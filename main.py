@@ -18,6 +18,8 @@ import helpers
 from loaders.camera_geometry_loader import camera_geometry_loader
 from loaders.synthetic import load_image_set
 
+from nets import NerfHash
+
 
 class NeRF(torch.nn.Module):
     def __init__(self, encoding, network_rgb, network_sigma):
@@ -44,10 +46,10 @@ class NeRF(torch.nn.Module):
 
 def meta_loader(loader):
     if loader == 'synthetic':
-        scene_path = '/local/v100/home/casey/Datasets/NeRF_Data/nerf_synthetic/lego'
+        scene_path = '/home/casey/Datasets/NeRF_Data/nerf_synthetic/lego'
         images, depths, intrinsics, extrinsics, bds = load_image_set(scene_path, near=2, far=6, scale=0.04)
     elif loader == 'camera_geometry':
-        scene_dir = '/local/v100/mnt/maara/synthetic_tree_assets/trees3/renders/vine_C2_1/back_close/cameras.json'
+        scene_dir = '/mnt/maara/synthetic_tree_assets/trees3/renders/vine_C2_1/back_close/cameras.json'
         images, depths, intrinsics, extrinsics, bds = camera_geometry_loader(scene_dir, image_scale=1, frame_range=(0, 2))
 
     return images, depths, intrinsics, extrinsics, bds
@@ -56,7 +58,7 @@ def meta_loader(loader):
 if __name__ == '__main__':
 
     ## Params
-    n_samples = 128
+    n_samples = 256
     n_rays = 1024
     device = 'cuda'
     # scene_dir = '/local/v100/mnt/maara/conan_scans/blenheim-21-6-28/30-06_13-05/ROW_349_EAST_SLOW_0006/scene.json'
@@ -68,20 +70,21 @@ if __name__ == '__main__':
     images, depths, intrinsics, extrinsics, bds = meta_loader('synthetic')
     N, H, W = images.shape[:3]
 
-    with open('./configs/config.json', 'r') as f:
-        config = json.load(f)
+    # with open('./configs/config.json', 'r') as f:
+    #     config = json.load(f)
 
-    encoding = tcnn.Encoding(n_input_dims=3, encoding_config=config['encoding'])
-    network_rgb = tcnn.Network(n_input_dims=encoding.n_output_dims, n_output_dims=3, network_config=config['network_rgb'])
-    network_sigma = tcnn.Network(n_input_dims=encoding.n_output_dims, n_output_dims=1, network_config=config['network_sigma'])
+    # encoding = tcnn.Encoding(n_input_dims=3, encoding_config=config['encoding'])
+    # network_rgb = tcnn.Network(n_input_dims=encoding.n_output_dims, n_output_dims=3, network_config=config['network_rgb'])
+    # network_sigma = tcnn.Network(n_input_dims=encoding.n_output_dims, n_output_dims=1, network_config=config['network_sigma'])
 
-    model = NeRF(encoding, network_rgb, network_sigma)
+    # model = NeRF(encoding, network_rgb, network_sigma)
+    model = NerfHash()
 
     ## Optimiser
     optimizer = Adam(model.parameters(), lr=5e-4, betas=(0.9, 0.999))
 
 
-    for i in tqdm(range(100000)):
+    for i in tqdm(range(10000+1)):
 
         n = np.random.randint(0, N, (n_rays,))
         h = np.random.randint(0, H, (n_rays,))
@@ -125,7 +128,7 @@ if __name__ == '__main__':
         if i%1000 == 0:
             print(loss)
 
-        if i%20000 == 0 and i != 0:
+        if i%10000 == 0 and i != 0:
             with torch.no_grad():
                 
                 n = np.full((1,), 1)
