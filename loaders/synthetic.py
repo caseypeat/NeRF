@@ -20,7 +20,7 @@ def build_intrinsics(fx, fy, cx, cy):
     return K
 
 
-def load_image_set(rootdir, near=2, far=6):
+def load_image_set(rootdir, near=2, far=6, scale=1):
     with open(os.path.join(rootdir, 'transforms_train.json')) as fp:
         transforms = json.load(fp)
 
@@ -59,11 +59,16 @@ def load_image_set(rootdir, near=2, far=6):
 
     N, H, W, _ = np.shape(images)
 
-    depths = np.zeros((N, H, W))
+    depths = np.ones((N, H, W))
 
-    ## scaling to fit within (-1, 1), will remove after implenting subfundental octaves
-    scale = 100
+    ## scaling to fit within (-1, 1)
+    # scale = 100
     extrinsics[:,:3,3] = extrinsics[:,:3,3] * scale
+    extrinsics[:,:3,3] = extrinsics[:,:3,3] + 0.5
     bds = bds * scale
 
-    return images, intrinsics, extrinsics, bds, depths
+    #
+    extrinsics[:,:3,1] *= -1
+    extrinsics[:,:3,2] *= -1
+
+    return images, depths, intrinsics, extrinsics, bds
