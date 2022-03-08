@@ -5,6 +5,8 @@ import torch.nn.functional as F
 
 import tinycudann as tcnn
 
+import helpers
+import raymarching
 
 class NerfHash(torch.nn.Module):
     def __init__(self):
@@ -55,18 +57,117 @@ class NerfHash(torch.nn.Module):
                 "n_hidden_layers": 2,
             })
 
-    def forward(self, x):
+    def forward(self, xyz, dir):
 
-        x_flat = x.reshape(x.shape[0]*x.shape[1], 3)
+        xyz_flat = xyz.reshape(-1, 3)
+        dir_flat = dir.reshape(-1, 3)
         
-        x_enc_hash = self.encoder_hash(x_flat)
-        x_geometry = self.network_sigma(x_enc_hash)
-        x_sigma, x_geometry = x_geometry[..., :1], x_geometry[..., 1:]
+        enc_hash = self.encoder_hash(xyz_flat)
+        geometry = self.network_sigma(enc_hash)
+        sigma, geometry = geometry[..., :1], geometry[..., 1:]
 
-        x_enc_dir = self.encoder_dir(x_flat)
-        x_rgb_input = torch.cat([x_enc_dir, x_geometry], dim=-1)
-        x_rgb = self.network_rgb(x_rgb_input)
+        dir_enc = self.encoder_dir(dir_flat)
+        rgb_input = torch.cat([dir_enc, geometry], dim=-1)
+        rgb = self.network_rgb(rgb_input)
 
-        x_samples = torch.cat((x_rgb, x_sigma), dim=-1)
-        x_samples_unflat = x_samples.reshape(x.shape[0], x.shape[1], 4)
-        return x_samples_unflat
+        rgb_unflat = rgb.reshape(*xyz.shape)
+        sigma_unflat = sigma.reshape(*xyz.shape[:-1], 1)
+
+        # samples = torch.cat((rgb, sigma), dim=-1)
+        # samples_unflat = samples.reshape(*xyz.shape[:-1], 4)
+        return rgb_unflat, sigma_unflat
+
+
+class NerfRender(nn.Module):
+    def __init__(self, images, depths, intrinsics, extrinsics, bds):
+        super(NerfRender, self).__init__()
+
+        self.images = images
+        self.depths = depths
+        self.intrinsics = intrinsics
+        self.extrinsics = extrinsics
+        self.bds = bds
+
+        self.nerf = NerfHash()
+
+    def forward(self, n, h, w):
+
+        K = self.intrinsics[n]
+        E = self.extrinsics[n]
+        B = self.bds[n]
+
+        h = h.to('cuda')
+        w = w.to('cuda')
+        K = K.to('cuda')
+        E = E.to('cuda')
+        B = B.to('cuda')
+
+        rays_o, rays_d = helpers.get_rays(h, w, K, E)
+
+        z_vals = helpers.get_z_vals_log(B[..., 0], B[..., 1], len(rays_o), 256, 'cuda')
+        xyz, dir = helpers.get_sample_points(rays_o, rays_d, z_vals)
+
+        # xyz, dir = xyz.to('cuda'), dir.to('cuda')
+        # z_vals = z_vals.to('cuda')
+        
+        ## Network Inference
+        image, depth = self.nerf(xyz, dir)
+        samples = torch.cat([image, depth], dim=-1)
+        samples[..., 3] += torch.normal(mean=samples.new_zeros(samples.shape[:-1]), std=samples.new_ones(samples.shape[:-1]) * 0.1)
+        # print(samples.shape)
+        # exit()
+
+        ## Render Pixels
+        image, invdepth, weights, sigma, color = helpers.render_rays_log(samples, z_vals)
+
+        return image, invdepth
+
+
+class NerfRenderOccupancy(nn.Module):
+    def __init__(self, images, depths, intrinsics, extrinsics, bds):
+        super(NerfRenderOccupancy, self).__init__()
+
+        self.images = images
+        self.depths = depths
+        self.intrinsics = intrinsics
+        self.extrinsics = extrinsics
+        self.bds = bds
+
+        self.nerf = NerfHash()
+
+        density_grid = torch.zeros([128] * 3)
+        self.register_buffer('density_grid', density_grid)
+        self.mean_density = 0
+        self.iter_density = 0
+
+        step_counter = torch.zeros(64, 2, dtype=torch.int32)
+        self.register_buffer('step_counter', step_counter)
+        self.mean_count = 0
+        self.local_step = 0
+
+    def forward(self, n, h, w):
+
+        K = self.intrinsics[n]
+        E = self.extrinsics[n]
+        B = self.bds[n]
+
+        bg_color = torch.zeros((3,)).to('cuda')
+        bound = 1
+        perturb = True
+
+        rays_o, rays_d = helpers.get_rays(h, w, K, E)
+
+        rays_o = rays_o.to('cuda')
+        rays_d = rays_d.to('cuda')
+
+        # setup counter
+        counter = self.step_counter[self.local_step % 64]
+        counter.zero_() # set to 0
+        self.local_step += 1
+
+        xyzs, dirs, deltas, rays = raymarching.march_rays_train(rays_o, rays_d, bound, self.density_grid, self.mean_density, self.iter_density, counter, self.mean_count, perturb, 128, False)
+
+        rgbs, sigmas = self.nerf(xyzs, dirs)
+        depth, image = raymarching.composite_rays_train(sigmas, rgbs, deltas, rays, bound, bg_color)
+
+        return image, depth
