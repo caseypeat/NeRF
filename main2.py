@@ -72,12 +72,20 @@ if __name__ == '__main__':
 
     images, depths, intrinsics, extrinsics, bds = meta_loader('synthetic')
     N, H, W = images.shape[:3]
+    # print(torch.max(extrinsics[3, :3]), torch.min(extrinsics[3, :3]))
+    # exit()
 
-    # model = NerfRenderOccupancy(images, depths, intrinsics, extrinsics, bds).to('cuda')
-    model = NerfRender(images, depths, intrinsics, extrinsics, bds).to('cuda')
+    model = NerfRenderOccupancy(images, depths, intrinsics, extrinsics, bds).to('cuda')
+    # model = NerfRender(images, depths, intrinsics, extrinsics, bds).to('cuda')
 
     ## Optimiser
-    optimizer = Adam(model.parameters(), lr=5e-4, betas=(0.9, 0.999))
+    # optimizer = Adam(model.nerf.parameters(), lr=1e-2, betas=(0.9, 0.999))
+    optimizer = torch.optim.Adam([
+            {'name': 'encoding', 'params': list(model.nerf.encoder_hash.parameters())},
+            {'name': 'net', 'params': list(model.nerf.network_sigma.parameters()) + list(model.nerf.network_rgb.parameters()), 'weight_decay': 1e-6},
+        ], lr=1e-2, betas=(0.9, 0.99), eps=1e-15)
+
+    criterion = torch.nn.HuberLoss(delta=0.1)
 
 
     for i in tqdm(range(10000+1)):
@@ -100,13 +108,17 @@ if __name__ == '__main__':
         with autocast():
 
             optimizer.zero_grad()
+
+            if i%100 == 0:
+                model.update_extra_state(bound=1)
             
             image_gt = images[n, h, w].to('cuda')
 
             image, depth = model(n, h, w)
 
             ## Calculate Error
-            loss = F.mse_loss(image, image_gt)
+            # loss = F.mse_loss(image, image_gt)
+            loss = criterion(image, image_gt)
 
             # loss.backward()
             # optimizer.step()
@@ -116,10 +128,22 @@ if __name__ == '__main__':
             scaler.update()
 
         if i%100 == 0:
-            print(loss)
+            print(f'Loss: {float(loss):.4f} - PSNR: {float(helpers.mse2psnr(loss)):.2f}')
 
-        # if i%10000 == 0 and i != 0:
-        #     with torch.no_grad():
+        if i%1000 == 0 and i != 0:
+
+            with autocast():
+
+                n_i = torch.full((1,), 1)
+                h_i = torch.arange(0, H)
+                w_i = torch.arange(0, W)
+
+                n_im, h_im, w_im = torch.meshgrid(n_i, h_i, w_i)
+
+                image, depth = model.inference(n_im, h_im, w_im)
+
+                plt.imshow(cv2.cvtColor(image.cpu().numpy()[0], cv2.COLOR_RGB2BGR))
+                plt.show()
                 
         #         n = np.full((1,), 1)
         #         h = np.arange(0, H)

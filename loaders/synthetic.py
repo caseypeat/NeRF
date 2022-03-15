@@ -71,4 +71,6 @@ def load_image_set(rootdir, near=2, far=6, scale=1):
     extrinsics[:,:3,1] *= -1
     extrinsics[:,:3,2] *= -1
 
+    # print(np.amax(extrinsics[:,:3,3]), np.amin(extrinsics[:,:3,3]))
+
     return images, depths, intrinsics, extrinsics, bds

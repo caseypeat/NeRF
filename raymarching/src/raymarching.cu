@@ -96,10 +96,13 @@ __global__ void kernel_march_rays_train(
 
     const float near = fmaxf(fmaxf(near_x, fmaxf(near_y, near_z)), MIN_NEAR()); // hardcoded minimal near distance
     const float far = fminf(far_x, fminf(far_y, far_z));
+    // printf("%f %f", near, far);
 
     const float dt_min = MIN_STEPSIZE() * bound;
     const float dt_max = 2 * bound / (H - 1);
     const float dt_gamma = bound > 1 ? DT_GAMMA() : 0.0f;
+
+    // printf("1 - checkpoint\n");
 
     float t0 = near;
     if (perturb) {
@@ -110,6 +113,8 @@ __global__ void kernel_march_rays_train(
     // first pass: estimation of num_steps
     float t = t0;
     uint32_t num_steps = 0;
+
+    // printf("2 - checkpoint\n");
 
 
     while (t < far && num_steps < MAX_STEPS()) {
@@ -146,6 +151,8 @@ __global__ void kernel_march_rays_train(
         }
     }
 
+    // printf("3 - checkpoint\n");
+
     //printf("[n=%d] num_steps=%d\n", n, num_steps);
     //printf("[n=%d] num_steps=%d, pc=%d, rc=%d\n", n, num_steps, counter[0], counter[1]);
 
@@ -156,20 +163,32 @@ __global__ void kernel_march_rays_train(
     
     //printf("[n=%d] num_steps=%d, point_index=%d, ray_index=%d\n", n, num_steps, point_index, ray_index);
 
+    // printf("3a - checkpoint\n");
+
     // write rays
     rays[ray_index * 3] = n;
     rays[ray_index * 3 + 1] = point_index;
     rays[ray_index * 3 + 2] = num_steps;
 
+    // printf("3b - checkpoint\n");
+
     if (num_steps == 0) return;
+    // printf("3b0 - checkpoint\n");
     if (point_index + num_steps >= M) return;
+    // printf("3b1 - checkpoint\n");
+
+    // printf("3c - checkpoint\n");
 
     xyzs += point_index * 3;
     dirs += point_index * 3;
     deltas += point_index;
 
+    // printf("3d - checkpoint\n");
+
     t = t0;
     uint32_t step = 0;
+
+    // printf("4 - checkpoint\n");
 
     while (t < far && step < num_steps) {
         // current point
@@ -186,8 +205,11 @@ __global__ void kernel_march_rays_train(
         const uint32_t index = nx * H * H + ny * H + nz;
         const float density = grid[index];
 
+        // print("0")
+
         // if occpuied, advance a small step, and write to output
         if (density > density_thresh) {
+            // printf("above density thresh - 2nd pass\n");
             // write step
             xyzs[0] = x;
             xyzs[1] = y;
@@ -204,6 +226,7 @@ __global__ void kernel_march_rays_train(
             step++;
         // else, skip a large step (basically skip a voxel grid)
         } else {
+            // printf("below density thresh - 2nd pass\n");
             // calc distance to next voxel
             const float tx = (((nx + 0.5f + 0.5f * signf(dx)) / (H - 1) * 2 - 1) * bound - x) * rdx;
             const float ty = (((ny + 0.5f + 0.5f * signf(dy)) / (H - 1) * 2 - 1) * bound - y) * rdy;
@@ -216,6 +239,8 @@ __global__ void kernel_march_rays_train(
             } while (t < tt);
         }
     }
+
+    // printf("5 - checkpoint\n");
 }
 
 

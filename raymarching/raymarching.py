@@ -46,7 +46,11 @@ class _march_rays_train(Function):
         if step_counter is None:
             step_counter = torch.zeros(2, dtype=torch.int32, device=rays_o.device) # point counter, ray counter
 
+        # print(torch.max(rays_o))
         _backend.march_rays_train(rays_o, rays_d, density_grid, mean_density, iter_density, bound, N, H, M, xyzs, dirs, deltas, rays, step_counter, perturb) # m is the actually used points number
+        # print(xyzs.shape)
+        # print(torch.max(xyzs))
+        # exit()
 
         #print(step_counter, M)
 
@@ -58,6 +62,10 @@ class _march_rays_train(Function):
             xyzs = xyzs[:m]
             dirs = dirs[:m]
             deltas = deltas[:m]
+
+        # print(xyzs.shape, dirs.shape, deltas.shape, rays.shape)
+        # exit()
+
 
         return xyzs, dirs, deltas, rays
 
