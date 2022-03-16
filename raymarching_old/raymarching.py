@@ -46,7 +46,11 @@ class _march_rays_train(Function):
         if step_counter is None:
             step_counter = torch.zeros(2, dtype=torch.int32, device=rays_o.device) # point counter, ray counter
 
+        # print(torch.max(rays_o))
         _backend.march_rays_train(rays_o, rays_d, density_grid, mean_density, iter_density, bound, N, H, M, xyzs, dirs, deltas, rays, step_counter, perturb) # m is the actually used points number
+        # print(xyzs.shape)
+        # print(torch.max(xyzs))
+        # exit()
 
         #print(step_counter, M)
 
@@ -59,6 +63,10 @@ class _march_rays_train(Function):
             dirs = dirs[:m]
             deltas = deltas[:m]
 
+        # print(xyzs.shape, dirs.shape, deltas.shape, rays.shape)
+        # exit()
+
+
         return xyzs, dirs, deltas, rays
 
 march_rays_train = _march_rays_train.apply
@@ -66,11 +74,11 @@ march_rays_train = _march_rays_train.apply
 
 ### accumulate rays (need backward)
 # inputs: sigmas: [M], rgbs: [M, 3], rays: [N, 3], points [M, 7]
-# outputs: weights_sum: [N], image: [N, 3]
+# outputs: depth: [N], image: [N, 3]
 class _composite_rays_train(Function):
     @staticmethod
     @custom_fwd(cast_inputs=torch.half)
-    def forward(ctx, sigmas, rgbs, deltas, rays, bound):
+    def forward(ctx, sigmas, rgbs, deltas, rays, bound, bg_color):
         
         sigmas = sigmas.contiguous()
         rgbs = rgbs.contiguous()
@@ -80,33 +88,30 @@ class _composite_rays_train(Function):
         M = sigmas.shape[0]
         N = rays.shape[0]
 
-        weights_sum = torch.empty(N, dtype=sigmas.dtype, device=sigmas.device)
+        depth = torch.empty(N, dtype=sigmas.dtype, device=sigmas.device)
         image = torch.empty(N, 3, dtype=sigmas.dtype, device=sigmas.device)
 
-        _backend.composite_rays_train_forward(sigmas, rgbs, deltas, rays, bound, M, N, weights_sum, image)
+        _backend.composite_rays_train_forward(sigmas, rgbs, deltas, rays, bound, bg_color, M, N, depth, image)
 
-        ctx.save_for_backward(sigmas, rgbs, deltas, rays, weights_sum, image)
+        ctx.save_for_backward(sigmas, rgbs, deltas, rays, image, bg_color)
         ctx.dims = [M, N, bound]
 
-        return weights_sum, image
+        return depth, image
     
     @staticmethod
     @custom_bwd
-    def backward(ctx, grad_weights_sum, grad_image):
+    def backward(ctx, grad_depth, grad_image):
+        # grad_depth, grad_image: [N, 3]
 
-        grad_weights_sum = grad_weights_sum.contiguous()
         grad_image = grad_image.contiguous()
 
-        #print('grad_weights_sum', grad_weights_sum.shape, grad_weights_sum.dtype, grad_weights_sum.min().item(), grad_weights_sum.max().item(), grad_weights_sum.requires_grad)
-        #print('grad_image', grad_image.shape, grad_image.dtype, grad_image.min().item(), grad_image.max().item(), grad_image.requires_grad)
-
-        sigmas, rgbs, deltas, rays, weights_sum, image = ctx.saved_tensors
+        sigmas, rgbs, deltas, rays, image, bg_color = ctx.saved_tensors
         M, N, bound = ctx.dims
-   
+        
         grad_sigmas = torch.zeros_like(sigmas)
         grad_rgbs = torch.zeros_like(rgbs)
 
-        _backend.composite_rays_train_backward(grad_weights_sum, grad_image, sigmas, rgbs, deltas, rays, weights_sum, image, bound, M, N, grad_sigmas, grad_rgbs)
+        _backend.composite_rays_train_backward(grad_image, sigmas, rgbs, deltas, rays, image, bound, M, N, grad_sigmas, grad_rgbs)
 
         return grad_sigmas, grad_rgbs, None, None, None, None
 
@@ -132,7 +137,7 @@ composite_rays_train = _composite_rays_train.apply
 #   xyzs, dirs, dt: float [n_alive * n_step, 3/3/2], output
 class _march_rays(Function):
     @staticmethod
-    #@custom_fwd(cast_inputs=torch.float32)
+    @custom_fwd(cast_inputs=torch.half)
     def forward(ctx, n_alive, n_step, rays_alive, rays_t, rays_o, rays_d, bound, density_grid, mean_density, near, far, align=-1, perturb=False):
         
         rays_o = rays_o.contiguous().view(-1, 3)
@@ -165,7 +170,7 @@ march_rays = _march_rays.apply
 #   depth, image, weight: float [N, 1/3/1]
 class _composite_rays(Function):
     @staticmethod
-    @custom_fwd(cast_inputs=torch.float32) # need to cast sigmas & rgbs to float
+    @custom_fwd(cast_inputs=torch.half)
     def forward(ctx, n_alive, n_step, rays_alive, rays_t, sigmas, rgbs, deltas, weights, depth, image):
         _backend.composite_rays(n_alive, n_step, rays_alive, rays_t, sigmas, rgbs, deltas, weights, depth, image)
 
@@ -181,7 +186,7 @@ composite_rays = _composite_rays.apply
 #   rays_t
 class _compact_rays(Function):
     @staticmethod
-    #@custom_fwd(cast_inputs=torch.float32)
+    @custom_fwd(cast_inputs=torch.half)
     def forward(ctx, n_alive, rays_alive, rays_alive_old, rays_t, rays_t_old, alive_counter):
         _backend.compact_rays(n_alive, rays_alive, rays_alive_old, rays_t, rays_t_old, alive_counter)
 

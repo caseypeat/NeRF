@@ -10,6 +10,7 @@ import raymarching
 
 from tqdm import tqdm
 
+
 class NerfHash(torch.nn.Module):
     def __init__(self):
         super(NerfHash, self).__init__()

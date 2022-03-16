@@ -20,6 +20,18 @@ def build_intrinsics(fx, fy, cx, cy):
     return K
 
 
+# ref: https://github.com/NVlabs/instant-ngp/blob/b76004c8cf478880227401ae763be4c02f80b62f/include/neural-graphics-primitives/nerf_loader.h#L50
+def nerf_matrix_to_ngp(pose, scale=0.33):
+    # for the fox dataset, 0.33 scales camera radius to ~ 2
+    new_pose = np.array([
+        [pose[1, 0], -pose[1, 1], -pose[1, 2], pose[1, 3] * scale],
+        [pose[2, 0], -pose[2, 1], -pose[2, 2], pose[2, 3] * scale],
+        [pose[0, 0], -pose[0, 1], -pose[0, 2], pose[0, 3] * scale],
+        [0, 0, 0, 1],
+    ], dtype=np.float32)
+    return new_pose
+
+
 def load_image_set(rootdir, near=2, far=6, scale=1):
     with open(os.path.join(rootdir, 'transforms_train.json')) as fp:
         transforms = json.load(fp)
@@ -34,11 +46,7 @@ def load_image_set(rootdir, near=2, far=6, scale=1):
 
         image = cv2.imread(image_path, cv2.IMREAD_UNCHANGED)
 
-        # depth_path = os.path.join(rootdir, transforms['frames'][i]['file_path']) + '_depth_0001.png'
-        # depth = cv2.imread(depth_path, -1)
-
         image = image.astype(np.float32) / 255
-        image = image[..., :3]
 
         images.append(image)
 
@@ -48,7 +56,8 @@ def load_image_set(rootdir, near=2, far=6, scale=1):
         focal = 0.5 * W / np.tan(0.5 * alpha)
         intrinsics.append(build_intrinsics(focal, focal, W/2, H/2))
 
-        extrinsics.append(np.array(transforms['frames'][i]['transform_matrix']))
+        # extrinsics.append(np.array(transforms['frames'][i]['transform_matrix']))
+        extrinsics.append(nerf_matrix_to_ngp(np.array(transforms['frames'][i]['transform_matrix']), 0.8))
 
         bds.append(np.array([near, far], dtype=np.float32))
 
@@ -63,13 +72,15 @@ def load_image_set(rootdir, near=2, far=6, scale=1):
 
     ## scaling to fit within (-1, 1)
     # scale = 100
-    extrinsics[:,:3,3] = extrinsics[:,:3,3] * scale
-    extrinsics[:,:3,3] = extrinsics[:,:3,3] + 0.5
-    bds = bds * scale
+    # extrinsics[:,:3,3] = extrinsics[:,:3,3] * scale
+    # extrinsics[:,:3,3] = extrinsics[:,:3,3] + 0.5
+    # bds = bds * scale
+
+    # extrinsics = nerf_matrix_to_ngp(extrinsics)
 
     #
-    extrinsics[:,:3,1] *= -1
-    extrinsics[:,:3,2] *= -1
+    # extrinsics[:,:3,1] *= -1
+    # extrinsics[:,:3,2] *= -1
 
     # print(np.amax(extrinsics[:,:3,3]), np.amin(extrinsics[:,:3,3]))
 

@@ -48,7 +48,8 @@ class NeRF(torch.nn.Module):
 
 def meta_loader(loader):
     if loader == 'synthetic':
-        scene_path = '/home/casey/Datasets/NeRF_Data/nerf_synthetic/lego'
+        # scene_path = '/home/casey/Datasets/NeRF_Data/nerf_synthetic/lego'
+        scene_path = '/local/NeRF/torch-ngp/data/nerf_synthetic/lego'
         images, depths, intrinsics, extrinsics, bds = load_image_set(scene_path, near=2, far=6, scale=0.04)
     elif loader == 'camera_geometry':
         scene_dir = '/mnt/maara/synthetic_tree_assets/trees3/renders/vine_C2_1/back_close/cameras.json'
@@ -66,8 +67,8 @@ def meta_loader(loader):
 if __name__ == '__main__':
 
     ## Params
-    n_samples = 256
-    n_rays = 1024
+    # n_samples = 256
+    n_rays = 4096
     device = 'cuda'
 
     images, depths, intrinsics, extrinsics, bds = meta_loader('synthetic')
@@ -113,6 +114,9 @@ if __name__ == '__main__':
                 model.update_extra_state(bound=1)
             
             image_gt = images[n, h, w].to('cuda')
+            # bg_color = torch.ones(3, device=images.device) # [3], fixed white background
+            bg_color = torch.rand(3, device=image_gt.device) # [3], frame-wise random.
+            image_gt = image_gt[..., :3] * image_gt[..., 3:] + bg_color * (1 - image_gt[..., 3:])
 
             image, depth = model(n, h, w)
 
