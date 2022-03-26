@@ -34,7 +34,7 @@ class NerfRenderer(nn.Module):
         super().__init__()
 
         # density grid
-        density_grid = torch.zeros([128] * 3)
+        density_grid = torch.zeros([256] * 3)
         self.register_buffer('density_grid', density_grid)
         self.mean_density = 0
         self.iter_density = 0
@@ -60,6 +60,28 @@ class NerfRenderer(nn.Module):
         self.mean_count = 0
         self.local_step = 0
 
+    
+    def render_eval(self, rays_o, rays_d, bound, bg_color, perturb):
+
+        # counter = self.step_counter[self.local_step % 64]
+        # counter.zero_() # set to 0
+        # self.local_step += 1
+
+        xyzs, dirs, deltas, rays = raymarching.march_rays_train(rays_o, rays_d, bound, self.density_grid, self.mean_density, self.iter_density, None, self.mean_count, perturb, 128, True)
+        # with torch.cuda.amp.autocast():
+        sigmas, rgbs = self(xyzs, dirs, bound)
+        weights_sum, image = raymarching.composite_rays_train(sigmas, rgbs, deltas, rays, bound)
+
+        # composite bg (shade_kernel_nerf)
+        image = image + (1 - weights_sum).unsqueeze(-1) * bg_color
+        # depth = None # currently training do not requires depth
+        depth = image[..., 0]  # placeholder
+
+        image = image[None, ...]
+        depth = depth[None, ...]
+
+        return image, depth
+
     def render(self, rays_o, rays_d, bound, bg_color, perturb):
 
         # rays_o, rays_d: [B, N, 3], assumes B == 1
@@ -78,6 +100,10 @@ class NerfRenderer(nn.Module):
             self.local_step += 1
 
             xyzs, dirs, deltas, rays = raymarching.march_rays_train(rays_o, rays_d, bound, self.density_grid, self.mean_density, self.iter_density, counter, self.mean_count, perturb, 128, False)
+            # print(deltas)
+            # print(xyzs.shape, dirs.shape, deltas.shape, rays.shape)
+            # exit()
+            # with torch.cuda.amp.autocast():
             sigmas, rgbs = self(xyzs, dirs, bound)
             weights_sum, image = raymarching.composite_rays_train(sigmas, rgbs, deltas, rays, bound)
 
@@ -113,8 +139,7 @@ class NerfRenderer(nn.Module):
 
             step = 0
             i = 0
-            while step < 1024: # max step
-
+            while step < 2048: # max step  # default value: 1024
                 # count alive rays 
                 if step == 0:
                     # init rays at first step.

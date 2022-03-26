@@ -13,17 +13,64 @@ def mse2psnr(mse):
     return -10.0 * m.log10(mse)
 
 
-# def get_rays_np(h, w, K, E):
-#     """ Ray generation for Oliver's calibration format """
-#     dirs = np.stack([w+0.5, h+0.5, np.ones_like(w)], -1)  # [N_rays, 3]
-#     dirs = np.linalg.inv(K) @ dirs[:, :, None]  # [N_rays, 3, 1]
+def get_rays_np(h, w, K, E):
+    """ Ray generation for Oliver's calibration format """
+    dirs = np.stack([w+0.5, h+0.5, np.ones_like(w)], -1)  # [N_rays, 3]
+    dirs = np.linalg.inv(K) @ dirs[..., None]  # [N_rays, 3, 1]
 
-#     rays_d = E[:, :3, :3] @ dirs  # [N_rays, 3, 1]
-#     rays_d = np.squeeze(rays_d, dim=2)  # [N_rays, 3]
+    rays_d = E[..., :3, :3] @ dirs  # [N_rays, 3, 1]
+    rays_d = rays_d[..., 0]  # [N_rays, 3]
 
-#     rays_o = E[:, :3, -1]
+    rays_o = E[..., :3, -1]
 
-#     return rays_o, rays_d
+    return rays_o, rays_d
+
+
+def calculate_bounds(images, depths, intrinsics, extrinsics):
+
+    n = np.arange(images.shape[0])
+    h = np.arange(images.shape[1])
+    w = np.arange(images.shape[2])
+
+    n, h, w = np.meshgrid(n, h, w, indexing='ij')
+
+    K = intrinsics[n]
+    E = extrinsics[n]
+
+    rays_o, rays_d = get_rays_np(h, w, K, E)
+
+    xyz = rays_o + rays_d * depths[..., None]
+
+    xyz[xyz == np.inf] = 0
+    xyz[xyz == -np.inf] = 0
+
+    xyz_min = np.amin(xyz, axis=tuple(np.arange(len(xyz.shape[:-1]))))
+    xyz_max = np.amax(xyz, axis=tuple(np.arange(len(xyz.shape[:-1]))))
+
+    return xyz_min, xyz_max
+
+def calculate_bounds_sphere(images, depths, intrinsics, extrinsics):
+
+    n = np.arange(images.shape[0])
+    h = np.arange(images.shape[1])
+    w = np.arange(images.shape[2])
+
+    n, h, w = np.meshgrid(n, h, w, indexing='ij')
+
+    K = intrinsics[n]
+    E = extrinsics[n]
+
+    rays_o, rays_d = get_rays_np(h, w, K, E)
+
+    xyz = rays_o + rays_d * depths[..., None]
+
+    xyz[xyz == np.inf] = 0
+    xyz[xyz == -np.inf] = 0
+
+    xyz_min = np.amin(np.linalg.norm(xyz, axis=-1))
+    xyz_max = np.amax(np.linalg.norm(xyz, axis=-1))
+
+    return xyz_min, xyz_max
 
 
 def get_rays(h, w, K, E):
@@ -37,6 +84,12 @@ def get_rays(h, w, K, E):
     rays_o = E[:, :3, -1]
 
     return rays_o, rays_d
+
+
+def mipnerf360_coordinate_transform(xyz):
+    xyz[xyz > 1] = 2 - 1/xyz[xyz > 1]
+    xyz[xyz < -1] = -2 - 1/xyz[xyz < -1]
+    return xyz
 
 
 def get_z_vals_log(begin, end, N_rays, N_samples, device):
