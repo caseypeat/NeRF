@@ -113,7 +113,7 @@ __global__ void kernel_march_rays_train(
 
     float d = sqrtf(ox*ox + oy*oy + oz*oz);
 
-    while (d < 2 && num_steps < MAX_STEPS()) {
+    while (d < 100 && num_steps < MAX_STEPS()) {
         // current point
         const float x = ox + t * dx;
         const float y = oy + t * dy;
@@ -122,23 +122,6 @@ __global__ void kernel_march_rays_train(
         // distance from center
         d = sqrtf(x*x + y*y + z*z);
 
-        // Mipnerf360 piecewise coordinate transform
-        // if (d > 1) {
-        //     const float scale = (2 - 1 / d) / d;
-
-        //     const float sx = x * scale;
-        //     const float sy = y * scale;
-        //     const float sz = z * scale;
-
-        //     const float dt = dt_min / scale; // scale by distance from center
-
-        // } else {
-        //     const float sx = x;
-        //     const float sy = y;
-        //     const float sz = z;
-
-        //     const float dt = dt_min;
-        // }
         // Mipnerf360 piecewise coordinate transform
         const float scale = d > 1 ? (2 - 1 / d) / d : 1;
 
@@ -184,7 +167,9 @@ __global__ void kernel_march_rays_train(
     t = t0;
     uint32_t step = 0;
 
-    while (d < 2 && step < num_steps) {
+    d = sqrtf(ox*ox + oy*oy + oz*oz);
+
+    while (d < 100 && step < num_steps) {
         // current point
         const float x = ox + t * dx;
         const float y = oy + t * dy;
