@@ -38,6 +38,7 @@ class Trainer(object):
         self.model = model
 
         self.scaler = torch.cuda.amp.GradScaler(enabled=False)
+        # self.scaler = torch.cuda.amp.GradScaler()
 
         self.train_len = 5001
         self.epoch_len = 100
@@ -82,14 +83,6 @@ class Trainer(object):
         self.model.train()
         N, H, W, C = self.images.shape
 
-        # n_r = torch.randint(0, N, (self.n_rays*100,))
-        # h_r = torch.randint(0, H, (self.n_rays*100,))
-        # w_r = torch.randint(0, W, (self.n_rays*100,))
-
-        # n = n_r[self.depths[n_r, h_r, w_r] != torch.inf][:self.n_rays]
-        # h = h_r[self.depths[n_r, h_r, w_r] != torch.inf][:self.n_rays]
-        # w = w_r[self.depths[n_r, h_r, w_r] != torch.inf][:self.n_rays]
-
         n = torch.randint(0, N, (self.n_rays,))
         h = torch.randint(0, H, (self.n_rays,))
         w = torch.randint(0, W, (self.n_rays,))
@@ -109,7 +102,6 @@ class Trainer(object):
         w = w.to(self.device)
         
         rays_o, rays_d = helpers.get_rays(h, w, K, E)
-        # print(rays_o.device, rays_d.device)
 
         rgb_gt = rgb_gt[None, ...]
         rays_o = rays_o[None, ...]
@@ -118,7 +110,6 @@ class Trainer(object):
         rgb_pred, depth_pred = self.model.render(rays_o, rays_d, self.bound, color_bg, perturb=True)
 
         loss = self.criterion(rgb_pred, rgb_gt)
-        # print(torch.amax(rgb_pred))
 
         return loss
 
@@ -162,25 +153,12 @@ class Trainer(object):
                 w_fb = w_fb.to(self.device)
 
                 color_bg = torch.ones(3, device=self.device) # [3], fixed white background
-                # color_bg = torch.rand(3, device=self.device) # [3], frame-wise random.
-                # if C == 4:
-                #     rgba_gt = self.images[n_fb, h_fb, w_fb, :].to(self.device)
-                #     rgb_gt = rgba_gt[..., :3] * rgba_gt[..., 3:] + color_bg * (1 - rgba_gt[..., 3:])
-                # else:
-                #     rgb_gt = self.images[n_fb, h_fb, w_fb, :].to(self.device)
 
                 rays_o, rays_d = helpers.get_rays(h_fb, w_fb, K, E)
                 rays_o = rays_o[None, ...]
                 rays_d = rays_d[None, ...]
 
-                # print(rays_o.shape, rays_d.shape)
-                image_fb, depth_fb = self.model.render_eval(rays_o, rays_d, self.bound, bg_color=color_bg, perturb=False)
-
-                # depth_gt_fb = self.depths[n_fb, h_fb, w_fb]
-                # image_fb[0][depth_gt_fb == torch.inf] = 1
-
-                # print(image_fb.shape, depth_fb.shape)
-                # exit()
+                image_fb, depth_fb = self.model.render(rays_o, rays_d, self.bound, bg_color=color_bg, perturb=False)
 
                 image[i:end] = image_fb[0, ...]
                 depth[i:end] = depth_fb[0, ...]
