@@ -37,10 +37,10 @@ class Trainer(object):
 
         self.model = model
 
-        self.scaler = torch.cuda.amp.GradScaler(enabled=False)
-        # self.scaler = torch.cuda.amp.GradScaler()
+        # self.scaler = torch.cuda.amp.GradScaler(enabled=False)
+        self.scaler = torch.cuda.amp.GradScaler()
 
-        self.train_len = 5001
+        self.train_len = 1001
         self.epoch_len = 100
 
         self.loss_avg = 0
@@ -107,7 +107,8 @@ class Trainer(object):
         rays_o = rays_o[None, ...]
         rays_d = rays_d[None, ...]
 
-        rgb_pred, depth_pred = self.model.render(rays_o, rays_d, self.bound, color_bg, perturb=True)
+        with torch.cuda.amp.autocast():
+            rgb_pred, depth_pred = self.model.render(rays_o, rays_d, self.bound, color_bg, perturb=True, force_all_rays=False)
 
         loss = self.criterion(rgb_pred, rgb_gt)
 
@@ -158,7 +159,8 @@ class Trainer(object):
                 rays_o = rays_o[None, ...]
                 rays_d = rays_d[None, ...]
 
-                image_fb, depth_fb = self.model.render(rays_o, rays_d, self.bound, bg_color=color_bg, perturb=False)
+                with torch.cuda.amp.autocast():
+                    image_fb, depth_fb = self.model.render(rays_o, rays_d, self.bound, bg_color=color_bg, perturb=False, force_all_rays=True)
 
                 image[i:end] = image_fb[0, ...]
                 depth[i:end] = depth_fb[0, ...]

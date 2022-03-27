@@ -10,6 +10,7 @@ _backend = load(name='_raymarching',
                     'raymarching.cu',
                     'bindings.cpp',
                 ]],
+                verbose=True
                 )
 
 __all__ = ['_backend']

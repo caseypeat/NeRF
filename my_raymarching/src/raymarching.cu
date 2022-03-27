@@ -20,7 +20,7 @@
 // some const
 inline constexpr __device__ float DENSITY_THRESH() { return 10.0f; } // TODO: how to decide this threshold (default 10.0)?
 inline constexpr __device__ float SQRT3() { return 1.73205080757f; }
-inline constexpr __device__ int MAX_STEPS() { return 2048; }  // default value: 1024
+inline constexpr __device__ int MAX_STEPS() { return 1024; }  // default value: 1024
 inline constexpr __device__ float MIN_STEPSIZE() { return 2 * SQRT3() / MAX_STEPS(); } // still need to mul bound to get dt_min
 inline constexpr __device__ float MIN_NEAR() { return 0.05f; }
 // inline constexpr __device__ float DT_GAMMA() { return 1.f / 256.f; }  // default value: 1 / 256
@@ -111,19 +111,21 @@ __global__ void kernel_march_rays_train(
     float t = t0;
     uint32_t num_steps = 0;
 
-    float d = sqrtf(ox*ox + oy*oy + oz*oz);
-
-    while (d < 100 && num_steps < MAX_STEPS()) {
+    while (num_steps < MAX_STEPS()) {
         // current point
         const float x = ox + t * dx;
         const float y = oy + t * dy;
         const float z = oz + t * dz;
 
         // distance from center
-        d = sqrtf(x*x + y*y + z*z);
+        const float d = sqrtf(x*x + y*y + z*z);
 
         // Mipnerf360 piecewise coordinate transform
         const float scale = d > 1 ? (2 - 1 / d) / d : 1;
+
+        if (d > 100) {
+            break;
+        }
 
         const float sx = x * scale;
         const float sy = y * scale;
@@ -167,16 +169,18 @@ __global__ void kernel_march_rays_train(
     t = t0;
     uint32_t step = 0;
 
-    d = sqrtf(ox*ox + oy*oy + oz*oz);
-
-    while (d < 100 && step < num_steps) {
+    while (step < num_steps) {
         // current point
         const float x = ox + t * dx;
         const float y = oy + t * dy;
         const float z = oz + t * dz;
 
         // distance from center
-        d = sqrtf(x*x + y*y + z*z);
+        const float d = sqrtf(x*x + y*y + z*z);
+
+        if (d > 100) {
+            break;
+        }
 
         // Mipnerf360 piecewise coordinate transform
         const float scale = d > 1 ? (2 - 1 / d) / d : 1;

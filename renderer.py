@@ -61,14 +61,15 @@ class NerfRenderer(nn.Module):
         self.local_step = 0
 
 
-    def render(self, rays_o, rays_d, bound, bg_color, perturb):
+    def render(self, rays_o, rays_d, bound, bg_color, perturb, force_all_rays):
 
         if self.training:
             counter = self.step_counter[self.local_step % 64]
             counter.zero_() # set to 0
             self.local_step += 1
 
-        xyzs, dirs, deltas, rays = raymarching.march_rays_train(rays_o, rays_d, bound, self.density_grid, self.mean_density, self.iter_density, None, self.mean_count, perturb, 128, True)
+        xyzs, dirs, deltas, rays = raymarching.march_rays_train(rays_o, rays_d, bound, self.density_grid, self.mean_density, self.iter_density, None, self.mean_count, perturb, 128, force_all_rays)
+        print(xyzs.shape)
         sigmas, rgbs = self(xyzs, dirs, bound)
         weights_sum, image = raymarching.composite_rays_train(sigmas, rgbs, deltas, rays, bound)
 
