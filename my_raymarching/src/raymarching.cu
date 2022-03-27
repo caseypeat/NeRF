@@ -18,9 +18,9 @@
 #define CHECK_IS_FLOATING(x) TORCH_CHECK(x.scalar_type() == at::ScalarType::Float || x.scalar_type() == at::ScalarType::Half || x.scalar_type() == at::ScalarType::Double, #x " must be a floating tensor")
 
 // some const
-inline constexpr __device__ float DENSITY_THRESH() { return 1.0f; } // TODO: how to decide this threshold (default 10.0)?
+inline constexpr __device__ float DENSITY_THRESH() { return 10.0f; } // TODO: how to decide this threshold (default 10.0)?
 inline constexpr __device__ float SQRT3() { return 1.73205080757f; }
-inline constexpr __device__ int MAX_STEPS() { return 4096; }  // default value: 1024
+inline constexpr __device__ int MAX_STEPS() { return 2048; }  // default value: 1024
 inline constexpr __device__ float MIN_STEPSIZE() { return 2 * SQRT3() / MAX_STEPS(); } // still need to mul bound to get dt_min
 inline constexpr __device__ float MIN_NEAR() { return 0.05f; }
 // inline constexpr __device__ float DT_GAMMA() { return 1.f / 256.f; }  // default value: 1 / 256

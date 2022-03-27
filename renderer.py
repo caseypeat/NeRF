@@ -34,7 +34,7 @@ class NerfRenderer(nn.Module):
         super().__init__()
 
         # density grid
-        density_grid = torch.zeros([384] * 3)
+        density_grid = torch.zeros([256] * 3)
         self.register_buffer('density_grid', density_grid)
         self.mean_density = 0
         self.iter_density = 0

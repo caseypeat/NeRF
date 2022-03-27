@@ -51,7 +51,7 @@ def meta_camera_geometry():
     # images, depths, intrinsics, extrinsics = camera_geometry_loader(scene_dir, image_scale=0.25, frame_range=(0, 2))
     images, depths, intrinsics, extrinsics = camera_geometry_loader(scene_dir, image_scale=0.25)
 
-    images, depths = remove_background(images, depths, threshold=1)
+    images_nb, depths_nb = remove_background(images, depths, threshold=1)
 
     # xyz_min, xyz_max = helpers.calculate_bounds(images, depths, intrinsics, extrinsics)
 
@@ -106,8 +106,9 @@ def meta_camera_geometry():
 if __name__ == '__main__':
 
     ## Params
-    n_rays = 4096
+    # n_rays = 4096
     # n_rays = 2048
+    n_rays = 1024
     bound = 2
     # bound = 3
     device = 'cuda'
