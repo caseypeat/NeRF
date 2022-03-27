@@ -108,6 +108,7 @@ if __name__ == '__main__':
     ## Params
     # n_rays = 4096
     # n_rays = 2048
+    # n_rays = 1536
     n_rays = 1024
     bound = 2
     # bound = 3
