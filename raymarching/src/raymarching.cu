@@ -20,7 +20,7 @@
 // some const
 inline constexpr __device__ float DENSITY_THRESH() { return 10.0f; } // TODO: how to decide this threshold (default 10.0)?
 inline constexpr __device__ float SQRT3() { return 1.73205080757f; }
-inline constexpr __device__ int MAX_STEPS() { return 1024; }  // default value: 1024
+inline constexpr __device__ int MAX_STEPS() { return 2048; }  // default value: 1024
 inline constexpr __device__ float MIN_STEPSIZE() { return 2 * SQRT3() / MAX_STEPS(); } // still need to mul bound to get dt_min
 inline constexpr __device__ float MIN_NEAR() { return 0.05f; }
 // inline constexpr __device__ float DT_GAMMA() { return 1.f / 256.f; }  // default value: 1 / 256
@@ -160,7 +160,7 @@ __global__ void kernel_march_rays_train(
         }
         else {
             const float density = grid_outer[index];
-            if (density > 0) {
+            if (1) {
                 num_steps++;
             }
         }
@@ -250,7 +250,7 @@ __global__ void kernel_march_rays_train(
         }
         else {
             const float density = grid_outer[index];
-            if (density > 0) {
+            if (1) {
                 // write step
                 xyzs[0] = sx;
                 xyzs[1] = sy;
