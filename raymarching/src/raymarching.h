@@ -5,7 +5,7 @@
 #include <torch/extension.h>
 
 // _backend.march_rays_train(rays_o, rays_d, density_grid, bound, N, H, M, points, offsets)
-void march_rays_train(at::Tensor rays_o, at::Tensor rays_d, at::Tensor grid, const float mean_density, const int iter_density, const float bound, const uint32_t N, const uint32_t H, const uint32_t M, at::Tensor xyzs, at::Tensor dirs, at::Tensor deltas, at::Tensor rays, at::Tensor counter, const uint32_t perturb);
+void march_rays_train(at::Tensor rays_o, at::Tensor rays_d, at::Tensor grid_inner, const float mean_density_inner, at::Tensor grid_outer, const float mean_density_outer, const int iter_density, const float bound, const uint32_t N, const uint32_t H_inner, const uint32_t H_outer, const uint32_t M, at::Tensor xyzs, at::Tensor dirs, at::Tensor deltas, at::Tensor rays, at::Tensor counter, const uint32_t perturb);
 
 // _backend.composite_rays_train_forward(sigmas, rgbs, rays, bound, M, N, weights_sum, image)
 void composite_rays_train_forward(at::Tensor sigmas, at::Tensor rgbs, at::Tensor deltas, at::Tensor rays, const float bound, const uint32_t M, const uint32_t N, at::Tensor weights_sum, at::Tensor image);

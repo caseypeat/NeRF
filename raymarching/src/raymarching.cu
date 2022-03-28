@@ -18,9 +18,9 @@
 #define CHECK_IS_FLOATING(x) TORCH_CHECK(x.scalar_type() == at::ScalarType::Float || x.scalar_type() == at::ScalarType::Half || x.scalar_type() == at::ScalarType::Double, #x " must be a floating tensor")
 
 // some const
-inline constexpr __device__ float DENSITY_THRESH() { return 1.0f; } // TODO: how to decide this threshold (default 10.0)?
+inline constexpr __device__ float DENSITY_THRESH() { return 10.0f; } // TODO: how to decide this threshold (default 10.0)?
 inline constexpr __device__ float SQRT3() { return 1.73205080757f; }
-inline constexpr __device__ int MAX_STEPS() { return 4096; }  // default value: 1024
+inline constexpr __device__ int MAX_STEPS() { return 1024; }  // default value: 1024
 inline constexpr __device__ float MIN_STEPSIZE() { return 2 * SQRT3() / MAX_STEPS(); } // still need to mul bound to get dt_min
 inline constexpr __device__ float MIN_NEAR() { return 0.05f; }
 // inline constexpr __device__ float DT_GAMMA() { return 1.f / 256.f; }  // default value: 1 / 256
@@ -57,11 +57,13 @@ template <typename scalar_t>
 __global__ void kernel_march_rays_train(
     const scalar_t * __restrict__ rays_o,
     const scalar_t * __restrict__ rays_d,  
-    const scalar_t * __restrict__ grid,
-    const float mean_density,
+    const scalar_t * __restrict__ grid_inner,
+    const float mean_density_inner,
+    const scalar_t * __restrict__ grid_outer,
+    const float mean_density_outer,
     const int iter_density,
     const float bound,
-    const uint32_t N, const uint32_t H, const uint32_t M,
+    const uint32_t N, const uint32_t H_inner, const uint32_t H_outer, const uint32_t M,
     scalar_t * xyzs, scalar_t * dirs, scalar_t * deltas,
     int * rays,
     int * counter,
@@ -71,9 +73,12 @@ __global__ void kernel_march_rays_train(
     const uint32_t n = threadIdx.x + blockIdx.x * blockDim.x;
     if (n >= N) return;
 
-    const float rbound = 1 / bound;
+    // const float rbound = 1 / bound;
 
-    const float density_thresh = fminf(DENSITY_THRESH(), mean_density);
+    const float density_thresh_inner = fminf(DENSITY_THRESH(), mean_density_inner);
+    const float density_thresh_outer = fminf(DENSITY_THRESH(), mean_density_outer);
+
+    // const float density_thresh = DENSITY_THRESH();
 
     // locate
     rays_o += n * 3;
@@ -99,8 +104,7 @@ __global__ void kernel_march_rays_train(
     const float far = fminf(far_x, fminf(far_y, far_z));
 
     const float dt_min = MIN_STEPSIZE() * bound;
-    const float dt_max = 2 * bound / (H - 1);
-    const float dt_gamma = bound > 1 ? DT_GAMMA() : 0.0f;
+    // const float dt_max = 2 * bound / (H - 1);
 
     float t0 = near;
     if (perturb) {
@@ -112,53 +116,60 @@ __global__ void kernel_march_rays_train(
     float t = t0;
     uint32_t num_steps = 0;
 
-    //if (t < far) printf("valid ray %d t=%f near=%f far=%f \n", n, t, near, far);
-
-    while (t < far && num_steps < MAX_STEPS()) {
+    while (num_steps < MAX_STEPS()) {
         // current point
-        const float x = clamp(ox + t * dx, -bound, bound);
-        const float y = clamp(oy + t * dy, -bound, bound);
-        const float z = clamp(oz + t * dz, -bound, bound);
+        const float x = ox + t * dx;
+        const float y = oy + t * dy;
+        const float z = oz + t * dz;
+
+        // distance from center
+        const float d = sqrtf(x*x + y*y + z*z);
+
+        // Mipnerf360 piecewise coordinate transform
+        const float scale = d > 1 ? (2 - 1 / d) / d : 1;
+
+        if (d > 100) {
+            break;
+        }
+
+        const float sx = x * scale;
+        const float sy = y * scale;
+        const float sz = z * scale;
+
+        const float dt = d > 1 ?  dt_min / scale * 8 : dt_min ; // scale by distance from center
+        const float sdt = d > 1 ?  dt_min * 8 : dt_min;
+
+        const float rbound = d > 1 ? 1/2 : 1;
+
+        const float H = d > 1 ? H_outer : H_inner;
 
         // convert to nearest grid position
-        const int nx = clamp(0.5 * (x * rbound + 1) * H, 0.0f, (float)(H - 1));
-        const int ny = clamp(0.5 * (y * rbound + 1) * H, 0.0f, (float)(H - 1));
-        const int nz = clamp(0.5 * (z * rbound + 1) * H, 0.0f, (float)(H - 1));
+        const int nx = clamp(0.5 * (sx * rbound + 1) * H, 0.0f, (float)(H - 1));
+        const int ny = clamp(0.5 * (sy * rbound + 1) * H, 0.0f, (float)(H - 1));
+        const int nz = clamp(0.5 * (sz * rbound + 1) * H, 0.0f, (float)(H - 1));
 
         const uint32_t index = nx * H * H + ny * H + nz;
-        const float density = grid[index];
 
-        // if occpuied, advance a small step, and write to output
-        //if (n == 0) printf("t=%f density=%f vs thresh=%f step=%d\n", t, density, density_thresh, num_steps);
+        t += dt;
 
-        if (density > density_thresh) {
-            num_steps++;
-            const float dt = clamp(t * dt_gamma, dt_min, dt_max);
-            t += dt;
-        // else, skip a large step (basically skip a voxel grid)
-        } else {
-            // calc distance to next voxel
-            const float tx = (((nx + 0.5f + 0.5f * signf(dx)) / (H - 1) * 2 - 1) * bound - x) * rdx;
-            const float ty = (((ny + 0.5f + 0.5f * signf(dy)) / (H - 1) * 2 - 1) * bound - y) * rdy;
-            const float tz = (((nz + 0.5f + 0.5f * signf(dz)) / (H - 1) * 2 - 1) * bound - z) * rdz;
-            const float tt = t + fmaxf(0.0f, fminf(tx, fminf(ty, tz)));
-            // step until next voxel
-            do { 
-                const float dt = clamp(t * dt_gamma, dt_min, dt_max);
-                t += dt; 
-            } while (t < tt);
+        if (d < 1) {
+            const float density = grid_inner[index];
+            if (density > density_thresh_inner) {
+                num_steps++;
+            }
+        }
+        else {
+            const float density = grid_outer[index];
+            if (density > 0) {
+                num_steps++;
+            }
         }
     }
-
-    //printf("[n=%d] num_steps=%d\n", n, num_steps);
-    //printf("[n=%d] num_steps=%d, pc=%d, rc=%d\n", n, num_steps, counter[0], counter[1]);
 
 
     // second pass: really locate and write points & dirs
     uint32_t point_index = atomicAdd(counter, num_steps);
     uint32_t ray_index = atomicAdd(counter + 1, 1);
-    
-    //printf("[n=%d] num_steps=%d, point_index=%d, ray_index=%d\n", n, num_steps, point_index, ray_index);
 
     // write rays
     rays[ray_index * 3] = n;
@@ -175,51 +186,89 @@ __global__ void kernel_march_rays_train(
     t = t0;
     uint32_t step = 0;
 
-    while (t < far && step < num_steps) {
+    // printf("num_steps: %d\n");
+
+    while (step < num_steps) {
         // current point
-        const float x = clamp(ox + t * dx, -bound, bound);
-        const float y = clamp(oy + t * dy, -bound, bound);
-        const float z = clamp(oz + t * dz, -bound, bound);
+        const float x = ox + t * dx;
+        const float y = oy + t * dy;
+        const float z = oz + t * dz;
+
+        // distance from center
+        const float d = sqrtf(x*x + y*y + z*z);
+
+        if (d > 100) {
+            break;
+        }
+
+        // Mipnerf360 piecewise coordinate transform
+        const float scale = d > 1 ? (2 - 1 / d) / d : 1;
+
+        const float sx = x * scale;
+        const float sy = y * scale;
+        const float sz = z * scale;
+
+        const float dt = d > 1 ?  dt_min / scale * 8 : dt_min ; // scale by distance from center
+        const float sdt = d > 1 ?  dt_min * 8 : dt_min;
+
+        const float rbound = d > 1 ? 1/2 : 1;
+
+        const float H = d > 1 ? H_outer : H_inner;
 
         // convert to nearest grid position
-        const int nx = clamp(0.5 * (x * rbound + 1) * H, 0.0f, (float)(H - 1));
-        const int ny = clamp(0.5 * (y * rbound + 1) * H, 0.0f, (float)(H - 1));
-        const int nz = clamp(0.5 * (z * rbound + 1) * H, 0.0f, (float)(H - 1));
+        const int nx = clamp(0.5 * (sx * rbound + 1) * H, 0.0f, (float)(H - 1));
+        const int ny = clamp(0.5 * (sy * rbound + 1) * H, 0.0f, (float)(H - 1));
+        const int nz = clamp(0.5 * (sz * rbound + 1) * H, 0.0f, (float)(H - 1));
 
         // query grid
         const uint32_t index = nx * H * H + ny * H + nz;
-        const float density = grid[index];
+
+        t += dt;
+
+        // if (step%100 == 0) {
+        //     printf("density: %f\n", density);
+        // }
 
         // if occpuied, advance a small step, and write to output
-        if (density > density_thresh) {
-            // write step
-            xyzs[0] = x;
-            xyzs[1] = y;
-            xyzs[2] = z;
-            dirs[0] = dx;
-            dirs[1] = dy;
-            dirs[2] = dz;
-            const float dt = clamp(t * dt_gamma, dt_min, dt_max);
-            t += dt;
-            deltas[0] = dt;
-            xyzs += 3;
-            dirs += 3;
-            deltas++;
-            step++;
-        // else, skip a large step (basically skip a voxel grid)
-        } else {
-            // calc distance to next voxel
-            const float tx = (((nx + 0.5f + 0.5f * signf(dx)) / (H - 1) * 2 - 1) * bound - x) * rdx;
-            const float ty = (((ny + 0.5f + 0.5f * signf(dy)) / (H - 1) * 2 - 1) * bound - y) * rdy;
-            const float tz = (((nz + 0.5f + 0.5f * signf(dz)) / (H - 1) * 2 - 1) * bound - z) * rdz;
-            const float tt = t + fmaxf(0.0f, fminf(tx, fminf(ty, tz)));
-            // step until next voxel
-            do { 
-                const float dt = clamp(t * dt_gamma, dt_min, dt_max);
-                t += dt; 
-            } while (t < tt);
+        if (d < 1) {
+            const float density = grid_inner[index];
+            if (density > density_thresh_inner) {
+                // write step
+                xyzs[0] = sx;
+                xyzs[1] = sy;
+                xyzs[2] = sz;
+                dirs[0] = dx;
+                dirs[1] = dy;
+                dirs[2] = dz;
+
+                deltas[0] = sdt;
+                xyzs += 3;
+                dirs += 3;
+                deltas++;
+                step++;
+            }
         }
+        else {
+            const float density = grid_outer[index];
+            if (density > 0) {
+                // write step
+                xyzs[0] = sx;
+                xyzs[1] = sy;
+                xyzs[2] = sz;
+                dirs[0] = dx;
+                dirs[1] = dy;
+                dirs[2] = dz;
+
+                deltas[0] = sdt;
+                xyzs += 3;
+                dirs += 3;
+                deltas++;
+                step++;
+            }
+        }     
     }
+
+    // printf("step: %d\n", step);
 }
 
 
@@ -392,24 +441,27 @@ __global__ void kernel_composite_rays_train_backward(
 }
 
 
-void march_rays_train(at::Tensor rays_o, at::Tensor rays_d, at::Tensor grid, const float mean_density, const int iter_density, const float bound, const uint32_t N, const uint32_t H, const uint32_t M, at::Tensor xyzs, at::Tensor dirs, at::Tensor deltas, at::Tensor rays, at::Tensor counter, const uint32_t perturb) {
+void march_rays_train(at::Tensor rays_o, at::Tensor rays_d, at::Tensor grid_inner, const float mean_density_inner, at::Tensor grid_outer, const float mean_density_outer, const int iter_density, const float bound, const uint32_t N, const uint32_t H_inner, const uint32_t H_outer, const uint32_t M, at::Tensor xyzs, at::Tensor dirs, at::Tensor deltas, at::Tensor rays, at::Tensor counter, const uint32_t perturb) {
     CHECK_CUDA(rays_o);
     CHECK_CUDA(rays_d);
-    CHECK_CUDA(grid);
+    CHECK_CUDA(grid_inner);
+    CHECK_CUDA(grid_outer);
 
     CHECK_CONTIGUOUS(rays_o);
     CHECK_CONTIGUOUS(rays_d);
-    CHECK_CONTIGUOUS(grid);
+    CHECK_CONTIGUOUS(grid_inner);
+    CHECK_CONTIGUOUS(grid_outer);
 
     CHECK_IS_FLOATING(rays_o);
     CHECK_IS_FLOATING(rays_d);
-    CHECK_IS_FLOATING(grid);
+    CHECK_IS_FLOATING(grid_inner);
+    CHECK_IS_FLOATING(grid_outer);
 
     static constexpr uint32_t N_THREAD = 256;
 
     AT_DISPATCH_FLOATING_TYPES_AND_HALF(
     rays_o.scalar_type(), "march_rays_train", ([&] {
-        kernel_march_rays_train<<<div_round_up(N, N_THREAD), N_THREAD>>>(rays_o.data_ptr<scalar_t>(), rays_d.data_ptr<scalar_t>(), grid.data_ptr<scalar_t>(), mean_density, iter_density, bound, N, H, M, xyzs.data_ptr<scalar_t>(), dirs.data_ptr<scalar_t>(), deltas.data_ptr<scalar_t>(), rays.data_ptr<int>(), counter.data_ptr<int>(), perturb);
+        kernel_march_rays_train<<<div_round_up(N, N_THREAD), N_THREAD>>>(rays_o.data_ptr<scalar_t>(), rays_d.data_ptr<scalar_t>(), grid_inner.data_ptr<scalar_t>(), mean_density_inner, grid_outer.data_ptr<scalar_t>(), mean_density_outer, iter_density, bound, N, H_inner, H_outer, M, xyzs.data_ptr<scalar_t>(), dirs.data_ptr<scalar_t>(), deltas.data_ptr<scalar_t>(), rays.data_ptr<int>(), counter.data_ptr<int>(), perturb);
     }));
 }
 

@@ -105,7 +105,7 @@ def meta_camera_geometry():
 
 if __name__ == '__main__':
 
-    print('test...')
+    # print('test...')
 
     ## Params
     n_rays = 4096

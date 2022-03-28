@@ -53,17 +53,18 @@ class Trainer(object):
             #     self.train_epoch(1000)
             # else:
             #     self.train_epoch(100)
-            self.train_epoch(self.epoch_len)
+            self.train_epoch(self.epoch_len, t0)
 
-            print(f'Epoch: {epoch} - Time (s): {time.time() - t0:.2f} - Loss: {self.loss_avg:.7f}')
+            print(f'Epoch: {epoch} - Time (s): {time.time() - t0:.2f} - Loss: {self.loss_avg:.7f}\n')
             self.loss_avg = 0
 
             if epoch % 10 == 0 and epoch != 0:
                 self.evaluate_image()
 
-    def train_epoch(self, epoch_len):
+    def train_epoch(self, epoch_len, t0):
+        print(f'start update extra state: {time.time() - t0:.2f}')
         self.model.update_extra_state(self.bound)
-
+        print(f'finish update extra state: {time.time() - t0:.2f}')
 
         for i in range(epoch_len):
             self.optimizer.zero_grad()
@@ -75,6 +76,10 @@ class Trainer(object):
             self.scaler.scale(loss).backward()
             self.scaler.step(self.optimizer)
             self.scaler.update()
+
+        # print('mean_density_inner: ', self.model.mean_density_inner)
+        # print('mean_density_outer: ', self.model.mean_density_outer)
+        # print()
 
         # print(self.loss_avg)
         # self.loss_avg = 0

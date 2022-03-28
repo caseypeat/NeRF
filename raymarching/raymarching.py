@@ -21,15 +21,17 @@ from .backend import _backend
 class _march_rays_train(Function):
     @staticmethod
     @custom_fwd(cast_inputs=torch.half)
-    def forward(ctx, rays_o, rays_d, bound, density_grid, mean_density, iter_density, step_counter=None, mean_count=-1, perturb=False, align=-1, force_all_rays=False):
+    def forward(ctx, rays_o, rays_d, bound, density_grid_inner, mean_density_inner, density_grid_outer, mean_density_outer, iter_density, step_counter=None, mean_count=-1, perturb=False, align=-1, force_all_rays=False):
         
         rays_o = rays_o.contiguous().view(-1, 3)
         rays_d = rays_d.contiguous().view(-1, 3)
 
         N = rays_o.shape[0] # num rays
-        H = density_grid.shape[0] # grid resolution
+        H_inner = density_grid_inner.shape[0] # grid resolution
+        H_outer = density_grid_outer.shape[0] # grid resolution
 
         M = N * 1024 # init max points number in total, hardcoded
+        # M = N * 2048 # init max points number in total, hardcoded
 
         # running average based on previous epoch (mimic `measured_batch_size_before_compaction` in instant-ngp)
         # It estimate the max points number to enable faster training, but will lead to random ignored rays if underestimated.
@@ -48,7 +50,7 @@ class _march_rays_train(Function):
 
         # print(rays_o.dtype, rays_d.dtype)
 
-        _backend.march_rays_train(rays_o, rays_d, density_grid, mean_density, iter_density, bound, N, H, M, xyzs, dirs, deltas, rays, step_counter, perturb) # m is the actually used points number
+        _backend.march_rays_train(rays_o, rays_d, density_grid_inner, mean_density_inner, density_grid_outer, mean_density_outer, iter_density, bound, N, H_inner, H_outer, M, xyzs, dirs, deltas, rays, step_counter, perturb) # m is the actually used points number
 
         #print(step_counter, M)
 

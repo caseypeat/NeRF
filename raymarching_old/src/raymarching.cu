@@ -18,9 +18,9 @@
 #define CHECK_IS_FLOATING(x) TORCH_CHECK(x.scalar_type() == at::ScalarType::Float || x.scalar_type() == at::ScalarType::Half || x.scalar_type() == at::ScalarType::Double, #x " must be a floating tensor")
 
 // some const
-inline constexpr __device__ float DENSITY_THRESH() { return 10.0f; } // TODO: how to decide this threshold (default 10.0)?
+inline constexpr __device__ float DENSITY_THRESH() { return 1.0f; } // TODO: how to decide this threshold (default 10.0)?
 inline constexpr __device__ float SQRT3() { return 1.73205080757f; }
-inline constexpr __device__ int MAX_STEPS() { return 1024; }  // default value: 1024
+inline constexpr __device__ int MAX_STEPS() { return 4096; }  // default value: 1024
 inline constexpr __device__ float MIN_STEPSIZE() { return 2 * SQRT3() / MAX_STEPS(); } // still need to mul bound to get dt_min
 inline constexpr __device__ float MIN_NEAR() { return 0.05f; }
 // inline constexpr __device__ float DT_GAMMA() { return 1.f / 256.f; }  // default value: 1 / 256
@@ -100,6 +100,7 @@ __global__ void kernel_march_rays_train(
 
     const float dt_min = MIN_STEPSIZE() * bound;
     const float dt_max = 2 * bound / (H - 1);
+    const float dt_gamma = bound > 1 ? DT_GAMMA() : 0.0f;
 
     float t0 = near;
     if (perturb) {
@@ -111,48 +112,53 @@ __global__ void kernel_march_rays_train(
     float t = t0;
     uint32_t num_steps = 0;
 
-    while (num_steps < MAX_STEPS()) {
+    //if (t < far) printf("valid ray %d t=%f near=%f far=%f \n", n, t, near, far);
+
+    while (t < far && num_steps < MAX_STEPS()) {
         // current point
-        const float x = ox + t * dx;
-        const float y = oy + t * dy;
-        const float z = oz + t * dz;
-
-        // distance from center
-        const float d = sqrtf(x*x + y*y + z*z);
-
-        // Mipnerf360 piecewise coordinate transform
-        const float scale = d > 1 ? (2 - 1 / d) / d : 1;
-
-        if (d > 100) {
-            break;
-        }
-
-        const float sx = x * scale;
-        const float sy = y * scale;
-        const float sz = z * scale;
-
-        const float dt = dt_min / scale; // scale by distance from center
-        const float sdt = dt_min;
+        const float x = clamp(ox + t * dx, -bound, bound);
+        const float y = clamp(oy + t * dy, -bound, bound);
+        const float z = clamp(oz + t * dz, -bound, bound);
 
         // convert to nearest grid position
-        const int nx = clamp(0.5 * (sx * rbound + 1) * H, 0.0f, (float)(H - 1));
-        const int ny = clamp(0.5 * (sy * rbound + 1) * H, 0.0f, (float)(H - 1));
-        const int nz = clamp(0.5 * (sz * rbound + 1) * H, 0.0f, (float)(H - 1));
+        const int nx = clamp(0.5 * (x * rbound + 1) * H, 0.0f, (float)(H - 1));
+        const int ny = clamp(0.5 * (y * rbound + 1) * H, 0.0f, (float)(H - 1));
+        const int nz = clamp(0.5 * (z * rbound + 1) * H, 0.0f, (float)(H - 1));
 
         const uint32_t index = nx * H * H + ny * H + nz;
         const float density = grid[index];
 
-        t += dt;
+        // if occpuied, advance a small step, and write to output
+        //if (n == 0) printf("t=%f density=%f vs thresh=%f step=%d\n", t, density, density_thresh, num_steps);
 
         if (density > density_thresh) {
             num_steps++;
+            const float dt = clamp(t * dt_gamma, dt_min, dt_max);
+            t += dt;
+        // else, skip a large step (basically skip a voxel grid)
+        } else {
+            // calc distance to next voxel
+            const float tx = (((nx + 0.5f + 0.5f * signf(dx)) / (H - 1) * 2 - 1) * bound - x) * rdx;
+            const float ty = (((ny + 0.5f + 0.5f * signf(dy)) / (H - 1) * 2 - 1) * bound - y) * rdy;
+            const float tz = (((nz + 0.5f + 0.5f * signf(dz)) / (H - 1) * 2 - 1) * bound - z) * rdz;
+            const float tt = t + fmaxf(0.0f, fminf(tx, fminf(ty, tz)));
+            // step until next voxel
+            do { 
+                const float dt = clamp(t * dt_gamma, dt_min, dt_max);
+                t += dt; 
+            } while (t < tt);
         }
     }
+
+    //printf("[n=%d] num_steps=%d\n", n, num_steps);
+    //printf("[n=%d] num_steps=%d, pc=%d, rc=%d\n", n, num_steps, counter[0], counter[1]);
 
 
     // second pass: really locate and write points & dirs
     uint32_t point_index = atomicAdd(counter, num_steps);
     uint32_t ray_index = atomicAdd(counter + 1, 1);
+    
+    //printf("[n=%d] num_steps=%d, point_index=%d, ray_index=%d\n", n, num_steps, point_index, ray_index);
 
     // write rays
     rays[ray_index * 3] = n;
@@ -169,57 +175,50 @@ __global__ void kernel_march_rays_train(
     t = t0;
     uint32_t step = 0;
 
-    while (step < num_steps) {
+    while (t < far && step < num_steps) {
         // current point
-        const float x = ox + t * dx;
-        const float y = oy + t * dy;
-        const float z = oz + t * dz;
-
-        // distance from center
-        const float d = sqrtf(x*x + y*y + z*z);
-
-        if (d > 100) {
-            break;
-        }
-
-        // Mipnerf360 piecewise coordinate transform
-        const float scale = d > 1 ? (2 - 1 / d) / d : 1;
-
-        const float sx = x * scale;
-        const float sy = y * scale;
-        const float sz = z * scale;
-
-        const float dt = dt_min / scale; // scale by distance from center
-        const float sdt = dt_min;
+        const float x = clamp(ox + t * dx, -bound, bound);
+        const float y = clamp(oy + t * dy, -bound, bound);
+        const float z = clamp(oz + t * dz, -bound, bound);
 
         // convert to nearest grid position
-        const int nx = clamp(0.5 * (sx * rbound + 1) * H, 0.0f, (float)(H - 1));
-        const int ny = clamp(0.5 * (sy * rbound + 1) * H, 0.0f, (float)(H - 1));
-        const int nz = clamp(0.5 * (sz * rbound + 1) * H, 0.0f, (float)(H - 1));
+        const int nx = clamp(0.5 * (x * rbound + 1) * H, 0.0f, (float)(H - 1));
+        const int ny = clamp(0.5 * (y * rbound + 1) * H, 0.0f, (float)(H - 1));
+        const int nz = clamp(0.5 * (z * rbound + 1) * H, 0.0f, (float)(H - 1));
 
         // query grid
         const uint32_t index = nx * H * H + ny * H + nz;
         const float density = grid[index];
 
-        t += dt;
-
         // if occpuied, advance a small step, and write to output
         if (density > density_thresh) {
             // write step
-            xyzs[0] = sx;
-            xyzs[1] = sy;
-            xyzs[2] = sz;
+            xyzs[0] = x;
+            xyzs[1] = y;
+            xyzs[2] = z;
             dirs[0] = dx;
             dirs[1] = dy;
             dirs[2] = dz;
-
-            deltas[0] = sdt;
+            const float dt = clamp(t * dt_gamma, dt_min, dt_max);
+            t += dt;
+            deltas[0] = dt;
             xyzs += 3;
             dirs += 3;
             deltas++;
             step++;
+        // else, skip a large step (basically skip a voxel grid)
+        } else {
+            // calc distance to next voxel
+            const float tx = (((nx + 0.5f + 0.5f * signf(dx)) / (H - 1) * 2 - 1) * bound - x) * rdx;
+            const float ty = (((ny + 0.5f + 0.5f * signf(dy)) / (H - 1) * 2 - 1) * bound - y) * rdy;
+            const float tz = (((nz + 0.5f + 0.5f * signf(dz)) / (H - 1) * 2 - 1) * bound - z) * rdz;
+            const float tt = t + fmaxf(0.0f, fminf(tx, fminf(ty, tz)));
+            // step until next voxel
+            do { 
+                const float dt = clamp(t * dt_gamma, dt_min, dt_max);
+                t += dt; 
+            } while (t < tt);
         }
-        
     }
 }
 
