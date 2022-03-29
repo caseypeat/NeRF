@@ -2,12 +2,32 @@ import numpy as np
 import torch
 import cv2
 import time
+import matplotlib.pyplot as plt
+
+from matplotlib import cm
 
 import helpers
 
 from nets import NerfHash
 
 from tqdm import tqdm
+
+
+def color_depthmap_torch(grey, maxval=None, minval=None):
+
+    if minval is None:
+        minval = torch.min(grey)
+    if maxval is None:
+        maxval = torch.max(grey)
+
+    grey -= minval
+    grey[grey < 0] = 0
+    grey /= maxval
+
+    rgb = torch.Tensor(cm.get_cmap(plt.get_cmap('jet'))(grey)[:, :, :3])
+
+    return rgb
+
 
 class Trainer(object):
     def __init__(
@@ -62,9 +82,9 @@ class Trainer(object):
                 self.evaluate_image()
 
     def train_epoch(self, epoch_len, t0):
-        print(f'start update extra state: {time.time() - t0:.2f}')
+        # print(f'start update extra state: {time.time() - t0:.2f}')
         self.model.update_extra_state(self.bound)
-        print(f'finish update extra state: {time.time() - t0:.2f}')
+        # print(f'finish update extra state: {time.time() - t0:.2f}')
 
         for i in range(epoch_len):
             self.optimizer.zero_grad()
@@ -182,6 +202,12 @@ class Trainer(object):
             image_diff[image_diff < 0] = 0
             image_diff[image_diff > 1] = 1
 
-            image_comb = torch.cat([image_uf.detach().cpu(), image_gt], dim=0).permute((1, 0, 2))
+            depth_uf[depth_uf == 0] = 1000
+            depth_color = color_depthmap_torch(1 / depth_uf.detach().cpu())[..., torch.Tensor([2, 1, 0]).to(int)]
+
+            # plt.imshow(1 / depth_uf)
+            # plt.show()
+
+            image_comb = torch.cat([depth_color, image_uf.detach().cpu(), image_gt], dim=0).permute((1, 0, 2))
 
             cv2.imwrite('./data/test_vine_comb.png', np.uint8(cv2.flip(image_comb.numpy()*255, 1)))

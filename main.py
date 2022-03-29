@@ -108,11 +108,11 @@ if __name__ == '__main__':
     # print('test...')
 
     ## Params
-    n_rays = 4096
-    # n_rays = 2048
+    # n_rays = 4096
+    n_rays = 2048
     # n_rays = 1536
     # n_rays = 1024
-    bound = 2
+    bound = 1.125
     # bound = 3
     device = 'cuda'
 

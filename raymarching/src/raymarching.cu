@@ -126,7 +126,7 @@ __global__ void kernel_march_rays_train(
         const float d = sqrtf(x*x + y*y + z*z);
 
         // Mipnerf360 piecewise coordinate transform
-        const float scale = d > 1 ? (2 - 1 / d) / d : 1;
+        const float scale = d > 1 ? (bound - (bound - 1) / d) / d : 1;
 
         if (d > 100) {
             break;
@@ -136,33 +136,36 @@ __global__ void kernel_march_rays_train(
         const float sy = y * scale;
         const float sz = z * scale;
 
-        const float dt = d > 1 ?  dt_min / scale * 8 : dt_min ; // scale by distance from center
+        const float dt = d > 1 ?  dt_min / scale * 8 : dt_min; // scale by distance from center
         const float sdt = d > 1 ?  dt_min * 8 : dt_min;
 
-        const float rbound = d > 1 ? 1/2 : 1;
+        // const float dt = dt_min / scale; // scale by distance from center
+        // const float sdt = dt_min;
+
+        const float rbound = d > 1 ? 1 / bound : 1;
 
         const float H = d > 1 ? H_outer : H_inner;
-
-        // convert to nearest grid position
-        const int nx = clamp(0.5 * (sx * rbound + 1) * H, 0.0f, (float)(H - 1));
-        const int ny = clamp(0.5 * (sy * rbound + 1) * H, 0.0f, (float)(H - 1));
-        const int nz = clamp(0.5 * (sz * rbound + 1) * H, 0.0f, (float)(H - 1));
-
-        const uint32_t index = nx * H * H + ny * H + nz;
 
         t += dt;
 
         if (d < 1) {
+            // convert to nearest grid position
+            const int nx = clamp(0.5 * (sx * rbound + 1) * H, 0.0f, (float)(H - 1));
+            const int ny = clamp(0.5 * (sy * rbound + 1) * H, 0.0f, (float)(H - 1));
+            const int nz = clamp(0.5 * (sz * rbound + 1) * H, 0.0f, (float)(H - 1));
+
+            const uint32_t index = nx * H * H + ny * H + nz;
+
             const float density = grid_inner[index];
             if (density > density_thresh_inner) {
                 num_steps++;
             }
         }
         else {
-            const float density = grid_outer[index];
-            if (1) {
-                num_steps++;
-            }
+            // const float density = grid_outer[index];
+            // if (1) {
+            num_steps++;
+            // }
         }
     }
 
@@ -202,35 +205,36 @@ __global__ void kernel_march_rays_train(
         }
 
         // Mipnerf360 piecewise coordinate transform
-        const float scale = d > 1 ? (2 - 1 / d) / d : 1;
+        // const float scale = d > 1 ? (2 - 1 / d) / d : 1;
+        const float scale = d > 1 ? (bound - (bound - 1) / d) / d : 1;
 
         const float sx = x * scale;
         const float sy = y * scale;
         const float sz = z * scale;
 
-        const float dt = d > 1 ?  dt_min / scale * 8 : dt_min ; // scale by distance from center
+        const float dt = d > 1 ?  dt_min / scale * 8 : dt_min; // scale by distance from center
         const float sdt = d > 1 ?  dt_min * 8 : dt_min;
 
-        const float rbound = d > 1 ? 1/2 : 1;
+        // const float dt = dt_min / scale; // scale by distance from center
+        // const float sdt = dt_min;
+
+        const float rbound = d > 1 ? 1 / bound : 1;
 
         const float H = d > 1 ? H_outer : H_inner;
 
-        // convert to nearest grid position
-        const int nx = clamp(0.5 * (sx * rbound + 1) * H, 0.0f, (float)(H - 1));
-        const int ny = clamp(0.5 * (sy * rbound + 1) * H, 0.0f, (float)(H - 1));
-        const int nz = clamp(0.5 * (sz * rbound + 1) * H, 0.0f, (float)(H - 1));
-
-        // query grid
-        const uint32_t index = nx * H * H + ny * H + nz;
-
         t += dt;
-
-        // if (step%100 == 0) {
-        //     printf("density: %f\n", density);
-        // }
 
         // if occpuied, advance a small step, and write to output
         if (d < 1) {
+
+            // convert to nearest grid position
+            const int nx = clamp(0.5 * (sx * rbound + 1) * H, 0.0f, (float)(H - 1));
+            const int ny = clamp(0.5 * (sy * rbound + 1) * H, 0.0f, (float)(H - 1));
+            const int nz = clamp(0.5 * (sz * rbound + 1) * H, 0.0f, (float)(H - 1));
+
+            // query grid
+            const uint32_t index = nx * H * H + ny * H + nz;
+
             const float density = grid_inner[index];
             if (density > density_thresh_inner) {
                 // write step
@@ -249,22 +253,22 @@ __global__ void kernel_march_rays_train(
             }
         }
         else {
-            const float density = grid_outer[index];
-            if (1) {
-                // write step
-                xyzs[0] = sx;
-                xyzs[1] = sy;
-                xyzs[2] = sz;
-                dirs[0] = dx;
-                dirs[1] = dy;
-                dirs[2] = dz;
+            // const float density = grid_outer[index];
+            // if (1) {
+            // write step
+            xyzs[0] = sx;
+            xyzs[1] = sy;
+            xyzs[2] = sz;
+            dirs[0] = dx;
+            dirs[1] = dy;
+            dirs[2] = dz;
 
-                deltas[0] = sdt;
-                xyzs += 3;
-                dirs += 3;
-                deltas++;
-                step++;
-            }
+            deltas[0] = sdt;
+            xyzs += 3;
+            dirs += 3;
+            deltas++;
+            step++;
+            // }
         }     
     }
 
@@ -287,7 +291,8 @@ __global__ void kernel_composite_rays_train_forward(
     const float bound,
     const uint32_t M, const uint32_t N,
     scalar_t * weights_sum, // temp: used as weights_sum
-    scalar_t * image
+    scalar_t * image,
+    scalar_t * depth
 ) {
     // parallel per ray
     const uint32_t n = threadIdx.x + blockIdx.x * blockDim.x;
@@ -304,6 +309,7 @@ __global__ void kernel_composite_rays_train_forward(
         image[index * 3] = 0;
         image[index * 3 + 1] = 0;
         image[index * 3 + 2] = 0;
+        depth[index] = 0;
         return;
     }
 
@@ -317,6 +323,9 @@ __global__ void kernel_composite_rays_train_forward(
 
     scalar_t r = 0, g = 0, b = 0, d = 0;
 
+    scalar_t ds = 0;
+    scalar_t dc = 0;
+
     while (step < num_steps) {
 
         // minimal remained transmittence
@@ -328,6 +337,12 @@ __global__ void kernel_composite_rays_train_forward(
         r += weight * rgbs[0];
         g += weight * rgbs[1];
         b += weight * rgbs[2];
+
+        if (ds == 0 && sigmas[0] > 100) {
+            ds = dc;
+        }
+
+        dc += deltas[0];
 
         T *= 1.0f - alpha;
 
@@ -348,6 +363,7 @@ __global__ void kernel_composite_rays_train_forward(
     image[index * 3] = r;
     image[index * 3 + 1] = g;
     image[index * 3 + 2] = b;
+    depth[index] = ds;
 }
 
 
@@ -466,7 +482,7 @@ void march_rays_train(at::Tensor rays_o, at::Tensor rays_d, at::Tensor grid_inne
 }
 
 
-void composite_rays_train_forward(at::Tensor sigmas, at::Tensor rgbs, at::Tensor deltas, at::Tensor rays, const float bound, const uint32_t M, const uint32_t N, at::Tensor weights_sum, at::Tensor image) {
+void composite_rays_train_forward(at::Tensor sigmas, at::Tensor rgbs, at::Tensor deltas, at::Tensor rays, const float bound, const uint32_t M, const uint32_t N, at::Tensor weights_sum, at::Tensor image, at::Tensor depth) {
 
     CHECK_CUDA(sigmas);
     CHECK_CUDA(rgbs);
@@ -474,6 +490,7 @@ void composite_rays_train_forward(at::Tensor sigmas, at::Tensor rgbs, at::Tensor
     CHECK_CUDA(rays);
     CHECK_CUDA(weights_sum);
     CHECK_CUDA(image);
+    CHECK_CUDA(depth);
 
     CHECK_CONTIGUOUS(sigmas);
     CHECK_CONTIGUOUS(rgbs);
@@ -481,6 +498,7 @@ void composite_rays_train_forward(at::Tensor sigmas, at::Tensor rgbs, at::Tensor
     CHECK_CONTIGUOUS(rays);
     CHECK_CONTIGUOUS(weights_sum);
     CHECK_CONTIGUOUS(image);
+    CHECK_CONTIGUOUS(depth);
 
     CHECK_IS_FLOATING(sigmas);
     CHECK_IS_FLOATING(rgbs);
@@ -488,12 +506,13 @@ void composite_rays_train_forward(at::Tensor sigmas, at::Tensor rgbs, at::Tensor
     CHECK_IS_INT(rays);
     CHECK_IS_FLOATING(weights_sum);
     CHECK_IS_FLOATING(image);
+    CHECK_IS_FLOATING(depth);
 
     static constexpr uint32_t N_THREAD = 256;
 
     AT_DISPATCH_FLOATING_TYPES_AND_HALF(
     sigmas.scalar_type(), "composite_rays_train_forward", ([&] {
-        kernel_composite_rays_train_forward<<<div_round_up(N, N_THREAD), N_THREAD>>>(sigmas.data_ptr<scalar_t>(), rgbs.data_ptr<scalar_t>(), deltas.data_ptr<scalar_t>(), rays.data_ptr<int>(), bound, M, N, weights_sum.data_ptr<scalar_t>(), image.data_ptr<scalar_t>());
+        kernel_composite_rays_train_forward<<<div_round_up(N, N_THREAD), N_THREAD>>>(sigmas.data_ptr<scalar_t>(), rgbs.data_ptr<scalar_t>(), deltas.data_ptr<scalar_t>(), rays.data_ptr<int>(), bound, M, N, weights_sum.data_ptr<scalar_t>(), image.data_ptr<scalar_t>(), depth.data_ptr<scalar_t>());
     }));
 }
 

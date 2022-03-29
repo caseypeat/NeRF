@@ -86,17 +86,18 @@ class _composite_rays_train(Function):
 
         weights_sum = torch.empty(N, dtype=sigmas.dtype, device=sigmas.device)
         image = torch.empty(N, 3, dtype=sigmas.dtype, device=sigmas.device)
+        depth = torch.empty(N, dtype=sigmas.dtype, device=sigmas.device, requires_grad=False)
 
-        _backend.composite_rays_train_forward(sigmas, rgbs, deltas, rays, bound, M, N, weights_sum, image)
+        _backend.composite_rays_train_forward(sigmas, rgbs, deltas, rays, bound, M, N, weights_sum, image, depth)
 
         ctx.save_for_backward(sigmas, rgbs, deltas, rays, weights_sum, image)
         ctx.dims = [M, N, bound]
 
-        return weights_sum, image
+        return weights_sum, image, depth
     
     @staticmethod
     @custom_bwd
-    def backward(ctx, grad_weights_sum, grad_image):
+    def backward(ctx, grad_weights_sum, grad_image, grad_depth):
 
         grad_weights_sum = grad_weights_sum.contiguous()
         grad_image = grad_image.contiguous()

@@ -83,11 +83,11 @@ class NerfRenderer(nn.Module):
         xyzs, dirs, deltas, rays = raymarching.march_rays_train(rays_o, rays_d, bound, self.density_grid_inner, self.mean_density_inner, self.density_grid_outer, self.mean_density_outer, self.iter_density, None, self.mean_count, perturb, 128, force_all_rays)
         # print(xyzs.shape)
         sigmas, rgbs = self(xyzs, dirs, bound)
-        weights_sum, image = raymarching.composite_rays_train(sigmas, rgbs, deltas, rays, bound)
+        weights_sum, image, depth = raymarching.composite_rays_train(sigmas, rgbs, deltas, rays, bound)
 
         # composite bg (shade_kernel_nerf)
         image = image + (1 - weights_sum).unsqueeze(-1) * bg_color
-        depth = image[..., 0]  # placeholder
+        # depth = image[..., 0]  # placeholder
 
         image = image[None, ...]
         depth = depth[None, ...]
