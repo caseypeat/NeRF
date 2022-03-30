@@ -81,7 +81,10 @@ class NerfRenderer(nn.Module):
             self.local_step += 1
 
         xyzs, dirs, deltas, rays = raymarching.march_rays_train(rays_o, rays_d, bound, self.density_grid_inner, self.mean_density_inner, self.density_grid_outer, self.mean_density_outer, self.iter_density, None, self.mean_count, perturb, 128, force_all_rays)
-        # print(xyzs.shape)
+        # for i in range(len(rays)):
+        #     print(rays[i])
+        # print(xyzs.shape, dirs.shape, deltas.shape, rays.shape)
+        print(torch.sum(rays[:, 3] / 4096))
         sigmas, rgbs = self(xyzs, dirs, bound)
         weights_sum, image, depth = raymarching.composite_rays_train(sigmas, rgbs, deltas, rays, bound)
 

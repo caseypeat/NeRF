@@ -86,10 +86,9 @@ def get_rays(h, w, K, E):
     return rays_o, rays_d
 
 
-def mipnerf360_coordinate_transform(xyz):
-    xyz[xyz > 1] = 2 - 1/xyz[xyz > 1]
-    xyz[xyz < -1] = -2 - 1/xyz[xyz < -1]
-    return xyz
+def mipnerf360_consolidating_weights(W):
+    pass
+
 
 
 def get_z_vals_log(begin, end, N_rays, N_samples, device):

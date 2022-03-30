@@ -30,8 +30,8 @@ class _march_rays_train(Function):
         H_inner = density_grid_inner.shape[0] # grid resolution
         H_outer = density_grid_outer.shape[0] # grid resolution
 
-        M = N * 1024 # init max points number in total, hardcoded
-        # M = N * 2048 # init max points number in total, hardcoded
+        # M = N * 1024 # init max points number in total, hardcoded
+        M = N * 2048 # init max points number in total, hardcoded
 
         # running average based on previous epoch (mimic `measured_batch_size_before_compaction` in instant-ngp)
         # It estimate the max points number to enable faster training, but will lead to random ignored rays if underestimated.
@@ -43,7 +43,7 @@ class _march_rays_train(Function):
         xyzs = torch.zeros(M, 3, dtype=rays_o.dtype, device=rays_o.device)
         dirs = torch.zeros(M, 3, dtype=rays_o.dtype, device=rays_o.device)
         deltas = torch.zeros(M, dtype=rays_o.dtype, device=rays_o.device)
-        rays = torch.empty(N, 3, dtype=torch.int32, device=rays_o.device) # id, offset, num_steps
+        rays = torch.empty(N, 4, dtype=torch.int32, device=rays_o.device) # id, offset, num_steps, inner_num_steps
 
         if step_counter is None:
             step_counter = torch.zeros(2, dtype=torch.int32, device=rays_o.device) # point counter, ray counter

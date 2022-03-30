@@ -17,6 +17,8 @@
 #define CHECK_IS_INT(x) TORCH_CHECK(x.scalar_type() == at::ScalarType::Int, #x " must be an int tensor")
 #define CHECK_IS_FLOATING(x) TORCH_CHECK(x.scalar_type() == at::ScalarType::Float || x.scalar_type() == at::ScalarType::Half || x.scalar_type() == at::ScalarType::Double, #x " must be a floating tensor")
 
+#define RAYS_WIDTH 4
+
 // some const
 inline constexpr __device__ float DENSITY_THRESH() { return 10.0f; } // TODO: how to decide this threshold (default 10.0)?
 inline constexpr __device__ float SQRT3() { return 1.73205080757f; }
@@ -115,6 +117,7 @@ __global__ void kernel_march_rays_train(
     // first pass: estimation of num_steps
     float t = t0;
     uint32_t num_steps = 0;
+    uint32_t inner_num_steps = 0;
 
     while (num_steps < MAX_STEPS()) {
         // current point
@@ -159,6 +162,7 @@ __global__ void kernel_march_rays_train(
             const float density = grid_inner[index];
             if (density > density_thresh_inner) {
                 num_steps++;
+                inner_num_steps++;
             }
         }
         else {
@@ -175,9 +179,10 @@ __global__ void kernel_march_rays_train(
     uint32_t ray_index = atomicAdd(counter + 1, 1);
 
     // write rays
-    rays[ray_index * 3] = n;
-    rays[ray_index * 3 + 1] = point_index;
-    rays[ray_index * 3 + 2] = num_steps;
+    rays[ray_index * RAYS_WIDTH] = n;
+    rays[ray_index * RAYS_WIDTH + 1] = point_index;
+    rays[ray_index * RAYS_WIDTH + 2] = num_steps;
+    rays[ray_index * RAYS_WIDTH + 3] = inner_num_steps;
 
     if (num_steps == 0) return;
     if (point_index + num_steps >= M) return;
@@ -279,7 +284,7 @@ __global__ void kernel_march_rays_train(
 // sigmas: [M]
 // rgbs: [M, 3]
 // deltas: [M]
-// rays: [N, 3], idx, offset, num_steps
+// rays: [N, 4], idx, offset, num_steps, inner_num_steps
 // weights_sum: [N], final pixel alpha
 // image: [N, 3]
 template <typename scalar_t>
@@ -299,9 +304,10 @@ __global__ void kernel_composite_rays_train_forward(
     if (n >= N) return;
 
     // locate 
-    uint32_t index = rays[n * 3];
-    uint32_t offset = rays[n * 3 + 1];
-    uint32_t num_steps = rays[n * 3 + 2];
+    uint32_t index = rays[n * RAYS_WIDTH];
+    uint32_t offset = rays[n * RAYS_WIDTH + 1];
+    uint32_t num_steps = rays[n * RAYS_WIDTH + 2];
+    uint32_t inner_num_steps = rays[n * RAYS_WIDTH + 3];
 
     // empty ray, or ray that exceed max step count.
     if (num_steps == 0 || offset + num_steps >= M) {
@@ -334,10 +340,24 @@ __global__ void kernel_composite_rays_train_forward(
         const scalar_t alpha = 1.0f - __expf(- sigmas[0] * deltas[0]);
         const scalar_t weight = alpha * T;
 
+        // MipNerf360 consolidating weights
+        // uint32_t step_j = 0;
+        // while (step_j < inner_num_steps) {
+
+        //     // weights are normilised by definition
+
+        // change to point incrementation (such as hack..)
+        // ~50 samples inside innersphere coord space (should be able to O(N^2) nested for loop)
+
+
+        //     step_j++;
+        // }
+
         r += weight * rgbs[0];
         g += weight * rgbs[1];
         b += weight * rgbs[2];
 
+        // depth
         if (ds == 0 && sigmas[0] > 100) {
             ds = dc;
         }
@@ -372,7 +392,7 @@ __global__ void kernel_composite_rays_train_forward(
 // sigmas: [M]
 // rgbs: [M, 3]
 // deltas: [M]
-// rays: [N, 3], idx, offset, num_steps
+// rays: [N, 4], idx, offset, num_steps, inner_num_steps
 // weights_sum: [N,], weights_sum here 
 // image: [N, 3]
 // grad_sigmas: [M]
@@ -397,9 +417,10 @@ __global__ void kernel_composite_rays_train_backward(
     if (n >= N) return;
 
     // locate 
-    uint32_t index = rays[n * 3];
-    uint32_t offset = rays[n * 3 + 1];
-    uint32_t num_steps = rays[n * 3 + 2];
+    uint32_t index = rays[n * RAYS_WIDTH];
+    uint32_t offset = rays[n * RAYS_WIDTH + 1];
+    uint32_t num_steps = rays[n * RAYS_WIDTH + 2];
+    uint32_t inner_num_steps = rays[n * RAYS_WIDTH + 3];
 
     if (num_steps == 0 || offset + num_steps >= M) return;
 
