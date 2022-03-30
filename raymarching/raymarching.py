@@ -74,10 +74,11 @@ march_rays_train = _march_rays_train.apply
 class _composite_rays_train(Function):
     @staticmethod
     @custom_fwd(cast_inputs=torch.half)
-    def forward(ctx, sigmas, rgbs, deltas, rays, bound):
+    def forward(ctx, sigmas, rgbs, xyzs, deltas, rays, bound):
         
         sigmas = sigmas.contiguous()
         rgbs = rgbs.contiguous()
+        xyzs = xyzs.contiguous()
         deltas = deltas.contiguous()
         rays = rays.contiguous()
 
@@ -88,9 +89,9 @@ class _composite_rays_train(Function):
         image = torch.empty(N, 3, dtype=sigmas.dtype, device=sigmas.device)
         depth = torch.empty(N, dtype=sigmas.dtype, device=sigmas.device, requires_grad=False)
 
-        _backend.composite_rays_train_forward(sigmas, rgbs, deltas, rays, bound, M, N, weights_sum, image, depth)
+        _backend.composite_rays_train_forward(sigmas, rgbs, xyzs, deltas, rays, bound, M, N, weights_sum, image, depth)
 
-        ctx.save_for_backward(sigmas, rgbs, deltas, rays, weights_sum, image)
+        ctx.save_for_backward(sigmas, rgbs, xyzs, deltas, rays, weights_sum, image)
         ctx.dims = [M, N, bound]
 
         return weights_sum, image, depth
@@ -105,13 +106,13 @@ class _composite_rays_train(Function):
         #print('grad_weights_sum', grad_weights_sum.shape, grad_weights_sum.dtype, grad_weights_sum.min().item(), grad_weights_sum.max().item(), grad_weights_sum.requires_grad)
         #print('grad_image', grad_image.shape, grad_image.dtype, grad_image.min().item(), grad_image.max().item(), grad_image.requires_grad)
 
-        sigmas, rgbs, deltas, rays, weights_sum, image = ctx.saved_tensors
+        sigmas, rgbs, xyzs, deltas, rays, weights_sum, image = ctx.saved_tensors
         M, N, bound = ctx.dims
    
         grad_sigmas = torch.zeros_like(sigmas)
         grad_rgbs = torch.zeros_like(rgbs)
 
-        _backend.composite_rays_train_backward(grad_weights_sum, grad_image, sigmas, rgbs, deltas, rays, weights_sum, image, bound, M, N, grad_sigmas, grad_rgbs)
+        _backend.composite_rays_train_backward(grad_weights_sum, grad_image, sigmas, rgbs, xyzs, deltas, rays, weights_sum, image, bound, M, N, grad_sigmas, grad_rgbs)
 
         return grad_sigmas, grad_rgbs, None, None, None, None
 

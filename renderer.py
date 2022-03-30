@@ -84,9 +84,9 @@ class NerfRenderer(nn.Module):
         # for i in range(len(rays)):
         #     print(rays[i])
         # print(xyzs.shape, dirs.shape, deltas.shape, rays.shape)
-        print(torch.sum(rays[:, 3] / 4096))
+        # print(torch.sum(rays[:, 3] / 4096))
         sigmas, rgbs = self(xyzs, dirs, bound)
-        weights_sum, image, depth = raymarching.composite_rays_train(sigmas, rgbs, deltas, rays, bound)
+        weights_sum, image, depth = raymarching.composite_rays_train(sigmas, rgbs, xyzs, deltas, rays, bound)
 
         # composite bg (shade_kernel_nerf)
         image = image + (1 - weights_sum).unsqueeze(-1) * bg_color

@@ -23,6 +23,7 @@
 inline constexpr __device__ float DENSITY_THRESH() { return 10.0f; } // TODO: how to decide this threshold (default 10.0)?
 inline constexpr __device__ float SQRT3() { return 1.73205080757f; }
 inline constexpr __device__ int MAX_STEPS() { return 2048; }  // default value: 1024
+// inline constexpr __device__ int MAX_STEPS() { return 1024; }  // default value: 1024
 inline constexpr __device__ float MIN_STEPSIZE() { return 2 * SQRT3() / MAX_STEPS(); } // still need to mul bound to get dt_min
 inline constexpr __device__ float MIN_NEAR() { return 0.05f; }
 // inline constexpr __device__ float DT_GAMMA() { return 1.f / 256.f; }  // default value: 1 / 256
@@ -160,7 +161,8 @@ __global__ void kernel_march_rays_train(
             const uint32_t index = nx * H * H + ny * H + nz;
 
             const float density = grid_inner[index];
-            if (density > density_thresh_inner) {
+            // if (density > density_thresh_inner) {
+            if (1) {
                 num_steps++;
                 inner_num_steps++;
             }
@@ -241,7 +243,8 @@ __global__ void kernel_march_rays_train(
             const uint32_t index = nx * H * H + ny * H + nz;
 
             const float density = grid_inner[index];
-            if (density > density_thresh_inner) {
+            // if (density > density_thresh_inner) {
+            if (1) {
                 // write step
                 xyzs[0] = sx;
                 xyzs[1] = sy;
@@ -290,7 +293,8 @@ __global__ void kernel_march_rays_train(
 template <typename scalar_t>
 __global__ void kernel_composite_rays_train_forward(
     const scalar_t * __restrict__ sigmas,
-    const scalar_t * __restrict__ rgbs,  
+    const scalar_t * __restrict__ rgbs,
+    const scalar_t * __restrict__ xyzs,
     const scalar_t * __restrict__ deltas,
     const int * __restrict__ rays,
     const float bound,
@@ -358,11 +362,13 @@ __global__ void kernel_composite_rays_train_forward(
         b += weight * rgbs[2];
 
         // depth
-        if (ds == 0 && sigmas[0] > 100) {
-            ds = dc;
+        const float d = sqrtf(xyzs[0]*xyzs[0] + xyzs[1]*xyzs[1] + xyzs[2]*xyzs[2]);
+        if (sigmas[0] > dc && sigmas[0] > 100 && d < 1) {
+            ds = d;
+            dc = sigmas[0];
         }
 
-        dc += deltas[0];
+        // dc += deltas[0];
 
         T *= 1.0f - alpha;
 
@@ -371,6 +377,7 @@ __global__ void kernel_composite_rays_train_forward(
         // locate
         sigmas++;
         rgbs += 3;
+        xyzs += 3;
         deltas++;
 
         step++;
@@ -402,7 +409,8 @@ __global__ void kernel_composite_rays_train_backward(
     const scalar_t * __restrict__ grad_weights_sum,
     const scalar_t * __restrict__ grad,
     const scalar_t * __restrict__ sigmas,
-    const scalar_t * __restrict__ rgbs,  
+    const scalar_t * __restrict__ rgbs,
+    const scalar_t * __restrict__ xyzs,
     const scalar_t * __restrict__ deltas,  
     const int * __restrict__ rays,
     const scalar_t * __restrict__ weights_sum,
@@ -503,10 +511,11 @@ void march_rays_train(at::Tensor rays_o, at::Tensor rays_d, at::Tensor grid_inne
 }
 
 
-void composite_rays_train_forward(at::Tensor sigmas, at::Tensor rgbs, at::Tensor deltas, at::Tensor rays, const float bound, const uint32_t M, const uint32_t N, at::Tensor weights_sum, at::Tensor image, at::Tensor depth) {
+void composite_rays_train_forward(at::Tensor sigmas, at::Tensor rgbs, at::Tensor xyzs, at::Tensor deltas, at::Tensor rays, const float bound, const uint32_t M, const uint32_t N, at::Tensor weights_sum, at::Tensor image, at::Tensor depth) {
 
     CHECK_CUDA(sigmas);
     CHECK_CUDA(rgbs);
+    CHECK_CUDA(xyzs);
     CHECK_CUDA(deltas);
     CHECK_CUDA(rays);
     CHECK_CUDA(weights_sum);
@@ -515,6 +524,7 @@ void composite_rays_train_forward(at::Tensor sigmas, at::Tensor rgbs, at::Tensor
 
     CHECK_CONTIGUOUS(sigmas);
     CHECK_CONTIGUOUS(rgbs);
+    CHECK_CONTIGUOUS(xyzs);
     CHECK_CONTIGUOUS(deltas);
     CHECK_CONTIGUOUS(rays);
     CHECK_CONTIGUOUS(weights_sum);
@@ -523,6 +533,7 @@ void composite_rays_train_forward(at::Tensor sigmas, at::Tensor rgbs, at::Tensor
 
     CHECK_IS_FLOATING(sigmas);
     CHECK_IS_FLOATING(rgbs);
+    CHECK_IS_FLOATING(xyzs);
     CHECK_IS_FLOATING(deltas);
     CHECK_IS_INT(rays);
     CHECK_IS_FLOATING(weights_sum);
@@ -533,17 +544,18 @@ void composite_rays_train_forward(at::Tensor sigmas, at::Tensor rgbs, at::Tensor
 
     AT_DISPATCH_FLOATING_TYPES_AND_HALF(
     sigmas.scalar_type(), "composite_rays_train_forward", ([&] {
-        kernel_composite_rays_train_forward<<<div_round_up(N, N_THREAD), N_THREAD>>>(sigmas.data_ptr<scalar_t>(), rgbs.data_ptr<scalar_t>(), deltas.data_ptr<scalar_t>(), rays.data_ptr<int>(), bound, M, N, weights_sum.data_ptr<scalar_t>(), image.data_ptr<scalar_t>(), depth.data_ptr<scalar_t>());
+        kernel_composite_rays_train_forward<<<div_round_up(N, N_THREAD), N_THREAD>>>(sigmas.data_ptr<scalar_t>(), rgbs.data_ptr<scalar_t>(), xyzs.data_ptr<scalar_t>(), deltas.data_ptr<scalar_t>(), rays.data_ptr<int>(), bound, M, N, weights_sum.data_ptr<scalar_t>(), image.data_ptr<scalar_t>(), depth.data_ptr<scalar_t>());
     }));
 }
 
 
-void composite_rays_train_backward(at::Tensor grad_weights_sum, at::Tensor grad, at::Tensor sigmas, at::Tensor rgbs, at::Tensor deltas, at::Tensor rays, at::Tensor weights_sum, at::Tensor image, const float bound, const uint32_t M, const uint32_t N, at::Tensor grad_sigmas, at::Tensor grad_rgbs) {
+void composite_rays_train_backward(at::Tensor grad_weights_sum, at::Tensor grad, at::Tensor sigmas, at::Tensor rgbs, at::Tensor xyzs, at::Tensor deltas, at::Tensor rays, at::Tensor weights_sum, at::Tensor image, const float bound, const uint32_t M, const uint32_t N, at::Tensor grad_sigmas, at::Tensor grad_rgbs) {
     
     CHECK_CUDA(grad_weights_sum);
     CHECK_CUDA(grad);
     CHECK_CUDA(sigmas);
     CHECK_CUDA(rgbs);
+    CHECK_CUDA(xyzs);
     CHECK_CUDA(deltas);
     CHECK_CUDA(rays);
     CHECK_CUDA(weights_sum);
@@ -555,6 +567,7 @@ void composite_rays_train_backward(at::Tensor grad_weights_sum, at::Tensor grad,
     CHECK_CONTIGUOUS(grad);
     CHECK_CONTIGUOUS(sigmas);
     CHECK_CONTIGUOUS(rgbs);
+    CHECK_CONTIGUOUS(xyzs);
     CHECK_CONTIGUOUS(deltas);
     CHECK_CONTIGUOUS(rays);
     CHECK_CONTIGUOUS(weights_sum);
@@ -566,6 +579,7 @@ void composite_rays_train_backward(at::Tensor grad_weights_sum, at::Tensor grad,
     CHECK_IS_FLOATING(grad);
     CHECK_IS_FLOATING(sigmas);
     CHECK_IS_FLOATING(rgbs);
+    CHECK_IS_FLOATING(xyzs);
     CHECK_IS_FLOATING(deltas);
     CHECK_IS_INT(rays);
     CHECK_IS_FLOATING(weights_sum);
@@ -577,7 +591,7 @@ void composite_rays_train_backward(at::Tensor grad_weights_sum, at::Tensor grad,
 
     AT_DISPATCH_FLOATING_TYPES_AND_HALF(
     grad.scalar_type(), "composite_rays_train_backward", ([&] {
-        kernel_composite_rays_train_backward<<<div_round_up(N, N_THREAD), N_THREAD>>>(grad_weights_sum.data_ptr<scalar_t>(), grad.data_ptr<scalar_t>(), sigmas.data_ptr<scalar_t>(), rgbs.data_ptr<scalar_t>(), deltas.data_ptr<scalar_t>(), rays.data_ptr<int>(), weights_sum.data_ptr<scalar_t>(), image.data_ptr<scalar_t>(), bound, M, N, grad_sigmas.data_ptr<scalar_t>(), grad_rgbs.data_ptr<scalar_t>());
+        kernel_composite_rays_train_backward<<<div_round_up(N, N_THREAD), N_THREAD>>>(grad_weights_sum.data_ptr<scalar_t>(), grad.data_ptr<scalar_t>(), sigmas.data_ptr<scalar_t>(), rgbs.data_ptr<scalar_t>(), xyzs.data_ptr<scalar_t>(), deltas.data_ptr<scalar_t>(), rays.data_ptr<int>(), weights_sum.data_ptr<scalar_t>(), image.data_ptr<scalar_t>(), bound, M, N, grad_sigmas.data_ptr<scalar_t>(), grad_rgbs.data_ptr<scalar_t>());
     }));
 }
 
