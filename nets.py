@@ -168,8 +168,8 @@ class NeRFNetwork(NerfRenderer):
         # d: [B, N, 3], nomalized in [-1, 1]
 
         prefix = x.shape[:-1]
-        x = x.view(-1, 3)
-        d = d.view(-1, 3)
+        x = x.reshape(-1, 3)
+        d = d.reshape(-1, 3)
 
         # sigma
         x = (x + bound) / (2 * bound) # to [0, 1]
@@ -190,8 +190,8 @@ class NeRFNetwork(NerfRenderer):
         # sigmoid activation for rgb
         color = torch.sigmoid(h)
     
-        sigma = sigma.view(*prefix)
-        color = color.view(*prefix, -1)
+        sigma = sigma.reshape(*prefix)
+        color = color.reshape(*prefix, -1)
 
         return sigma, color
 
@@ -199,7 +199,7 @@ class NeRFNetwork(NerfRenderer):
         # x: [B, N, 3], in [-bound, bound]
 
         prefix = x.shape[:-1]
-        x = x.view(-1, 3)
+        x = x.reshape(-1, 3)
 
         x = (x + bound) / (2 * bound) # to [0, 1]
         x = self.encoder(x)
@@ -208,6 +208,6 @@ class NeRFNetwork(NerfRenderer):
         #sigma = torch.exp(torch.clamp(h[..., 0], -15, 15))
         sigma = F.relu(h[..., 0])
 
-        sigma = sigma.view(*prefix)
+        sigma = sigma.reshape(*prefix)
 
         return sigma

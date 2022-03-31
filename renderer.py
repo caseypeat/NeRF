@@ -2,6 +2,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+import helpers
+
 from raymarching import raymarching
 
 def near_far_from_bound(rays_o, rays_d, bound, type='cube'):
@@ -80,22 +82,30 @@ class NerfRenderer(nn.Module):
             counter.zero_() # set to 0
             self.local_step += 1
 
-        xyzs, dirs, deltas, rays = raymarching.march_rays_train(rays_o, rays_d, bound, self.density_grid_inner, self.mean_density_inner, self.density_grid_outer, self.mean_density_outer, self.iter_density, None, self.mean_count, perturb, 128, force_all_rays)
-        # for i in range(len(rays)):
-        #     print(rays[i])
-        # print(xyzs.shape, dirs.shape, deltas.shape, rays.shape)
-        # print(torch.sum(rays[:, 3] / 4096))
-        sigmas, rgbs = self(xyzs, dirs, bound)
-        weights_sum, image, depth = raymarching.composite_rays_train(sigmas, rgbs, xyzs, deltas, rays, bound)
+        # xyzs, dirs, deltas, rays = raymarching.march_rays_train(rays_o, rays_d, bound, self.density_grid_inner, self.mean_density_inner, self.density_grid_outer, self.mean_density_outer, self.iter_density, None, self.mean_count, perturb, 128, force_all_rays)
+        # sigmas, rgbs = self(xyzs, dirs, bound)
+        # weights_sum, image, depth = raymarching.composite_rays_train(sigmas, rgbs, xyzs, deltas, rays, bound)
+
+        # z_vals = torch.cat([torch.linspace(0.05, 1, 512), torch.logspace(0, 2, 256)], dim=-1)[None, :].expand(rays_o[0].shape[0], -1).to(rays_o.device)
+        z_vals = torch.cat([torch.logspace(-1.2, 0, 256, device=rays_o.device), torch.logspace(0, 2, 128, device=rays_o.device)], dim=-1)[None, :].expand(rays_o[0].shape[0], -1)
+        xyzs, dirs = helpers.get_sample_points(rays_o[0], rays_d[0], z_vals)
+        s_xyzs = helpers.mipnerf360_scale(xyzs, bound)
+        sigmas, rgbs = self(s_xyzs, dirs, bound)
+        image, invdepth, weights = helpers.render_rays_log_new(sigmas, rgbs, z_vals)
+
+        w = torch.bmm(weights[:, :, None], weights[:, None, :])
+
+        # print(image.shape, invdepth.shape, weights.shape, w.shape)
+        # exit()
 
         # composite bg (shade_kernel_nerf)
-        image = image + (1 - weights_sum).unsqueeze(-1) * bg_color
+        # image = image + (1 - weights_sum).unsqueeze(-1) * bg_color
         # depth = image[..., 0]  # placeholder
 
         image = image[None, ...]
-        depth = depth[None, ...]
+        invdepth = invdepth[None, ...]
 
-        return image, depth
+        return image, invdepth
 
     def update_extra_state(self, bound, decay=0.95):
         

@@ -90,6 +90,14 @@ def mipnerf360_consolidating_weights(W):
     pass
 
 
+def mipnerf360_scale(xyzs, bound):
+    d = torch.linalg.norm(xyzs, dim=-1)[..., None].expand(-1, -1, 3)
+    # print(d.shape)
+    s_xyzs = torch.clone(xyzs)
+    s_xyzs[d > 1] = s_xyzs[d > 1] * ((bound - (bound - 1) / d[d > 1]) / d[d > 1])
+    return s_xyzs
+
+
 
 def get_z_vals_log(begin, end, N_rays, N_samples, device):
     """ Inversly proportional to depth sample spacing """
@@ -98,6 +106,17 @@ def get_z_vals_log(begin, end, N_rays, N_samples, device):
     z_vals = z_vals + torch.rand([N_rays, N_samples], device=device)/N_samples  # [N_rays, N_samples]
 
     z_vals = torch.exp((torch.log(end)-torch.log(begin))[..., None]*z_vals + torch.log(begin)[..., None])
+
+    return z_vals
+
+
+def get_z_vals_log_new(begin, end, N_rays, N_samples, device):
+    """ Inversly proportional to depth sample spacing """
+    z_vals = torch.linspace(0, 1-1/N_samples, N_samples, device=device)
+    z_vals = z_vals[None, :].expand(N_rays, -1)
+    z_vals = z_vals + torch.rand([N_rays, N_samples], device=device)/N_samples  # [N_rays, N_samples]
+
+    z_vals = torch.exp((m.log(end)-m.log(begin))*z_vals + m.log(begin))
 
     return z_vals
 
@@ -164,6 +183,31 @@ def render_rays_log(samples, z_vals):
     invdepth = torch.sum(weights / z_vals, -1)  # [N_rays]
 
     return rgb, invdepth, weights, sigma, color
+
+
+def render_rays_log_new(sigmas, rgbs, z_vals):
+    N_rays, N_samples = z_vals.shape[:2]
+
+    delta = z_vals.new_zeros([N_rays, N_samples])  # [N_rays, N_samples]
+    # delta[:, :512-1] = (z_vals[:, 1:512] - z_vals[:, :512-1])
+    # delta[:, 512-1:-1] = (z_vals[:, 512:] - z_vals[:, 512-1:-1]) / (z_vals[:, 512:]/2 + z_vals[:, 512-1:-1]/2)
+
+    # delta[:, :-1] = z_vals[:, 1:] - z_vals[:, :-1]
+    delta[:, :-1] = (z_vals[:, 1:] - z_vals[:, :-1]) / (z_vals[:, 1:]/2 + z_vals[:, :-1]/2)
+
+    # for d in delta[0]:
+    #     print(d)
+    # exit()
+
+    alpha = 1 - torch.exp(-sigmas * delta)  # [N_rays, N_samples]
+
+    alpha_shift = torch.cat([alpha.new_zeros((alpha.shape[0], 1)), alpha], dim=-1)[:, :-1]  # [N_rays, N_samples]
+    weights = alpha * torch.cumprod(1 - alpha_shift, dim=-1)  # [N_rays, N_samples]
+
+    rgb = torch.sum(weights[..., None] * rgbs, -2)  # [N_rays, 3]
+    invdepth = torch.sum(weights / z_vals, -1)  # [N_rays]
+
+    return rgb, invdepth, weights
 
 
 def sample_pdf(z_vals, weights, N_importance, alpha=0.0001):

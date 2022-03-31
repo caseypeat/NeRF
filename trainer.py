@@ -83,7 +83,7 @@ class Trainer(object):
 
     def train_epoch(self, epoch_len, t0):
         # print(f'start update extra state: {time.time() - t0:.2f}')
-        self.model.update_extra_state(self.bound)
+        # self.model.update_extra_state(self.bound)
         # print(f'finish update extra state: {time.time() - t0:.2f}')
 
         for i in range(epoch_len):
@@ -202,8 +202,8 @@ class Trainer(object):
             image_diff[image_diff < 0] = 0
             image_diff[image_diff > 1] = 1
 
-            depth_uf[depth_uf == 0] = 1000
-            depth_color = color_depthmap_torch(1 / depth_uf.detach().cpu())[..., torch.Tensor([2, 1, 0]).to(int)]
+            # depth_uf[depth_uf == 0] = 1000
+            depth_color = color_depthmap_torch(depth_uf.detach().cpu())[..., torch.Tensor([2, 1, 0]).to(int)]
 
             # plt.imshow(1 / depth_uf)
             # plt.show()

@@ -32,6 +32,7 @@ class _march_rays_train(Function):
 
         # M = N * 1024 # init max points number in total, hardcoded
         M = N * 2048 # init max points number in total, hardcoded
+        # M = N * 4096 # init max points number in total, hardcoded
 
         # running average based on previous epoch (mimic `measured_batch_size_before_compaction` in instant-ngp)
         # It estimate the max points number to enable faster training, but will lead to random ignored rays if underestimated.

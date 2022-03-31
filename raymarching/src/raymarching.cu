@@ -153,14 +153,14 @@ __global__ void kernel_march_rays_train(
         t += dt;
 
         if (d < 1) {
-            // convert to nearest grid position
-            const int nx = clamp(0.5 * (sx * rbound + 1) * H, 0.0f, (float)(H - 1));
-            const int ny = clamp(0.5 * (sy * rbound + 1) * H, 0.0f, (float)(H - 1));
-            const int nz = clamp(0.5 * (sz * rbound + 1) * H, 0.0f, (float)(H - 1));
+            // // convert to nearest grid position
+            // const int nx = clamp(0.5 * (sx * rbound + 1) * H, 0.0f, (float)(H - 1));
+            // const int ny = clamp(0.5 * (sy * rbound + 1) * H, 0.0f, (float)(H - 1));
+            // const int nz = clamp(0.5 * (sz * rbound + 1) * H, 0.0f, (float)(H - 1));
 
-            const uint32_t index = nx * H * H + ny * H + nz;
+            // const uint32_t index = nx * H * H + ny * H + nz;
 
-            const float density = grid_inner[index];
+            // const float density = grid_inner[index];
             // if (density > density_thresh_inner) {
             if (1) {
                 num_steps++;
@@ -186,8 +186,17 @@ __global__ void kernel_march_rays_train(
     rays[ray_index * RAYS_WIDTH + 2] = num_steps;
     rays[ray_index * RAYS_WIDTH + 3] = inner_num_steps;
 
-    if (num_steps == 0) return;
-    if (point_index + num_steps >= M) return;
+    // if (num_steps == 0) return;
+    // if (point_index + num_steps >= M) return;
+
+    if (num_steps == 0) {
+        printf("num_steps==0\n");
+        return;
+    }
+    if (point_index + num_steps >= M) {
+        printf("point_index + num_steps >= M\n");
+        return;
+    }
 
     xyzs += point_index * 3;
     dirs += point_index * 3;
@@ -234,15 +243,15 @@ __global__ void kernel_march_rays_train(
         // if occpuied, advance a small step, and write to output
         if (d < 1) {
 
-            // convert to nearest grid position
-            const int nx = clamp(0.5 * (sx * rbound + 1) * H, 0.0f, (float)(H - 1));
-            const int ny = clamp(0.5 * (sy * rbound + 1) * H, 0.0f, (float)(H - 1));
-            const int nz = clamp(0.5 * (sz * rbound + 1) * H, 0.0f, (float)(H - 1));
+            // // convert to nearest grid position
+            // const int nx = clamp(0.5 * (sx * rbound + 1) * H, 0.0f, (float)(H - 1));
+            // const int ny = clamp(0.5 * (sy * rbound + 1) * H, 0.0f, (float)(H - 1));
+            // const int nz = clamp(0.5 * (sz * rbound + 1) * H, 0.0f, (float)(H - 1));
 
-            // query grid
-            const uint32_t index = nx * H * H + ny * H + nz;
+            // // query grid
+            // const uint32_t index = nx * H * H + ny * H + nz;
 
-            const float density = grid_inner[index];
+            // const float density = grid_inner[index];
             // if (density > density_thresh_inner) {
             if (1) {
                 // write step

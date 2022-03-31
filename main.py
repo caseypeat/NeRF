@@ -46,8 +46,8 @@ def meta_loader(loader):
 
 
 def meta_camera_geometry():
-    scene_dir = '/local/v100/mnt/maara/synthetic_tree_assets/trees3/renders/vine_C2_1/back_close/cameras.json'
-    # scene_dir = '/home/casey/Documents/PhD/data/synthetic_tree_assets/trees3/renders/vine_C2_1/back_close/cameras.json'
+    # scene_dir = '/local/v100/mnt/maara/synthetic_tree_assets/trees3/renders/vine_C2_1/back_close/cameras.json'
+    scene_dir = '/home/casey/Documents/PhD/data/synthetic_tree_assets/trees3/renders/vine_C2_1/back_close/cameras.json'
     # images, depths, intrinsics, extrinsics = camera_geometry_loader(scene_dir, image_scale=0.25, frame_range=(0, 2))
     images, depths, intrinsics, extrinsics = camera_geometry_loader(scene_dir, image_scale=0.25)
 
@@ -108,10 +108,10 @@ if __name__ == '__main__':
     # print('test...')
 
     ## Params
-    # n_rays = 4096
+    n_rays = 4096
     # n_rays = 2048
     # n_rays = 1536
-    n_rays = 1024
+    # n_rays = 1024
     bound = 1.125
     # bound = 3
     device = 'cuda'
