@@ -77,10 +77,10 @@ class NerfRenderer(nn.Module):
 
     def render(self, rays_o, rays_d, bound, bg_color, perturb, force_all_rays):
 
-        if self.training:
-            counter = self.step_counter[self.local_step % 64]
-            counter.zero_() # set to 0
-            self.local_step += 1
+        # if self.training:
+        #     counter = self.step_counter[self.local_step % 64]
+        #     counter.zero_() # set to 0
+        #     self.local_step += 1
 
         # xyzs, dirs, deltas, rays = raymarching.march_rays_train(rays_o, rays_d, bound, self.density_grid_inner, self.mean_density_inner, self.density_grid_outer, self.mean_density_outer, self.iter_density, None, self.mean_count, perturb, 128, force_all_rays)
         # sigmas, rgbs = self(xyzs, dirs, bound)
@@ -93,9 +93,18 @@ class NerfRenderer(nn.Module):
         sigmas, rgbs = self(s_xyzs, dirs, bound)
         image, invdepth, weights = helpers.render_rays_log_new(sigmas, rgbs, z_vals)
 
-        w = torch.bmm(weights[:, :, None], weights[:, None, :])
+        w = weights[:, :, None] * weights[:, None, :]
 
-        # print(image.shape, invdepth.shape, weights.shape, w.shape)
+        z_vals_lin = (torch.cat([torch.linspace(-1.2, 0, 256, device=rays_o.device), torch.linspace(0, 2, 128, device=rays_o.device)], dim=-1)[None, :].expand(rays_o[0].shape[0], -1) + 1.2) / 3.2
+        s = torch.abs(z_vals_lin[:, :, None] - z_vals_lin[:, None, :])
+
+        l_dist = w * s
+
+        # second term not nessacary with dense sampling??
+
+        print(torch.mean(torch.sum(l_dist, dim=[1, 2])))
+
+        # print(image.shape, invdepth.shape, weights.shape, w.shape, s.shape, l_dist.shape, torch.sum(l_dist, dim=[1, 2]))
         # exit()
 
         # composite bg (shade_kernel_nerf)
