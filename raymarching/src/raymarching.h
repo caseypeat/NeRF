@@ -9,7 +9,7 @@ void march_rays_train(at::Tensor rays_o, at::Tensor rays_d, at::Tensor grid_inne
 
 // _backend.composite_rays_train_forward(sigmas, rgbs, rays, bound, M, N, weights_sum, image)
 void composite_rays_train_forward(at::Tensor sigmas, at::Tensor rgbs, at::Tensor xyzs, at::Tensor deltas, at::Tensor rays, const float bound, const uint32_t M, const uint32_t N, at::Tensor weights_sum, at::Tensor image, at::Tensor depth);
-void composite_rays_train_backward(at::Tensor grad_weights_sum, at::Tensor grad, at::Tensor sigmas, at::Tensor rgbs, at::Tensor xyzs, at::Tensor deltas, at::Tensor rays, at::Tensor weights_sum, at::Tensor image, const float bound, const uint32_t M, const uint32_t N, at::Tensor grad_sigmas, at::Tensor grad_rgbs);
+void composite_rays_train_backward(at::Tensor grad_weights_sum, at::Tensor grad, at::Tensor grad_depth, at::Tensor sigmas, at::Tensor rgbs, at::Tensor xyzs, at::Tensor deltas, at::Tensor rays, at::Tensor weights_sum, at::Tensor image, at::Tensor depth, const float bound, const uint32_t M, const uint32_t N, at::Tensor grad_sigmas, at::Tensor grad_rgbs);
 
 // inference functions
 void march_rays(const uint32_t n_alive, const uint32_t n_step, at::Tensor rays_alive, at::Tensor rays_t, at::Tensor rays_o, at::Tensor rays_d, const float bound, const uint32_t H, at::Tensor density_grid, const float mean_density, at::Tensor near, at::Tensor far, at::Tensor xyzs, at::Tensor dirs, at::Tensor deltas, const uint32_t perturb);

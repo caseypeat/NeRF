@@ -408,13 +408,15 @@ template <typename scalar_t>
 __global__ void kernel_composite_rays_train_backward(
     const scalar_t * __restrict__ grad_weights_sum,
     const scalar_t * __restrict__ grad,
+    const scalar_t * __restrict__ grad_depth,
     const scalar_t * __restrict__ sigmas,
     const scalar_t * __restrict__ rgbs,
     const scalar_t * __restrict__ xyzs,
     const scalar_t * __restrict__ deltas,  
     const int * __restrict__ rays,
     const scalar_t * __restrict__ weights_sum,
-    const scalar_t * __restrict__ image,  
+    const scalar_t * __restrict__ image,
+    const scalar_t * __restrict__ depth,
     const float bound,
     const uint32_t M, const uint32_t N,
     scalar_t * grad_sigmas,
@@ -434,8 +436,10 @@ __global__ void kernel_composite_rays_train_backward(
 
     grad_weights_sum += index;
     grad += index * 3;
+    grad_depth += index;
     weights_sum += index;
     image += index * 3;
+    depth += index;
     sigmas += offset;
     rgbs += offset * 3;
     deltas += offset;
@@ -549,10 +553,11 @@ void composite_rays_train_forward(at::Tensor sigmas, at::Tensor rgbs, at::Tensor
 }
 
 
-void composite_rays_train_backward(at::Tensor grad_weights_sum, at::Tensor grad, at::Tensor sigmas, at::Tensor rgbs, at::Tensor xyzs, at::Tensor deltas, at::Tensor rays, at::Tensor weights_sum, at::Tensor image, const float bound, const uint32_t M, const uint32_t N, at::Tensor grad_sigmas, at::Tensor grad_rgbs) {
+void composite_rays_train_backward(at::Tensor grad_weights_sum, at::Tensor grad, at::Tensor grad_depth, at::Tensor sigmas, at::Tensor rgbs, at::Tensor xyzs, at::Tensor deltas, at::Tensor rays, at::Tensor weights_sum, at::Tensor image, at::Tensor depth, const float bound, const uint32_t M, const uint32_t N, at::Tensor grad_sigmas, at::Tensor grad_rgbs) {
     
     CHECK_CUDA(grad_weights_sum);
     CHECK_CUDA(grad);
+    CHECK_CUDA(grad_depth);
     CHECK_CUDA(sigmas);
     CHECK_CUDA(rgbs);
     CHECK_CUDA(xyzs);
@@ -560,11 +565,13 @@ void composite_rays_train_backward(at::Tensor grad_weights_sum, at::Tensor grad,
     CHECK_CUDA(rays);
     CHECK_CUDA(weights_sum);
     CHECK_CUDA(image);
+    CHECK_CUDA(depth);
     CHECK_CUDA(grad_sigmas);
     CHECK_CUDA(grad_rgbs);
     
     CHECK_CONTIGUOUS(grad_weights_sum);
     CHECK_CONTIGUOUS(grad);
+    CHECK_CONTIGUOUS(grad_depth);
     CHECK_CONTIGUOUS(sigmas);
     CHECK_CONTIGUOUS(rgbs);
     CHECK_CONTIGUOUS(xyzs);
@@ -572,11 +579,13 @@ void composite_rays_train_backward(at::Tensor grad_weights_sum, at::Tensor grad,
     CHECK_CONTIGUOUS(rays);
     CHECK_CONTIGUOUS(weights_sum);
     CHECK_CONTIGUOUS(image);
+    CHECK_CONTIGUOUS(depth);
     CHECK_CONTIGUOUS(grad_sigmas);
     CHECK_CONTIGUOUS(grad_rgbs);
 
     CHECK_IS_FLOATING(grad_weights_sum);
     CHECK_IS_FLOATING(grad);
+    CHECK_IS_FLOATING(grad_depth);
     CHECK_IS_FLOATING(sigmas);
     CHECK_IS_FLOATING(rgbs);
     CHECK_IS_FLOATING(xyzs);
@@ -584,6 +593,7 @@ void composite_rays_train_backward(at::Tensor grad_weights_sum, at::Tensor grad,
     CHECK_IS_INT(rays);
     CHECK_IS_FLOATING(weights_sum);
     CHECK_IS_FLOATING(image);
+    CHECK_IS_FLOATING(depth);
     CHECK_IS_FLOATING(grad_sigmas);
     CHECK_IS_FLOATING(grad_rgbs);
 
@@ -591,7 +601,7 @@ void composite_rays_train_backward(at::Tensor grad_weights_sum, at::Tensor grad,
 
     AT_DISPATCH_FLOATING_TYPES_AND_HALF(
     grad.scalar_type(), "composite_rays_train_backward", ([&] {
-        kernel_composite_rays_train_backward<<<div_round_up(N, N_THREAD), N_THREAD>>>(grad_weights_sum.data_ptr<scalar_t>(), grad.data_ptr<scalar_t>(), sigmas.data_ptr<scalar_t>(), rgbs.data_ptr<scalar_t>(), xyzs.data_ptr<scalar_t>(), deltas.data_ptr<scalar_t>(), rays.data_ptr<int>(), weights_sum.data_ptr<scalar_t>(), image.data_ptr<scalar_t>(), bound, M, N, grad_sigmas.data_ptr<scalar_t>(), grad_rgbs.data_ptr<scalar_t>());
+        kernel_composite_rays_train_backward<<<div_round_up(N, N_THREAD), N_THREAD>>>(grad_weights_sum.data_ptr<scalar_t>(), grad.data_ptr<scalar_t>(), grad_depth.data_ptr<scalar_t>(), sigmas.data_ptr<scalar_t>(), rgbs.data_ptr<scalar_t>(), xyzs.data_ptr<scalar_t>(), deltas.data_ptr<scalar_t>(), rays.data_ptr<int>(), weights_sum.data_ptr<scalar_t>(), image.data_ptr<scalar_t>(), depth.data_ptr<scalar_t>(), bound, M, N, grad_sigmas.data_ptr<scalar_t>(), grad_rgbs.data_ptr<scalar_t>());
     }));
 }
 
