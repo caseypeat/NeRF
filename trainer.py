@@ -64,6 +64,8 @@ class Trainer(object):
         self.epoch_len = 100
 
         self.loss_avg = 0
+        self.loss_rgb_avg = 0
+        self.loss_dist_avg = 0
 
 
     def train(self):
@@ -75,11 +77,16 @@ class Trainer(object):
             #     self.train_epoch(100)
             self.train_epoch(self.epoch_len, t0)
 
-            print(f'Epoch: {epoch} - Time (s): {time.time() - t0:.2f} - Loss: {self.loss_avg:.7f}\n')
+            print(f'Epoch: {epoch} - Time (s): {time.time() - t0:.2f} - Loss: {self.loss_avg:.7f} - Loss RGB: {self.loss_rgb_avg:.7f} - Loss Dist: {self.loss_dist_avg:.7f}\n')
             self.loss_avg = 0
+            self.loss_rgb_avg = 0
+            self.loss_dist_avg = 0
 
             if epoch % 10 == 0 and epoch != 0:
                 self.evaluate_image()
+
+                with torch.cuda.amp.autocast():
+                    self.model.extract_geometry(self.bound)
 
     def train_epoch(self, epoch_len, t0):
         # print(f'start update extra state: {time.time() - t0:.2f}')
@@ -89,9 +96,12 @@ class Trainer(object):
         for i in range(epoch_len):
             self.optimizer.zero_grad()
 
-            loss = self.train_step()
+            loss_rgb, l_dist = self.train_step()
+            loss = loss_rgb + 0.001 * l_dist
 
             self.loss_avg += float(loss) / epoch_len
+            self.loss_rgb_avg += float(loss_rgb) / epoch_len
+            self.loss_dist_avg += float(l_dist) / epoch_len
 
             self.scaler.scale(loss).backward()
             self.scaler.step(self.optimizer)
@@ -133,11 +143,11 @@ class Trainer(object):
         rays_d = rays_d[None, ...]
 
         with torch.cuda.amp.autocast():
-            rgb_pred, depth_pred = self.model.render(rays_o, rays_d, self.bound, color_bg, perturb=True, force_all_rays=False)
+            rgb_pred, depth_pred, l_dist = self.model.render(rays_o, rays_d, self.bound, color_bg, perturb=True, force_all_rays=False)
 
-        loss = self.criterion(rgb_pred, rgb_gt)
+        loss = self.criterion(rgb_pred, rgb_gt) #+ 0.01 * l_dist
 
-        return loss
+        return loss, l_dist
 
     def evaluate_image(self):
         self.model.eval()
@@ -185,7 +195,7 @@ class Trainer(object):
                 rays_d = rays_d[None, ...]
 
                 with torch.cuda.amp.autocast():
-                    image_fb, depth_fb = self.model.render(rays_o, rays_d, self.bound, bg_color=color_bg, perturb=False, force_all_rays=True)
+                    image_fb, depth_fb, _ = self.model.render(rays_o, rays_d, self.bound, bg_color=color_bg, perturb=False, force_all_rays=True)
 
                 image[i:end] = image_fb[0, ...]
                 depth[i:end] = depth_fb[0, ...]

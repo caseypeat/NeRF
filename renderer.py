@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import open3d as o3d
 
 import helpers
 
@@ -99,10 +100,11 @@ class NerfRenderer(nn.Module):
         s = torch.abs(z_vals_lin[:, :, None] - z_vals_lin[:, None, :])
 
         l_dist = w * s
+        l_dist = torch.mean(torch.sum(l_dist, dim=[1, 2]))
 
         # second term not nessacary with dense sampling??
 
-        print(torch.mean(torch.sum(l_dist, dim=[1, 2])))
+        # print(torch.mean(torch.sum(l_dist, dim=[1, 2])))
 
         # print(image.shape, invdepth.shape, weights.shape, w.shape, s.shape, l_dist.shape, torch.sum(l_dist, dim=[1, 2]))
         # exit()
@@ -114,7 +116,62 @@ class NerfRenderer(nn.Module):
         image = image[None, ...]
         invdepth = invdepth[None, ...]
 
-        return image, invdepth
+        return image, invdepth, l_dist
+
+    # def extract_geometry(self, bound):
+    #     with torch.no_grad():
+    #         res = 512
+    #         d_inner = torch.linspace(-1, 1, res, device='cuda')
+    #         D_inner = torch.stack(torch.meshgrid(d_inner, d_inner, d_inner), dim=-1)
+    #         dist_inner = torch.linalg.norm(D_inner, dim=-1)[:, :, :, None].expand(-1, -1, -1, 3)
+    #         mask_inner = torch.zeros(dist_inner.shape, dtype=bool, device='cuda')
+    #         mask_inner[dist_inner < 1] = True
+
+    #         xyzs = D_inner[mask_inner].view(-1, 3)
+
+    #         # sigmas = self.density(xyzs, bound)
+
+    #         # sigmas_voxel = torch.zeros((res, res, res), device='cuda', dtype=torch.half)
+
+    #         # sigmas_voxel[mask_inner[..., 0]] = sigmas
+
+    #         # print(sigmas_voxel.shape)
+    #         exit()
+
+    def extract_geometry(self, bound):
+        with torch.no_grad():
+            res = 1024
+            thresh = 33
+
+            points = torch.zeros((0, 3), device='cuda')
+
+            for i in range(res):
+                d = torch.linspace(-1, 1, res, device='cuda')
+                D = torch.stack(torch.meshgrid(d[i], d, d), dim=-1)
+                dist = torch.linalg.norm(D, dim=-1)[:, :, :, None].expand(-1, -1, -1, 3)
+                mask = torch.zeros(dist.shape, dtype=bool, device='cuda')
+                mask[dist < 1] = True
+
+                xyzs = D[mask].view(-1, 3)
+
+                sigmas = self.density(xyzs, bound)
+
+                # print(1, sigmas[..., None].expand(-1, 3).shape)
+
+                new_points = xyzs[sigmas[..., None].expand(-1, 3) > thresh].view(-1, 3)
+
+                # print(2, new_points.shape)
+
+                points = torch.cat((points, new_points))
+
+            points = torch.stack((points[:, 1], points[:, 2], points[:, 0]), dim=-1)
+            print(points.shape)
+
+            pcd = o3d.geometry.PointCloud()
+            pcd.points = o3d.utility.Vector3dVector(points.cpu().numpy())
+            o3d.visualization.draw_geometries([pcd])
+
+            # exit()
 
     def update_extra_state(self, bound, decay=0.95):
         
