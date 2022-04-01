@@ -70,6 +70,9 @@ class Trainer(object):
 
     def train(self):
         t0 = time.time()
+        N, H, W, C = self.images.shape
+        # ids = torch.Tensor(np.array([0, 5, 24, 25, 48, 49, 72, 73, 96, 97])).to(int).to('cuda')
+        # ids = torch.Tensor(np.array([N//2])).to(int).to('cuda')
         for epoch in range(self.train_len):
             # if epoch == 0:
             #     self.train_epoch(1000)
@@ -86,8 +89,9 @@ class Trainer(object):
                 self.evaluate_image()
 
                 # with torch.cuda.amp.autocast():
-            if epoch % 50 == 0 and epoch != 0:
-                self.model.extract_geometry(self.bound)
+            if epoch % 10 == 0 and epoch != 0:
+            # if epoch % 50 == 0:
+                self.model.extract_geometry(self.bound, H, W, self.intrinsics[:, ...].to('cuda'), self.extrinsics[:, ...].to('cuda'))
 
     def train_epoch(self, epoch_len, t0):
         # print(f'start update extra state: {time.time() - t0:.2f}')

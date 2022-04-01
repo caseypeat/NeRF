@@ -2,6 +2,7 @@ import numpy as np
 import cv2
 import os
 import sys
+import matplotlib.pyplot as plt
 
 from tqdm import tqdm
 
@@ -36,6 +37,7 @@ def camera_geometry_loader(scene_path, image_scale=1, frame_range=None):
     depths_list = []
     intrinsics_list = []
     extrinsics_list = []
+    ids_list = []
 
     frames = load_frames(scene)
 
@@ -54,11 +56,16 @@ def camera_geometry_loader(scene_path, image_scale=1, frame_range=None):
                 depth_temp = frame.depth.astype(np.float32)
             else:
                 depth_temp = np.ones(image_temp.shape[:-1], dtype=np.float32)
+
             depths_list.append(depth_temp)
+
+            id_temp = frame.ids / (16.0/65536.0)
+            ids_list.append(id_temp)
     
     images = np.stack(images_list, axis=0)
     intrinsics = np.stack(intrinsics_list, axis=0)
     extrinsics = np.stack(extrinsics_list, axis=0)
     depths = np.stack(depths_list, axis=0)
+    ids = np.stack(ids_list, axis=0)
 
-    return images, depths, intrinsics, extrinsics
+    return images, depths, intrinsics, extrinsics, ids

@@ -1,3 +1,4 @@
+from turtle import shape
 from numpy import dtype
 import torch
 import torch.nn as nn
@@ -148,10 +149,10 @@ class NerfRenderer(nn.Module):
     #         # print(sigmas_voxel.shape)
     #         exit()
 
-    def extract_geometry(self, bound):
+    def extract_geometry(self, bound, H, W, K, E):
         with torch.no_grad():
-            res = 2048
-            thresh = 33
+            res = 1024
+            thresh = 10
 
             points = torch.zeros((0, 3), device='cuda')
 
@@ -163,6 +164,18 @@ class NerfRenderer(nn.Module):
                 mask[dist < 1] = True
 
                 # also mask out parts outside camera coverage
+                rays_d = D - E[:, None, None, :3, -1]
+                dirs_ = torch.inverse(E[:, None, None, :3, :3]) @ rays_d[..., None]
+                dirs_ = K[:, None, None, ...] @ dirs_
+                dirs = dirs_ / dirs_[:, :, :, 2, None, :]
+                mask_dirs = torch.zeros((E.shape[0], res, res), dtype=int, device='cuda')
+                mask_dirs[((dirs[:, :, :, 0, 0] > 0) & (dirs[:, :, :, 0, 0] < H) & (dirs[:, :, :, 1, 0] > 0) & (dirs[:, :, :, 1, 0] < W) & (dirs_[:, :, :, 2, 0] > 0))] = 1
+                mask_dirs = torch.sum(mask_dirs, dim=0)
+                mask_dirs[mask_dirs > 0] = 1
+                mask_dirs = mask_dirs.to(bool)
+                mask_dirs = mask_dirs[None, :, :, None].expand(-1, -1, -1, 3)
+                mask = torch.logical_and(mask, mask_dirs)
+                # print(mask_dirs.shape, mask.shape)
 
                 xyzs = D[mask].view(-1, 3)
 

@@ -49,16 +49,20 @@ def meta_camera_geometry():
     # scene_dir = '/local/v100/mnt/maara/synthetic_tree_assets/trees3/renders/vine_C2_1/back_close/cameras.json'
     scene_dir = '/home/casey/Documents/PhD/data/synthetic_tree_assets/trees3/renders/vine_C2_1/back_close/cameras.json'
     # images, depths, intrinsics, extrinsics = camera_geometry_loader(scene_dir, image_scale=0.25, frame_range=(0, 2))
-    images, depths, intrinsics, extrinsics = camera_geometry_loader(scene_dir, image_scale=0.25)
+    images, depths, intrinsics, extrinsics, ids = camera_geometry_loader(scene_dir, image_scale=0.25)
 
-    images_nb, depths_nb = remove_background(images, depths, threshold=1)
+    images_nb, depths_nb = remove_background(images, depths, ids, threshold=1)
 
-    # xyz_min, xyz_max = helpers.calculate_bounds(images, depths, intrinsics, extrinsics)
+    # for i in images_nb:
+    #     plt.imshow(i)
+    #     plt.show()
 
-    # e_min = np.amin(extrinsics[..., :3, 3], axis=tuple(np.arange(len(extrinsics[..., :3, 3].shape[:-1]))))
-    # e_max = np.amax(extrinsics[..., :3, 3], axis=tuple(np.arange(len(extrinsics[..., :3, 3].shape[:-1]))))
+    xyz_min, xyz_max = helpers.calculate_bounds(images_nb, depths_nb, intrinsics, extrinsics)
 
-    # print(e_min, e_max)
+    e_min = np.amin(extrinsics[..., :3, 3], axis=tuple(np.arange(len(extrinsics[..., :3, 3].shape[:-1]))))
+    e_max = np.amax(extrinsics[..., :3, 3], axis=tuple(np.arange(len(extrinsics[..., :3, 3].shape[:-1]))))
+
+    print(e_min, e_max)
 
     # t_min = np.minimum(e_min, xyz_min)
     # t_max = np.maximum(e_max, xyz_max)
@@ -68,15 +72,15 @@ def meta_camera_geometry():
     # extrinsics[..., :3, 3] = (extrinsics[..., :3, 3] - np.amin(bds_min))
     # depths = depths / (np.amax(xyz_max) - np.amin(xyz_min)) * 2
 
-    xyz_min, xyz_max = np.array([-0.4991, -1.1396, -0.4194]), np.array([0.2367, 1.3705, 1.2255])
-    xyz_min_norm, xyz_max_norm = 0, 1.53529
+    # xyz_min, xyz_max = np.array([-0.4991, -1.1396, -0.4194]), np.array([0.2367, 1.3705, 1.2255])
+    # xyz_min_norm, xyz_max_norm = 0, 1.53529
 
     extrinsics[..., :3, 3] = extrinsics[..., :3, 3] - (xyz_max + xyz_min) / 2
 
-    # xyz_min_norm, xyz_max_norm = helpers.calculate_bounds_sphere(images, depths, intrinsics, extrinsics)
+    xyz_min_norm, xyz_max_norm = helpers.calculate_bounds_sphere(images_nb, depths_nb, intrinsics, extrinsics)
 
     # print(xyz_min, xyz_max)
-    # print(xyz_min_norm, xyz_max_norm)
+    print(xyz_min_norm, xyz_max_norm)
 
     # exit()
 
