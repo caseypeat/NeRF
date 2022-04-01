@@ -1,3 +1,4 @@
+from numpy import dtype
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -6,6 +7,8 @@ import open3d as o3d
 import helpers
 
 from raymarching import raymarching
+
+from tqdm import tqdm
 
 def near_far_from_bound(rays_o, rays_d, bound, type='cube'):
     # rays: [B, N, 3], [B, N, 3]
@@ -89,18 +92,25 @@ class NerfRenderer(nn.Module):
 
         # z_vals = torch.cat([torch.linspace(0.05, 1, 512), torch.logspace(0, 2, 256)], dim=-1)[None, :].expand(rays_o[0].shape[0], -1).to(rays_o.device)
         z_vals = torch.cat([torch.logspace(-1.2, 0, 256, device=rays_o.device), torch.logspace(0, 2, 128, device=rays_o.device)], dim=-1)[None, :].expand(rays_o[0].shape[0], -1)
+        # z_vals = torch.cat([torch.logspace(-1.2, 0, 512, device=rays_o.device), torch.logspace(0, 2, 256, device=rays_o.device)], dim=-1)[None, :].expand(rays_o[0].shape[0], -1)
         xyzs, dirs = helpers.get_sample_points(rays_o[0], rays_d[0], z_vals)
         s_xyzs = helpers.mipnerf360_scale(xyzs, bound)
         sigmas, rgbs = self(s_xyzs, dirs, bound)
         image, invdepth, weights = helpers.render_rays_log_new(sigmas, rgbs, z_vals)
 
-        w = weights[:, :, None] * weights[:, None, :]
+        with torch.cuda.amp.autocast():
 
-        z_vals_lin = (torch.cat([torch.linspace(-1.2, 0, 256, device=rays_o.device), torch.linspace(0, 2, 128, device=rays_o.device)], dim=-1)[None, :].expand(rays_o[0].shape[0], -1) + 1.2) / 3.2
-        s = torch.abs(z_vals_lin[:, :, None] - z_vals_lin[:, None, :])
+            w = torch.bmm(weights[:, :, None], weights[:, None, :])
 
-        l_dist = w * s
-        l_dist = torch.mean(torch.sum(l_dist, dim=[1, 2]))
+            z_vals_lin = (torch.cat([torch.linspace(-1.2, 0, 256, device=rays_o.device, dtype=torch.half), torch.linspace(0, 2, 128, device=rays_o.device, dtype=torch.half)], dim=-1)[None, :].expand(rays_o[0].shape[0], -1) + 1.2) / 3.2
+            # z_vals_lin = (torch.cat([torch.linspace(-1.2, 0, 512, device=rays_o.device, dtype=torch.half), torch.linspace(0, 2, 256, device=rays_o.device, dtype=torch.half)], dim=-1)[None, :].expand(rays_o[0].shape[0], -1) + 1.2) / 3.2
+            s = torch.abs(z_vals_lin[:, :, None] - z_vals_lin[:, None, :])
+
+            l_dist = w * s
+            l_dist = torch.mean(torch.sum(l_dist, dim=[1, 2]))
+
+            # print(l_dist.dtype, z_vals_lin.dtype, w.dtype, s.dtype)
+            # exit()
 
         # second term not nessacary with dense sampling??
 
@@ -140,31 +150,28 @@ class NerfRenderer(nn.Module):
 
     def extract_geometry(self, bound):
         with torch.no_grad():
-            res = 1024
+            res = 2048
             thresh = 33
 
             points = torch.zeros((0, 3), device='cuda')
 
-            for i in range(res):
+            for i in tqdm(range(res)):
                 d = torch.linspace(-1, 1, res, device='cuda')
                 D = torch.stack(torch.meshgrid(d[i], d, d), dim=-1)
                 dist = torch.linalg.norm(D, dim=-1)[:, :, :, None].expand(-1, -1, -1, 3)
                 mask = torch.zeros(dist.shape, dtype=bool, device='cuda')
                 mask[dist < 1] = True
 
+                # also mask out parts outside camera coverage
+
                 xyzs = D[mask].view(-1, 3)
 
-                sigmas = self.density(xyzs, bound)
+                if xyzs.shape[0] > 0:
+                    sigmas = self.density(xyzs, bound)
+                    new_points = xyzs[sigmas[..., None].expand(-1, 3) > thresh].view(-1, 3)
+                    points = torch.cat((points, new_points))
 
-                # print(1, sigmas[..., None].expand(-1, 3).shape)
-
-                new_points = xyzs[sigmas[..., None].expand(-1, 3) > thresh].view(-1, 3)
-
-                # print(2, new_points.shape)
-
-                points = torch.cat((points, new_points))
-
-            points = torch.stack((points[:, 1], points[:, 2], points[:, 0]), dim=-1)
+            # points = torch.stack((points[:, 1], points[:, 2], points[:, 0]), dim=-1)
             print(points.shape)
 
             pcd = o3d.geometry.PointCloud()

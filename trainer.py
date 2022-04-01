@@ -85,8 +85,9 @@ class Trainer(object):
             if epoch % 10 == 0 and epoch != 0:
                 self.evaluate_image()
 
-                with torch.cuda.amp.autocast():
-                    self.model.extract_geometry(self.bound)
+                # with torch.cuda.amp.autocast():
+            if epoch % 50 == 0 and epoch != 0:
+                self.model.extract_geometry(self.bound)
 
     def train_epoch(self, epoch_len, t0):
         # print(f'start update extra state: {time.time() - t0:.2f}')
@@ -142,8 +143,8 @@ class Trainer(object):
         rays_o = rays_o[None, ...]
         rays_d = rays_d[None, ...]
 
-        with torch.cuda.amp.autocast():
-            rgb_pred, depth_pred, l_dist = self.model.render(rays_o, rays_d, self.bound, color_bg, perturb=True, force_all_rays=False)
+        # with torch.cuda.amp.autocast():
+        rgb_pred, depth_pred, l_dist = self.model.render(rays_o, rays_d, self.bound, color_bg, perturb=True, force_all_rays=False)
 
         loss = self.criterion(rgb_pred, rgb_gt) #+ 0.01 * l_dist
 
@@ -194,8 +195,8 @@ class Trainer(object):
                 rays_o = rays_o[None, ...]
                 rays_d = rays_d[None, ...]
 
-                with torch.cuda.amp.autocast():
-                    image_fb, depth_fb, _ = self.model.render(rays_o, rays_d, self.bound, bg_color=color_bg, perturb=False, force_all_rays=True)
+                # with torch.cuda.amp.autocast():
+                image_fb, depth_fb, _ = self.model.render(rays_o, rays_d, self.bound, bg_color=color_bg, perturb=False, force_all_rays=True)
 
                 image[i:end] = image_fb[0, ...]
                 depth[i:end] = depth_fb[0, ...]

@@ -173,8 +173,9 @@ class NeRFNetwork(NerfRenderer):
 
         # sigma
         x = (x + bound) / (2 * bound) # to [0, 1]
-        x = self.encoder(x)
-        h = self.sigma_net(x)
+        with torch.cuda.amp.autocast():
+            x = self.encoder(x)
+            h = self.sigma_net(x)
 
         sigma = F.relu(h[..., 0])
         geo_feat = h[..., 1:]
@@ -202,8 +203,9 @@ class NeRFNetwork(NerfRenderer):
         x = x.reshape(-1, 3)
 
         x = (x + bound) / (2 * bound) # to [0, 1]
-        x = self.encoder(x)
-        h = self.sigma_net(x)
+        with torch.cuda.amp.autocast():
+            x = self.encoder(x)
+            h = self.sigma_net(x)
 
         #sigma = torch.exp(torch.clamp(h[..., 0], -15, 15))
         sigma = F.relu(h[..., 0])
