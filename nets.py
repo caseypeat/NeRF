@@ -2,7 +2,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-import tinycudann as tcnn
+# import tinycudannf32 as tcnn32
+import tinycudannf16 as tcnn
 
 import helpers
 import raymarching
@@ -112,20 +113,23 @@ class NeRFNetwork(NerfRenderer):
             n_input_dims=3,
             encoding_config={
                 "otype": "HashGrid",
-                "n_levels": 16,
+                # "n_levels": 16,
                 # "n_levels": 24,
-                # "n_levels": 20,
+                "n_levels": 18,
                 "n_features_per_level": 2,
-                "log2_hashmap_size": 19,
+                # "log2_hashmap_size": 19,
+                "log2_hashmap_size": 24,
                 "base_resolution": 16,
                 "per_level_scale": 1.3819,
             },
+            dtype=torch.float32,
+            # dtype=torch.float16,
         )
 
         self.sigma_net = tcnn.Network(
-            n_input_dims=32,
+            # n_input_dims=32,
             # n_input_dims=48,
-            # n_input_dims=40,
+            n_input_dims=36,
             n_output_dims=1 + self.geo_feat_dim,
             network_config={
                 "otype": "FullyFusedMLP",
@@ -146,6 +150,8 @@ class NeRFNetwork(NerfRenderer):
                 "otype": "SphericalHarmonics",
                 "degree": 4,
             },
+            dtype=torch.float32,
+            # dtype=torch.float16,
         )
 
         self.in_dim_color = self.encoder_dir.n_output_dims + self.geo_feat_dim
@@ -172,10 +178,13 @@ class NeRFNetwork(NerfRenderer):
         d = d.reshape(-1, 3)
 
         # sigma
+        # print(x.dtype)
         x = (x + bound) / (2 * bound) # to [0, 1]
-        with torch.cuda.amp.autocast():
-            x = self.encoder(x)
-            h = self.sigma_net(x)
+        x = self.encoder(x)
+        # print(x.dtype)
+        h = self.sigma_net(x)
+        # print(h.dtype)
+        # exit()
 
         sigma = F.relu(h[..., 0])
         geo_feat = h[..., 1:]
@@ -203,11 +212,9 @@ class NeRFNetwork(NerfRenderer):
         x = x.reshape(-1, 3)
 
         x = (x + bound) / (2 * bound) # to [0, 1]
-        with torch.cuda.amp.autocast():
-            x = self.encoder(x)
-            h = self.sigma_net(x)
+        x = self.encoder(x)
+        h = self.sigma_net(x)
 
-        #sigma = torch.exp(torch.clamp(h[..., 0], -15, 15))
         sigma = F.relu(h[..., 0])
 
         sigma = sigma.reshape(*prefix)

@@ -2,6 +2,7 @@ import numpy as np
 import torch
 import cv2
 import time
+import math as m
 import matplotlib.pyplot as plt
 
 from matplotlib import cm
@@ -41,7 +42,8 @@ class Trainer(object):
         criterion,
         n_rays,
         bound,
-        device):
+        device,
+        mask):
 
         self.n_rays = n_rays
         self.bound = bound
@@ -60,12 +62,14 @@ class Trainer(object):
         # self.scaler = torch.cuda.amp.GradScaler(enabled=False)
         self.scaler = torch.cuda.amp.GradScaler()
 
-        self.train_len = 1001
+        self.train_len = 101
         self.epoch_len = 100
 
         self.loss_avg = 0
         self.loss_rgb_avg = 0
         self.loss_dist_avg = 0
+
+        self.mask = mask
 
 
     def train(self):
@@ -78,22 +82,28 @@ class Trainer(object):
             #     self.train_epoch(1000)
             # else:
             #     self.train_epoch(100)
-            self.train_epoch(self.epoch_len, t0)
 
-            print(f'Epoch: {epoch} - Time (s): {time.time() - t0:.2f} - Loss: {self.loss_avg:.7f} - Loss RGB: {self.loss_rgb_avg:.7f} - Loss Dist: {self.loss_dist_avg:.7f}\n')
+            l_dist_scalar = 10**(epoch/self.train_len * 2 - 4)
+
+            self.train_epoch(self.epoch_len, l_dist_scalar)
+
+            print(f'Epoch: {epoch} - Time (s): {time.time() - t0:.2f} - Loss: {self.loss_avg:.7f} - Loss RGB: {self.loss_rgb_avg:.7f} - Loss Dist: {self.loss_dist_avg:.7f}')
+            print(f'L Dist Scalar: {l_dist_scalar}')
+            print()
             self.loss_avg = 0
             self.loss_rgb_avg = 0
             self.loss_dist_avg = 0
 
-            if epoch % 10 == 0 and epoch != 0:
+            if epoch % 25 == 0 and epoch != 0:
                 self.evaluate_image()
 
                 # with torch.cuda.amp.autocast():
-            if epoch % 10 == 0 and epoch != 0:
-            # if epoch % 50 == 0:
-                self.model.extract_geometry(self.bound, H, W, self.intrinsics[:, ...].to('cuda'), self.extrinsics[:, ...].to('cuda'))
+            if epoch % 25 == 0 and epoch != 0:
+            # if epoch % 100 == 0:
+                # self.model.extract_geometry(self.bound, H, W, self.intrinsics[:, ...].to('cuda'), self.extrinsics[:, ...].to('cuda'))
+                self.model.extract_geometry(self.bound, self.mask)
 
-    def train_epoch(self, epoch_len, t0):
+    def train_epoch(self, epoch_len, l_dist_scalar):
         # print(f'start update extra state: {time.time() - t0:.2f}')
         # self.model.update_extra_state(self.bound)
         # print(f'finish update extra state: {time.time() - t0:.2f}')
@@ -102,7 +112,7 @@ class Trainer(object):
             self.optimizer.zero_grad()
 
             loss_rgb, l_dist = self.train_step()
-            loss = loss_rgb + 0.001 * l_dist
+            loss = loss_rgb + l_dist_scalar * l_dist
 
             self.loss_avg += float(loss) / epoch_len
             self.loss_rgb_avg += float(loss_rgb) / epoch_len

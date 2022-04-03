@@ -1,5 +1,4 @@
-from turtle import shape
-from numpy import dtype
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -92,23 +91,34 @@ class NerfRenderer(nn.Module):
         # weights_sum, image, depth = raymarching.composite_rays_train(sigmas, rgbs, xyzs, deltas, rays, bound)
 
         # z_vals = torch.cat([torch.linspace(0.05, 1, 512), torch.logspace(0, 2, 256)], dim=-1)[None, :].expand(rays_o[0].shape[0], -1).to(rays_o.device)
-        z_vals = torch.cat([torch.logspace(-1.2, 0, 256, device=rays_o.device), torch.logspace(0, 2, 128, device=rays_o.device)], dim=-1)[None, :].expand(rays_o[0].shape[0], -1)
-        # z_vals = torch.cat([torch.logspace(-1.2, 0, 512, device=rays_o.device), torch.logspace(0, 2, 256, device=rays_o.device)], dim=-1)[None, :].expand(rays_o[0].shape[0], -1)
+        # z_vals = torch.cat([torch.logspace(-1.2, 0, 256, device=rays_o.device), torch.logspace(0, 2, 128, device=rays_o.device)], dim=-1)[None, :].expand(rays_o[0].shape[0], -1)
+        z_vals = torch.cat([torch.logspace(-1.2, 0, 384, device=rays_o.device), torch.logspace(0, 2, 192, device=rays_o.device)], dim=-1)[None, :].expand(rays_o[0].shape[0], -1)
         xyzs, dirs = helpers.get_sample_points(rays_o[0], rays_d[0], z_vals)
         s_xyzs = helpers.mipnerf360_scale(xyzs, bound)
+        # with torch.cuda.amp.autocast():
         sigmas, rgbs = self(s_xyzs, dirs, bound)
+        sigmas, rgbs = sigmas.to(torch.float32), rgbs.to(torch.float32)
         image, invdepth, weights = helpers.render_rays_log_new(sigmas, rgbs, z_vals)
 
-        with torch.cuda.amp.autocast():
+        w = torch.bmm(weights[:, :, None], weights[:, None, :])
 
-            w = torch.bmm(weights[:, :, None], weights[:, None, :])
+        # z_vals_lin = (torch.cat([torch.linspace(-1.2, 0, 256, device=rays_o.device), torch.linspace(0, 2, 128, device=rays_o.device)], dim=-1)[None, :].expand(rays_o[0].shape[0], -1) + 1.2) / 3.2
+        z_vals_lin = (torch.cat([torch.linspace(-1.2, 0, 384, device=rays_o.device), torch.linspace(0, 2, 192, device=rays_o.device)], dim=-1)[None, :].expand(rays_o[0].shape[0], -1) + 1.2) / 3.2
+        s = torch.abs(z_vals_lin[:, :, None] - z_vals_lin[:, None, :])
 
-            z_vals_lin = (torch.cat([torch.linspace(-1.2, 0, 256, device=rays_o.device, dtype=torch.half), torch.linspace(0, 2, 128, device=rays_o.device, dtype=torch.half)], dim=-1)[None, :].expand(rays_o[0].shape[0], -1) + 1.2) / 3.2
-            # z_vals_lin = (torch.cat([torch.linspace(-1.2, 0, 512, device=rays_o.device, dtype=torch.half), torch.linspace(0, 2, 256, device=rays_o.device, dtype=torch.half)], dim=-1)[None, :].expand(rays_o[0].shape[0], -1) + 1.2) / 3.2
-            s = torch.abs(z_vals_lin[:, :, None] - z_vals_lin[:, None, :])
+        l_dist = w * s
+        l_dist = torch.mean(torch.sum(l_dist, dim=[1, 2]))
 
-            l_dist = w * s
-            l_dist = torch.mean(torch.sum(l_dist, dim=[1, 2]))
+        # with torch.cuda.amp.autocast():
+
+        #     w = torch.bmm(weights[:, :, None], weights[:, None, :])
+
+        #     z_vals_lin = (torch.cat([torch.linspace(-1.2, 0, 256, device=rays_o.device, dtype=torch.half), torch.linspace(0, 2, 128, device=rays_o.device, dtype=torch.half)], dim=-1)[None, :].expand(rays_o[0].shape[0], -1) + 1.2) / 3.2
+        #     # z_vals_lin = (torch.cat([torch.linspace(-1.2, 0, 512, device=rays_o.device, dtype=torch.half), torch.linspace(0, 2, 256, device=rays_o.device, dtype=torch.half)], dim=-1)[None, :].expand(rays_o[0].shape[0], -1) + 1.2) / 3.2
+        #     s = torch.abs(z_vals_lin[:, :, None] - z_vals_lin[:, None, :])
+
+        #     l_dist = w * s
+        #     l_dist = torch.mean(torch.sum(l_dist, dim=[1, 2]))
 
             # print(l_dist.dtype, z_vals_lin.dtype, w.dtype, s.dtype)
             # exit()
@@ -149,49 +159,86 @@ class NerfRenderer(nn.Module):
     #         # print(sigmas_voxel.shape)
     #         exit()
 
-    def extract_geometry(self, bound, H, W, K, E):
+    # def extract_geometry(self, bound, H, W, K, E):
+    #     with torch.no_grad():
+    #         res = 1024
+    #         thresh = 10
+
+    #         points = torch.zeros((0, 3), device='cuda')
+
+    #         for i in tqdm(range(res)):
+    #             d = torch.linspace(-1, 1, res, device='cuda')
+    #             D = torch.stack(torch.meshgrid(d[i], d, d), dim=-1)
+    #             dist = torch.linalg.norm(D, dim=-1)[:, :, :, None].expand(-1, -1, -1, 3)
+    #             mask = torch.zeros(dist.shape, dtype=bool, device='cuda')
+    #             mask[dist < 1] = True
+
+    #             # also mask out parts outside camera coverage
+    #             rays_d = D - E[:, None, None, :3, -1]
+    #             dirs_ = torch.inverse(E[:, None, None, :3, :3]) @ rays_d[..., None]
+    #             dirs_ = K[:, None, None, ...] @ dirs_
+    #             dirs = dirs_ / dirs_[:, :, :, 2, None, :]
+    #             mask_dirs = torch.zeros((E.shape[0], res, res), dtype=int, device='cuda')
+    #             mask_dirs[((dirs[:, :, :, 0, 0] > 0) & (dirs[:, :, :, 0, 0] < H) & (dirs[:, :, :, 1, 0] > 0) & (dirs[:, :, :, 1, 0] < W) & (dirs_[:, :, :, 2, 0] > 0))] = 1
+    #             mask_dirs = torch.sum(mask_dirs, dim=0)
+    #             mask_dirs[mask_dirs > 0] = 1
+    #             mask_dirs = mask_dirs.to(bool)
+    #             mask_dirs = mask_dirs[None, :, :, None].expand(-1, -1, -1, 3)
+    #             mask = torch.logical_and(mask, mask_dirs)
+    #             # print(mask_dirs.shape, mask.shape)
+
+    #             xyzs = D[mask].view(-1, 3)
+
+    #             if xyzs.shape[0] > 0:
+    #                 sigmas = self.density(xyzs, bound)
+    #                 new_points = xyzs[sigmas[..., None].expand(-1, 3) > thresh].view(-1, 3)
+    #                 points = torch.cat((points, new_points))
+
+    #         # points = torch.stack((points[:, 1], points[:, 2], points[:, 0]), dim=-1)
+    #         print(points.shape)
+
+    #         pcd = o3d.geometry.PointCloud()
+    #         pcd.points = o3d.utility.Vector3dVector(points.cpu().numpy())
+    #         o3d.visualization.draw_geometries([pcd])
+
+    #         # exit()
+
+    def extract_geometry(self, bound, mask):
         with torch.no_grad():
-            res = 1024
+            scale = 4
+            res = 1024 * scale
             thresh = 10
 
-            points = torch.zeros((0, 3), device='cuda')
+            points = torch.zeros((0, 4), device='cuda')
 
             for i in tqdm(range(res)):
                 d = torch.linspace(-1, 1, res, device='cuda')
                 D = torch.stack(torch.meshgrid(d[i], d, d), dim=-1)
-                dist = torch.linalg.norm(D, dim=-1)[:, :, :, None].expand(-1, -1, -1, 3)
-                mask = torch.zeros(dist.shape, dtype=bool, device='cuda')
-                mask[dist < 1] = True
 
-                # also mask out parts outside camera coverage
-                rays_d = D - E[:, None, None, :3, -1]
-                dirs_ = torch.inverse(E[:, None, None, :3, :3]) @ rays_d[..., None]
-                dirs_ = K[:, None, None, ...] @ dirs_
-                dirs = dirs_ / dirs_[:, :, :, 2, None, :]
-                mask_dirs = torch.zeros((E.shape[0], res, res), dtype=int, device='cuda')
-                mask_dirs[((dirs[:, :, :, 0, 0] > 0) & (dirs[:, :, :, 0, 0] < H) & (dirs[:, :, :, 1, 0] > 0) & (dirs[:, :, :, 1, 0] < W) & (dirs_[:, :, :, 2, 0] > 0))] = 1
-                mask_dirs = torch.sum(mask_dirs, dim=0)
-                mask_dirs[mask_dirs > 0] = 1
-                mask_dirs = mask_dirs.to(bool)
-                mask_dirs = mask_dirs[None, :, :, None].expand(-1, -1, -1, 3)
-                mask = torch.logical_and(mask, mask_dirs)
-                # print(mask_dirs.shape, mask.shape)
+                mask_ = mask[i//scale, :, :, None].expand(-1, -1, 3)[None, ...].to('cuda')
+                # print(mask_.shape, mask_.permute(0, 3, 1, 2).shape)
+                mask_ = F.interpolate(mask_.permute(0, 3, 1, 2).to(float), (res, res), mode='nearest-exact').to(bool).permute(0, 2, 3, 1)
+                # print(mask_.shape)
 
-                xyzs = D[mask].view(-1, 3)
+                xyzs = D[mask_].view(-1, 3)
+                # print(xyzs.shape[0])
 
                 if xyzs.shape[0] > 0:
-                    sigmas = self.density(xyzs, bound)
-                    new_points = xyzs[sigmas[..., None].expand(-1, 3) > thresh].view(-1, 3)
+                    # with torch.cuda.amp.autocast():
+                    sigmas = self.density(xyzs, bound).to(torch.float32)
+                    # sigmas = sigmas.to(torch.float32)
+                    new_points = torch.cat((xyzs[sigmas[..., None].expand(-1, 3) > thresh].view(-1, 3), sigmas[sigmas > thresh][..., None]), dim=-1)
                     points = torch.cat((points, new_points))
 
             # points = torch.stack((points[:, 1], points[:, 2], points[:, 0]), dim=-1)
             print(points.shape)
+            np.save('./data/points.npy', points.cpu().numpy())
 
-            pcd = o3d.geometry.PointCloud()
-            pcd.points = o3d.utility.Vector3dVector(points.cpu().numpy())
-            o3d.visualization.draw_geometries([pcd])
+            # pcd = o3d.geometry.PointCloud()
+            # pcd.points = o3d.utility.Vector3dVector(points.cpu().numpy())
+            # o3d.visualization.draw_geometries([pcd])
 
-            # exit()
+
 
     def update_extra_state(self, bound, decay=0.95):
         
