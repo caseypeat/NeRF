@@ -1,0 +1,23 @@
+
+
+# Nets
+nets:
+  encoding:
+    n_levels: 18
+    n_features: 2
+    log2_hashmap_size: 24
+    precision: 'float32'
+  
+  encoding_dir:
+    encoding: "SphericalHarmonics"
+    degree: 4
+    precision: 'float32'
+
+  sigma:
+    num_layers: 2
+    hidden_dim: 64
+    geo_feat_dim: 15
+
+  color:
+    num_layers: 3
+    hidden_dim: 3

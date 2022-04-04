@@ -2,11 +2,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-# import tinycudannf32 as tcnn32
-import tinycudannf16 as tcnn
+import tinycudann as tcnn
 
 import helpers
-import raymarching
+# import raymarching
 
 from renderer import NerfRenderer
 

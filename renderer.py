@@ -6,7 +6,7 @@ import open3d as o3d
 
 import helpers
 
-from raymarching import raymarching
+# from raymarching import raymarching
 
 from tqdm import tqdm
 
