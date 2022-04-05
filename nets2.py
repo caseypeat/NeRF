@@ -4,15 +4,15 @@ import torch.nn.functional as F
 
 import tinycudann as tcnn
 
-from renderer import NerfRenderer
+from renderer2 import NerfRenderer
 
 
 class NeRFNetwork(NerfRenderer):
     def __init__(self,
                 # encoding (hashgrid)
-                n_levels=18,
+                n_levels=16,
                 n_features_per_level=2,
-                log2_hashmap_size=24,
+                log2_hashmap_size=19,
                 encoding_precision='float32',
 
                 # directional encoding

@@ -2,9 +2,9 @@ import numpy as np
 import open3d as o3d
 
 if __name__ == '__main__':
-    # points = np.load('./data/points_log24.npy')
+    points = np.load('./data/points_100_aneal.npy')
     # points = np.load('./data/points_00001.npy')
-    points = np.load('./data/points.npy')
+    # points = np.load('./data/points.npy')
 
     thresh = 50
 
@@ -13,6 +13,12 @@ if __name__ == '__main__':
     sigmas = sigmas[sigmas > thresh][..., None]
     print(points.shape)
 
+    # points = points[np.all(np.isfinite(points), axis=1)]
+    # points = points[np.linalg.norm(points, axis=1) < 1000]
+    # print(points.shape)
+    print(np.amax(points))
+    print(np.amin(points))
+
     pcd = o3d.geometry.PointCloud()
     pcd.points = o3d.utility.Vector3dVector(points)
-    o3d.visualization.draw_geometries([pcd])
+    o3d.visualization.draw([pcd])

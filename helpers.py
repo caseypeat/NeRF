@@ -185,19 +185,11 @@ def render_rays_log(samples, z_vals):
     return rgb, invdepth, weights, sigma, color
 
 
-def render_rays_log_new(sigmas, rgbs, z_vals):
+def render_rays_log_new(sigmas, rgbs, z_vals, z_vals_log):
     N_rays, N_samples = z_vals.shape[:2]
 
-    delta = z_vals.new_zeros([N_rays, N_samples])  # [N_rays, N_samples]
-    # delta[:, :512-1] = (z_vals[:, 1:512] - z_vals[:, :512-1])
-    # delta[:, 512-1:-1] = (z_vals[:, 512:] - z_vals[:, 512-1:-1]) / (z_vals[:, 512:]/2 + z_vals[:, 512-1:-1]/2)
-
-    # delta[:, :-1] = z_vals[:, 1:] - z_vals[:, :-1]
-    delta[:, :-1] = (z_vals[:, 1:] - z_vals[:, :-1]) / (z_vals[:, 1:]/2 + z_vals[:, :-1]/2)
-
-    # for d in delta[0]:
-    #     print(d)
-    # exit()
+    delta = z_vals_log.new_zeros([N_rays, N_samples])  # [N_rays, N_samples]
+    delta[:, :-1] = (z_vals_log[:, 1:] - z_vals_log[:, :-1])
 
     alpha = 1 - torch.exp(-sigmas * delta)  # [N_rays, N_samples]
 
