@@ -19,34 +19,44 @@ class Inference(object):
         pass
     
     @torch.no_grad()
-    def render_image(self):
-        pass
+    def render_image(self, H, W, K, E):
+        scale = 0.5
 
-    def extract_geometry_old(self, bound, mask):
-        with torch.no_grad():
-            scale = 4
-            res = 512 * scale
-            thresh = 10
+        n_rays = 1024
 
-            points = torch.zeros((0, 4), device='cuda')
+        K = K.to('cuda')
+        E = E.to('cuda')
 
-            for i in tqdm(range(res)):
-                d = torch.linspace(-1, 1, res, device='cuda')
-                D = torch.stack(torch.meshgrid(d[i], d, d), dim=-1)
+        h = torch.arange(0, H, device='cuda')
+        w = torch.arange(0, W, device='cuda')
 
-                mask_ = mask[i//scale, :, :, None].expand(-1, -1, 3)[None, ...].to('cuda')
-                # mask_ = F.interpolate(mask_.permute(0, 3, 1, 2).to(float), (res, res), mode='nearest-exact').to(bool).permute(0, 2, 3, 1)
-                mask_ = F.interpolate(mask_.permute(0, 3, 1, 2).to(float), (res, res), mode='nearest').to(bool).permute(0, 2, 3, 1)
+        h, w = torch.meshgrid(h, w)
 
-                xyzs = D[mask_].view(-1, 3)
+        h_f = torch.reshape(h, (-1,))
+        w_f = torch.reshape(w, (-1,))
 
-                if xyzs.shape[0] > 0:
-                    sigmas = self.model.density(xyzs, bound).to(torch.float32)
-                    new_points = torch.cat((xyzs[sigmas[..., None].expand(-1, 3) > thresh].view(-1, 3), sigmas[sigmas > thresh][..., None]), dim=-1)
-                    points = torch.cat((points, new_points))
+        image_f = torch.zeros((*h_f.shape, 3))
+        invdepth_f = torch.zeros(h_f.shape)
 
-            print(points.shape)
-            np.save('./data/points.npy', points.cpu().numpy())
+        for a in tqdm(range(0, len(h_f), n_rays)):
+            b = min(len(h_f), a+n_rays)
+
+            h_fb = h_f[a:b]
+            w_fb = w_f[a:b]
+
+            rays_o, rays_d = helpers.get_rays(h_fb, w_fb, K[None, ...], E[None, ...])
+
+            color_bg = torch.ones(3, device=self.device) # [3], fixed white background
+
+            image_fb, invdepth_fb, _, _ = self.model.render(rays_o, rays_d, bg_color=color_bg)
+
+            image_f[a:b] = image_fb
+            invdepth_f[a:b] = invdepth_fb
+
+        image = torch.reshape(image, (*h.shape, 3))
+        invdepth = torch.reshape(invdepth, h.shape)
+
+        return image, invdepth
 
     @torch.no_grad()
     def extract_geometry(self, mask):

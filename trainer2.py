@@ -118,7 +118,6 @@ class Trainer(object):
                 self.extract_geometry(self.bound, self.mask)
 
     def train_epoch(self, iters_per_epoch):
-
         for i in tqdm(range(iters_per_epoch)):
             self.optimizer.zero_grad()
 
@@ -163,13 +162,9 @@ class Trainer(object):
         
         rays_o, rays_d = helpers.get_rays(h, w, K, E)
 
-        # rgb_gt = rgb_gt[None, ...]
-        # rays_o = rays_o[None, ...]
-        # rays_d = rays_d[None, ...]
+        rgb, _, weights, z_vals_log = self.model.render(rays_o, rays_d, self.bound, color_bg)
 
-        rgb_pred, _, weights, z_vals_log = self.model.render(rays_o, rays_d, self.bound, color_bg)
-
-        loss_rgb = criterion_rgb(rgb_pred, rgb_gt)
+        loss_rgb = criterion_rgb(rgb, rgb_gt)
         loss_dist = criterion_dist(weights, z_vals_log)
 
         return loss_rgb, loss_dist
