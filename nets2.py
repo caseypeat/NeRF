@@ -9,10 +9,12 @@ from renderer2 import NerfRenderer
 
 class NeRFNetwork(NerfRenderer):
     def __init__(self,
+                bound,
+
                 # encoding (hashgrid)
-                n_levels=16,
+                n_levels=18,
                 n_features_per_level=2,
-                log2_hashmap_size=19,
+                log2_hashmap_size=24,
                 encoding_precision='float32',
 
                 # directional encoding
@@ -30,6 +32,8 @@ class NeRFNetwork(NerfRenderer):
                 hidden_dim_color=64,
                 ):
         super().__init__()
+
+        self.bound = bound
 
         if encoding_precision == 'float16':
             self.encoding_precision = torch.float16
@@ -104,14 +108,14 @@ class NeRFNetwork(NerfRenderer):
         )
 
     
-    def forward(self, x, d, bound):
+    def forward(self, x, d):
 
         prefix = x.shape[:-1]
         x = x.reshape(-1, 3)
         d = d.reshape(-1, 3)
 
         # sigma
-        x = (x + bound) / (2 * bound) # to [0, 1]
+        x = (x + self.bound) / (2 * self.bound) # to [0, 1]
         x = self.encoder(x)
         h = self.sigma_net(x)
 
@@ -133,12 +137,12 @@ class NeRFNetwork(NerfRenderer):
 
         return sigma, color
 
-    def density(self, x, bound):
+    def density(self, x):
 
         prefix = x.shape[:-1]
         x = x.reshape(-1, 3)
 
-        x = (x + bound) / (2 * bound) # to [0, 1]
+        x = (x + self.bound) / (2 * self.bound) # to [0, 1]
         x = self.encoder(x)
         h = self.sigma_net(x)
 

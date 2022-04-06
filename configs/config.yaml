@@ -1,6 +1,28 @@
 
+scene:
+  scene_path: '/home/casey/Documents/PhD/data/synthetic_tree_assets/trees3/renders/vine_C2_1/back_close/cameras.json'
+  image_scale: 0.5
+  bound: 1.125
 
-# Nets
+log:
+  save_path: './logs/alpha'
+
+trainer:
+  num_epochs: 101
+  iters_per_epoch: 100
+  eval_freq: 100
+  eval_image_scale: 0.5
+  pointcloud_res: 1024
+  n_rays: 2048
+
+renderer:
+  inner_near: 0.05
+  inner_far: 1
+  inner_steps: 384
+  outer_near: 1
+  outer_far: 100
+  outer_steps: 192
+
 nets:
   encoding:
     n_levels: 18

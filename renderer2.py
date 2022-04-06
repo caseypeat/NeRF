@@ -14,12 +14,10 @@ class NerfRenderer(nn.Module):
                 # z_vals
                 inner_near=0.05,
                 inner_far=1,
-                # inner_steps=384,
-                inner_steps=256,
+                inner_steps=384,
                 outer_near=1,
                 outer_far=100,
-                # outer_steps=192,
-                outer_steps=128,
+                outer_steps=192,
                 ):
         super().__init__()
 

@@ -76,7 +76,7 @@ class Trainer(object):
         self.iters_per_epoch = 100
         self.num_iters = self.num_epochs * self.iters_per_epoch
 
-        self.evaluate_freq = 25
+        self.evaluate_freq = 20
 
         self.iter = 0
 
@@ -98,7 +98,8 @@ class Trainer(object):
             l_dist_scalar = 10**(self.iter/self.num_iters * 2 - 4)
 
             self.train_epoch(self.iters_per_epoch)
-
+            
+            print(f'Time: {time.time() - t0} s')
             print(f'Iteration: {self.iter}')
             for key, val in self.scalars.items():
                 print(f'Scalar: {key} - Value: {np.mean(val[epoch*self.iters_per_epoch: (epoch+1)*self.iters_per_epoch]).item()}')
@@ -122,6 +123,7 @@ class Trainer(object):
             self.optimizer.zero_grad()
 
             dist_scalar = 10**(self.iter/self.num_iters * 2 - 4)
+            # dist_scalar = 10**(-4)
 
             loss_rgb, loss_dist = self.train_step()
             loss = loss_rgb + dist_scalar * loss_dist

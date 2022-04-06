@@ -2,6 +2,7 @@ import numpy as np
 import torch
 import cv2
 import commentjson as json
+import yaml
 import matplotlib.pyplot as plt
 
 from torch import nn
@@ -12,6 +13,7 @@ from torch.optim.lr_scheduler import ExponentialLR, LambdaLR, MultiStepLR, Lambd
 from torch.cuda.amp import autocast, GradScaler
 
 from tqdm import tqdm
+from box import Box
 
 import helpers
 
@@ -21,7 +23,7 @@ from loaders.synthetic import load_image_set
 from nets2 import NeRFNetwork
 from trainer2 import Trainer
 
-from misc import remove_background
+from misc import extract_foreground, remove_background
 
 
 
@@ -75,8 +77,8 @@ def get_valid_positions(H, W, K, E):
 
 
 def meta_camera_geometry():
-    scene_dir = '/local/v100/mnt/maara/synthetic_tree_assets/trees3/renders/vine_C2_1/back_close/cameras.json'
-    # scene_dir = '/home/casey/Documents/PhD/data/synthetic_tree_assets/trees3/renders/vine_C2_1/back_close/cameras.json'
+    # scene_dir = '/local/v100/mnt/maara/synthetic_tree_assets/trees3/renders/vine_C2_1/back_close/cameras.json'
+    scene_dir = '/home/casey/Documents/PhD/data/synthetic_tree_assets/trees3/renders/vine_C2_1/back_close/cameras.json'
 
     images, depths, intrinsics, extrinsics, ids = camera_geometry_loader(scene_dir, image_scale=0.5)
     images_, depths_, _, _, ids_ = camera_geometry_loader(scene_dir, image_scale=0.125)
@@ -100,18 +102,57 @@ def meta_camera_geometry():
     return images, depths, intrinsics, extrinsics
 
 
+def vine_extraction_test():
+
+    scene_file = '/home/casey/Documents/PhD/data/synthetic_tree_assets/trees3/renders/vine_C2_1/back_close/cameras.json'
+
+    images, depths, intrinsics, extrinsics, ids = camera_geometry_loader(scene_file, image_scale=0.5)
+    # with open('/home/casey/Documents/PhD/data/synthetic_tree_assets/trees3/scenes/vine_C2_1/scene.json', 'r') as f:
+    #     scene_ids = json.load(f)
+
+    # images_, depths_ = extract_foreground(images, depths, ids, scene_ids)
+
+    ids[ids > 256] = 0
+
+    plt.imshow(ids[3])
+    plt.show()
+
+    exit()
+
+
 if __name__ == '__main__':
 
-    # print('test...')
+    with open('./configs/config.yaml', 'r') as f:
+        cfg = Box(yaml.safe_load(f))
 
-    ## Params
+    model = NeRFNetwork(
+        # Render args
+        inner_near=cfg.renderer.inner_near
+        inner_far=cfg.renderer.inner_far
+        inner_steps=cfg.renderer.inner_steps
+        outer_near=cfg.renderer.outer_near
+        outer_far=cfg.renderer.outer_far
+        outer_steps=cfg.renderer.outer_steps
 
-    n_rays = 1024
-    bound = 1.125
+        # Net args
+        bound = cfg.scene.bound,
+        
+        n_levels=cfg.nets.encoding.n_levels
+        n_features=cfg.nets.encoding.n_features
+        log2_hashmap_size=cfg.nets.encoding.log2_hashmap_size
+        encoding_precision=cfg.nets.encoding.precision
 
-    device = 'cuda'
+        encoding_dir=cfg.nets.encoding_dir.encoding
+        encoding_dir_degree=cfg.nets.encoding_dir.degree
+        encoding_dir_precision=cfg.nets.encoding_dir.precision
 
-    model = NeRFNetwork().to(device)
+        num_layers=cfg.nets.sigma.num_layers
+        hidden_dim=cfg.nets.sigma.hidden_dim
+        geo_feat_dim=cfg.nets.sigma.geo_feat_dim
+
+        num_layers_color=cfg.nets.color.num_layers
+        hidden_dim_color=cfg.nets.color.hidden_dim
+    ).to('cuda')
 
     # images, depths, intrinsics, extrinsics, bds = meta_loader('synthetic')
     images, depths, intrinsics, extrinsics = meta_camera_geometry()
@@ -137,6 +178,24 @@ if __name__ == '__main__':
             {'name': 'net', 'params': list(model.sigma_net.parameters()) + list(model.color_net.parameters()), 'weight_decay': 1e-6},
         ], lr=1e-2, betas=(0.9, 0.99), eps=1e-15)
 
-    trainer = Trainer(model, images, depths, intrinsics, extrinsics, optimizer, n_rays, bound, device, mask)
+    trainer = Trainer(
+        model=model,
+        images=images,
+        depths=depths,
+        intrinsics=intrinsics,
+        extrinsics=extrinsics,
+        bound=cfg.scene.bound,
+
+        optimizer=optimizer,
+
+        n_rays=cfg.trainer.n_rays,
+        num_epochs=cfg.trainer.num_epochs,
+        iters_per_epoch=cfg.trainer.iters_per_epoch,
+        eval_freq=cfg.trainer.eval_freq,
+        eval_image_scale=cfg.trainer.eval_image_scale,
+        pointcloud_res=cfg.trainer.pointcloud_res,
+
+        log_path = cfg.log.save_path,
+        )
 
     trainer.train()
