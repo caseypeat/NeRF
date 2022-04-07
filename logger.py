@@ -51,14 +51,14 @@ class Logger(object):
 
     def image(self, image, step):
         file_path = os.path.join(self.image_dir, f'{step}.jpg')
-        self.writer.add_image('image', image)
-        cv2.imwrite(file_path, image)
+        self.writer.add_image('image', image, step, dataformats='HWC')
+        cv2.imwrite(file_path, np.uint8(image*255))
 
     def invdepth(self, invdepth, step):
         invdepth_c = color_depthmap(invdepth)
         file_path = os.path.join(self.invdepth_dir, f'{step}.jpg')
-        self.writer.add_image('invdepth', invdepth_c)
-        cv2.imwrite(file_path, invdepth_c)
+        self.writer.add_image('invdepth', invdepth_c, step, dataformats='HWC')
+        cv2.imwrite(file_path, np.uint8(invdepth_c*255))
 
     def pointcloud(self, pointcloud, step):
         file_path = os.path.join(self.pointcloud_dir, f'{step}.npy')

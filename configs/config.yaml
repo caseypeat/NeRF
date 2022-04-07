@@ -15,6 +15,7 @@ trainer:
 
 inference:
   n_rays: 4096
+  image_num: 52
   voxel_res: 1024
   thresh: 10
   batch_size: 1_048_576

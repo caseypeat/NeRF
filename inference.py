@@ -26,6 +26,7 @@ class Inference(object):
         batch_size):
         
         self.model = model
+        self.mask = mask
         # self.image_scale = image_scale
         self.n_rays = n_rays
         self.voxel_res = voxel_res
@@ -57,26 +58,26 @@ class Inference(object):
 
             rays_o, rays_d = helpers.get_rays(h_fb, w_fb, K[None, ...], E[None, ...])
 
-            color_bg = torch.ones(3, device=self.device) # [3], fixed white background
+            color_bg = torch.ones(3, device='cuda') # [3], fixed white background
 
             image_fb, invdepth_fb, _, _ = self.model.render(rays_o, rays_d, bg_color=color_bg)
 
             image_f[a:b] = image_fb
             invdepth_f[a:b] = invdepth_fb
 
-        image = torch.reshape(image, (*h.shape, 3))
-        invdepth = torch.reshape(invdepth, h.shape)
+        image = torch.reshape(image_f, (*h.shape, 3))
+        invdepth = torch.reshape(invdepth_f, h.shape)
 
         return image, invdepth
 
     @torch.no_grad()
-    def extract_geometry(self, mask):
+    def extract_geometry(self):
 
-        scale = self.voxel_res / mask.shape[0]
+        scale = self.voxel_res / self.mask.shape[0]
 
         voxels = torch.linspace(-1, 1, self.voxel_res, device='cuda')
 
-        num_samples = self.voxel_self.voxel_res**3
+        num_samples = self.voxel_res**3
 
         points = torch.zeros((0, 4), device='cuda')
 
@@ -91,7 +92,7 @@ class Inference(object):
 
             xyz = torch.stack((x, y, z), dim=-1)
 
-            xyz = xyz[mask[(x/scale).to(int), (y/scale).to(int), (z/scale).to(int)]].view(-1, 3)
+            xyz = xyz[self.mask[(x/scale).to(int), (y/scale).to(int), (z/scale).to(int)]].view(-1, 3)
 
             if xyz.shape[0] > 0:
                 sigmas = self.model.density(xyz).to(torch.float32)
