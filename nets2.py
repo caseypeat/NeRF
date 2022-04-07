@@ -9,8 +9,6 @@ from renderer2 import NerfRenderer
 
 class NeRFNetwork(NerfRenderer):
     def __init__(self,
-                bound,
-
                 # encoding (hashgrid)
                 n_levels=18,
                 n_features_per_level=2,
@@ -30,10 +28,10 @@ class NeRFNetwork(NerfRenderer):
                 # color network
                 num_layers_color=3,
                 hidden_dim_color=64,
-                ):
-        super().__init__()
 
-        self.bound = bound
+                **kwargs,
+                ):
+        super().__init__(**kwargs)
 
         if encoding_precision == 'float16':
             self.encoding_precision = torch.float16

@@ -1,3 +1,4 @@
+from logging import root
 import numpy as np
 import torch
 import cv2
@@ -9,6 +10,7 @@ from torch import nn
 from torch.nn import functional as F
 from torch.optim import Adam, SGD, LBFGS
 from torch.optim.lr_scheduler import ExponentialLR, LambdaLR, MultiStepLR, LambdaLR
+from torch.utils.tensorboard import SummaryWriter
 
 from torch.cuda.amp import autocast, GradScaler
 
@@ -22,6 +24,8 @@ from loaders.synthetic import load_image_set
 
 from nets2 import NeRFNetwork
 from trainer2 import Trainer
+from logger import Logger
+from inference import Inference
 
 from misc import extract_foreground, remove_background
 
@@ -44,34 +48,32 @@ def meta_loader(loader):
 
     return images, depths, intrinsics, extrinsics, bds
 
+@torch.no_grad()
+def get_valid_positions(N, H, W, K, E, res):
 
-def get_valid_positions(H, W, K, E):
-    with torch.no_grad():
-        res = 512
+    mask_full = torch.zeros((res, res, res), dtype=bool, device='cuda')
 
-        mask_full = torch.zeros((res, res, res), dtype=bool, device='cuda')
+    for i in tqdm(range(res)):
+        d = torch.linspace(-1, 1, res, device='cuda')
+        D = torch.stack(torch.meshgrid(d[i], d, d), dim=-1)
+        dist = torch.linalg.norm(D, dim=-1)[:, :, :, None].expand(-1, -1, -1, 3)
+        mask = torch.zeros(dist.shape, dtype=bool, device='cuda')
+        mask[dist < 1] = True
 
-        for i in tqdm(range(res)):
-            d = torch.linspace(-1, 1, res, device='cuda')
-            D = torch.stack(torch.meshgrid(d[i], d, d), dim=-1)
-            dist = torch.linalg.norm(D, dim=-1)[:, :, :, None].expand(-1, -1, -1, 3)
-            mask = torch.zeros(dist.shape, dtype=bool, device='cuda')
-            mask[dist < 1] = True
+        # also mask out parts outside camera coverage
+        rays_d = D - E[:, None, None, :3, -1]
+        dirs_ = torch.inverse(E[:, None, None, :3, :3]) @ rays_d[..., None]
+        dirs_ = K[:, None, None, ...] @ dirs_
+        dirs = dirs_ / dirs_[:, :, :, 2, None, :]
+        mask_dirs = torch.zeros((N, res, res), dtype=int, device='cuda')
+        mask_dirs[((dirs[:, :, :, 0, 0] > 0) & (dirs[:, :, :, 0, 0] < H) & (dirs[:, :, :, 1, 0] > 0) & (dirs[:, :, :, 1, 0] < W) & (dirs_[:, :, :, 2, 0] > 0))] = 1
+        mask_dirs = torch.sum(mask_dirs, dim=0)
+        mask_dirs[mask_dirs > 0] = 1
+        mask_dirs = mask_dirs.to(bool)
+        mask_dirs = mask_dirs[None, :, :, None].expand(-1, -1, -1, 3)
+        mask = torch.logical_and(mask, mask_dirs)
 
-            # also mask out parts outside camera coverage
-            rays_d = D - E[:, None, None, :3, -1]
-            dirs_ = torch.inverse(E[:, None, None, :3, :3]) @ rays_d[..., None]
-            dirs_ = K[:, None, None, ...] @ dirs_
-            dirs = dirs_ / dirs_[:, :, :, 2, None, :]
-            mask_dirs = torch.zeros((E.shape[0], res, res), dtype=int, device='cuda')
-            mask_dirs[((dirs[:, :, :, 0, 0] > 0) & (dirs[:, :, :, 0, 0] < H) & (dirs[:, :, :, 1, 0] > 0) & (dirs[:, :, :, 1, 0] < W) & (dirs_[:, :, :, 2, 0] > 0))] = 1
-            mask_dirs = torch.sum(mask_dirs, dim=0)
-            mask_dirs[mask_dirs > 0] = 1
-            mask_dirs = mask_dirs.to(bool)
-            mask_dirs = mask_dirs[None, :, :, None].expand(-1, -1, -1, 3)
-            mask = torch.logical_and(mask, mask_dirs)
-
-            mask_full[i, :, :] = mask[..., 0]
+        mask_full[i, :, :] = mask[..., 0]
 
     return mask_full.cpu().numpy()
 
@@ -125,37 +127,61 @@ if __name__ == '__main__':
     with open('./configs/config.yaml', 'r') as f:
         cfg = Box(yaml.safe_load(f))
 
+    
+    logger = Logger(
+        root_dir=cfg.log.root_dir,
+        )
+
+    logger.log('Loading Data...')
+
+    images, depths, intrinsics, extrinsics = meta_camera_geometry()
+
+    logger.log('Initilising Model...')
+
     model = NeRFNetwork(
         # Render args
-        inner_near=cfg.renderer.inner_near
-        inner_far=cfg.renderer.inner_far
-        inner_steps=cfg.renderer.inner_steps
-        outer_near=cfg.renderer.outer_near
-        outer_far=cfg.renderer.outer_far
-        outer_steps=cfg.renderer.outer_steps
-
-        # Net args
         bound = cfg.scene.bound,
         
-        n_levels=cfg.nets.encoding.n_levels
-        n_features=cfg.nets.encoding.n_features
-        log2_hashmap_size=cfg.nets.encoding.log2_hashmap_size
-        encoding_precision=cfg.nets.encoding.precision
+        inner_near=cfg.renderer.inner_near,
+        inner_far=cfg.renderer.inner_far,
+        inner_steps=cfg.renderer.inner_steps,
+        outer_near=cfg.renderer.outer_near,
+        outer_far=cfg.renderer.outer_far,
+        outer_steps=cfg.renderer.outer_steps,
 
-        encoding_dir=cfg.nets.encoding_dir.encoding
-        encoding_dir_degree=cfg.nets.encoding_dir.degree
-        encoding_dir_precision=cfg.nets.encoding_dir.precision
+        # Net args
+        n_levels=cfg.nets.encoding.n_levels,
+        n_features_per_level=cfg.nets.encoding.n_features,
+        log2_hashmap_size=cfg.nets.encoding.log2_hashmap_size,
+        encoding_precision=cfg.nets.encoding.precision,
 
-        num_layers=cfg.nets.sigma.num_layers
-        hidden_dim=cfg.nets.sigma.hidden_dim
-        geo_feat_dim=cfg.nets.sigma.geo_feat_dim
+        encoding_dir=cfg.nets.encoding_dir.encoding,
+        encoding_dir_degree=cfg.nets.encoding_dir.degree,
+        encoding_dir_precision=cfg.nets.encoding_dir.precision,
 
-        num_layers_color=cfg.nets.color.num_layers
-        hidden_dim_color=cfg.nets.color.hidden_dim
+        num_layers=cfg.nets.sigma.num_layers,
+        hidden_dim=cfg.nets.sigma.hidden_dim,
+        geo_feat_dim=cfg.nets.sigma.geo_feat_dim,
+
+        num_layers_color=cfg.nets.color.num_layers,
+        hidden_dim_color=cfg.nets.color.hidden_dim,
     ).to('cuda')
 
+    logger.log('Generating Mask...')
+
+    N, H, W = images.shape[:3]
+    mask = get_valid_positions(N, H, W, intrinsics.to('cuda'), extrinsics.to('cuda'), res=256)
+
+    inference = Inference(
+        model=model,
+        mask=mask,
+        n_rays=cfg.inference.n_rays,
+        voxel_res=cfg.inference.voxel_res,
+        thresh=cfg.inference.thresh,
+        batch_size=cfg.inference.batch_size,
+        )
+
     # images, depths, intrinsics, extrinsics, bds = meta_loader('synthetic')
-    images, depths, intrinsics, extrinsics = meta_camera_geometry()
     # plt.imshow(images[0, ..., -1])
     # # plt.imshow(depths[0, ...])
     # plt.show()
@@ -171,7 +197,7 @@ if __name__ == '__main__':
     # mask = get_valid_positions(H, W, intrinsics[ids, ...].to('cuda'), extrinsics[ids, ...].to('cuda'))
     # np.save('./data/valid_positions.npy', mask)
     # print(mask.shape)
-    mask = torch.Tensor(np.load('./data/valid_positions.npy')).to(bool)
+    # mask = torch.Tensor(np.load('./data/valid_positions.npy')).to(bool)
 
     optimizer = torch.optim.Adam([
             {'name': 'encoding', 'params': list(model.encoder.parameters())},
@@ -184,7 +210,6 @@ if __name__ == '__main__':
         depths=depths,
         intrinsics=intrinsics,
         extrinsics=extrinsics,
-        bound=cfg.scene.bound,
 
         optimizer=optimizer,
 
@@ -192,10 +217,6 @@ if __name__ == '__main__':
         num_epochs=cfg.trainer.num_epochs,
         iters_per_epoch=cfg.trainer.iters_per_epoch,
         eval_freq=cfg.trainer.eval_freq,
-        eval_image_scale=cfg.trainer.eval_image_scale,
-        pointcloud_res=cfg.trainer.pointcloud_res,
-
-        log_path = cfg.log.save_path,
         )
 
     trainer.train()
