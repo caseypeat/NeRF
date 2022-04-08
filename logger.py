@@ -42,6 +42,8 @@ class Logger(object):
         self.log_file = os.path.join(self.log_dir, 'events.log')
         self.t0 = time.time()
 
+        self.scalars = {}
+
     def log(self, string):
         with open(self.log_file, 'a') as f:
             dt = datetime.today().strftime("%Y-%m-%d %H:%M:%S")
@@ -58,15 +60,23 @@ class Logger(object):
         invdepth_c = color_depthmap(invdepth)
         file_path = os.path.join(self.invdepth_dir, f'{step}.jpg')
         self.writer.add_image('invdepth', invdepth_c, step, dataformats='HWC')
-        cv2.imwrite(file_path, np.uint8(invdepth_c*255))
+        cv2.imwrite(file_path, np.uint8(invdepth_c[..., np.array([2, 1, 0], dtype=int)]*255))
 
     def pointcloud(self, pointcloud, step):
-        file_path = os.path.join(self.pointcloud_dir, f'{step}.npy')
+        file_path = os.path.join(self.pointcloud_dir, f'pointcloud.npy')
         np.save(file_path, pointcloud)
 
     def model(self, model, step):
         file_path = os.path.join(self.model_dir, f'{step}.pth')
         torch.save(model, file_path)
+
+    def scalar(self, name, value, step):
+        if isinstance(value, torch.Tensor) or isinstance(value, np.ndarray):
+            value = value.item()
+        self.writer.add_scalar(name, value, step)
+        if name not in self.scalars.keys():
+            self.scalars[name] = []
+        self.scalars[name].append(value)
 
 
 if __name__ == '__main__':

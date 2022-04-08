@@ -7,6 +7,8 @@ import time
 import math as m
 import matplotlib.pyplot as plt
 
+from torch.profiler import profile, record_function, ProfilerActivity
+
 from matplotlib import cm
 
 import helpers
@@ -52,27 +54,27 @@ class Trainer(object):
 
         self.iter = 0
 
-        self.scalars = {}
-        self.scalars['loss'] = np.zeros((self.num_iters))
-        self.scalars['loss_rgb'] = np.zeros((self.num_iters))
-        self.scalars['loss_dist'] = np.zeros((self.num_iters))
-        self.scalars['dist_scalar'] = np.zeros((self.num_iters))
+        # self.scalars = {}
+        # self.scalars['loss'] = np.zeros((self.num_iters))
+        # self.scalars['loss_rgb'] = np.zeros((self.num_iters))
+        # self.scalars['loss_dist'] = np.zeros((self.num_iters))
+        # self.scalars['dist_scalar'] = np.zeros((self.num_iters))
 
 
     def train(self):
-        t0 = time.time()
         N, H, W, C = self.images.shape
+
+        # with torch.profiler.profile(
+        #     schedule=torch.profiler.schedule(wait=1, warmup=1, active=3, repeat=2),
+        #     on_trace_ready=torch.profiler.tensorboard_trace_handler(self.logger.tensorboard_dir),
+        #     record_shapes=True,
+        #     profile_memory=True,
+        #     with_stack=True
+        #     ) as prof:
 
         for epoch in range(self.num_epochs):
 
-            self.train_epoch(self.iters_per_epoch)
-            
-            self.logger.log(f'Iteration: {self.iter}')
-            for key, val in self.scalars.items():
-                self.logger.log(f'Scalar: {key} - Value: {np.mean(val[epoch*self.iters_per_epoch: (epoch+1)*self.iters_per_epoch]).item()}')
-            self.logger.log('')
-
-            if epoch % self.eval_freq == 0:
+            if epoch % self.eval_freq == 0 and epoch != 0:
                 self.logger.log('Rending Image...')
                 image, invdepth = self.inference.render_image(H, W, self.intrinsics[self.eval_image_num], self.extrinsics[self.eval_image_num])
                 self.logger.image(image.cpu().numpy(), self.iter)
@@ -82,26 +84,40 @@ class Trainer(object):
                 pointcloud = self.inference.extract_geometry()
                 self.logger.pointcloud(pointcloud.cpu().numpy(), self.iter)
 
+            # self.train_epoch(self.iters_per_epoch, prof)
+            self.train_epoch(self.iters_per_epoch)
+            
+            self.logger.log(f'Iteration: {self.iter}')
+            for key, val in self.logger.scalars.items():
+                self.logger.log(f'Scalar: {key} - Value: {np.mean(np.array(val[-self.iters_per_epoch:])).item()}')
+            self.logger.log('')
+
     def train_epoch(self, iters_per_epoch):
         for i in tqdm(range(iters_per_epoch)):
             self.optimizer.zero_grad()
 
-            # dist_scalar = 10**(self.iter/self.num_iters * 2 - 4)
-            dist_scalar = 10**(-4)
+            dist_scalar = 10**(self.iter/self.num_iters * 2 - 4)
+            # dist_scalar = 10**(-4)
+            # dist_scalar = 0
 
             loss_rgb, loss_dist = self.train_step()
+            # loss_rgb = self.train_step()
             loss = loss_rgb + dist_scalar * loss_dist
+            # loss = loss_rgb
 
-            self.scalars['loss'][self.iter] = loss
-            self.scalars['loss_rgb'][self.iter] = loss_rgb
-            self.scalars['loss_dist'][self.iter] = loss_dist
-            self.scalars['dist_scalar'][self.iter] = dist_scalar
+            self.logger.scalar('loss', loss, self.iter)
+            self.logger.scalar('loss_rgb', loss_rgb, self.iter)
+            # self.logger.scalar('psnr_rgb', helpers.mse2psnr(loss_rgb), self.iter)
+            self.logger.scalar('loss_dist', loss_dist, self.iter)
+            self.logger.scalar('dist_scalar', dist_scalar, self.iter)
 
             self.scaler.scale(loss).backward()
             self.scaler.step(self.optimizer)
             self.scaler.update()
 
             self.iter += 1
+
+            # prof.step()
 
     def train_step(self):
         self.model.train()
@@ -133,3 +149,4 @@ class Trainer(object):
         loss_dist = helpers.criterion_dist(weights, z_vals_log)
 
         return loss_rgb, loss_dist
+        # return loss_rgb

@@ -75,7 +75,7 @@ class Inference(object):
 
         scale = self.voxel_res / self.mask.shape[0]
 
-        voxels = torch.linspace(-1, 1, self.voxel_res, device='cuda')
+        voxels = torch.linspace(-1+1/self.voxel_res, 1-1/self.voxel_res, self.voxel_res, device='cuda')
 
         num_samples = self.voxel_res**3
 
@@ -92,7 +92,11 @@ class Inference(object):
 
             xyz = torch.stack((x, y, z), dim=-1)
 
-            xyz = xyz[self.mask[(x/scale).to(int), (y/scale).to(int), (z/scale).to(int)]].view(-1, 3)
+            x_i = ((x+1)/2*self.mask.shape[0]).to(int)
+            y_i = ((y+1)/2*self.mask.shape[1]).to(int)
+            z_i = ((z+1)/2*self.mask.shape[2]).to(int)
+
+            xyz = xyz[self.mask[x_i, y_i, z_i]].view(-1, 3)
 
             if xyz.shape[0] > 0:
                 sigmas = self.model.density(xyz).to(torch.float32)

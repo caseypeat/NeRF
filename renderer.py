@@ -35,13 +35,15 @@ class NerfRenderer(nn.Module):
     def forward(self, x, d):
         raise NotImplementedError()
 
-    def density(self, x, d):
+    def density(self, x):
         raise NotImplementedError()
 
 
     def render(self, rays_o, rays_d, bg_color):
-
-        z_vals_log = torch.cat([torch.linspace(m.log10(self.inner_near), m.log10(self.inner_far)-(m.log10(self.inner_far)-m.log10(self.inner_near))/self.inner_steps, self.inner_steps, device=rays_o.device), torch.linspace(m.log10(self.outer_near), m.log10(self.outer_far)-(m.log10(self.outer_far)-m.log10(self.outer_near))/self.outer_steps, self.outer_steps, device=rays_o.device)], dim=0)[None, ...].expand(rays_o.shape[0], -1)
+        if self.outer_steps != 0:
+            z_vals_log = torch.cat([torch.linspace(m.log10(self.inner_near), m.log10(self.inner_far)-(m.log10(self.inner_far)-m.log10(self.inner_near))/self.inner_steps, self.inner_steps, device=rays_o.device), torch.linspace(m.log10(self.outer_near), m.log10(self.outer_far)-(m.log10(self.outer_far)-m.log10(self.outer_near))/self.outer_steps, self.outer_steps, device=rays_o.device)], dim=0)[None, ...].expand(rays_o.shape[0], -1)
+        else:
+            z_vals_log = torch.linspace(m.log10(self.inner_near), m.log10(self.inner_far)-(m.log10(self.inner_far)-m.log10(self.inner_near))/self.inner_steps, self.inner_steps, device=rays_o.device)[None, ...].expand(rays_o.shape[0], -1)
         z_vals = torch.pow(10, z_vals_log)
 
         xyzs, dirs = helpers.get_sample_points(rays_o, rays_d, z_vals)
@@ -50,6 +52,13 @@ class NerfRenderer(nn.Module):
         sigmas, rgbs = self(s_xyzs, dirs)
         sigmas, rgbs = sigmas.to(torch.float32), rgbs.to(torch.float32)
 
+        # if self.training:
+        #     noise = torch.normal(mean=sigmas.new_zeros(sigmas.shape), std=sigmas.new_ones(sigmas.shape) * 0.1)
+        #     noise[noise < 0] = 0
+        #     sigmas += noise
+
         image, invdepth, weights = helpers.render_rays_log(sigmas, rgbs, z_vals, z_vals_log)
+
+        image = image + (1 - torch.sum(weights, dim=-1)[..., None]) * bg_color
 
         return image, invdepth, weights, z_vals_log

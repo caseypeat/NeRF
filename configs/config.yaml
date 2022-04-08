@@ -3,15 +3,17 @@ scene:
   scene_path: '/home/casey/Documents/PhD/data/synthetic_tree_assets/trees3/renders/vine_C2_1/back_close/cameras.json'
   image_scale: 0.5
   bound: 1.125
+  remove_background_bool: False
 
 log:
-  root_dir: './logs/test'
+  root_dir: './logs/alpha'
 
 trainer:
   num_epochs: 101
   iters_per_epoch: 100
-  eval_freq: 100
-  n_rays: 2048
+  eval_freq: 20
+  # n_rays: 4096
+  n_rays: 8192
 
 inference:
   n_rays: 4096
@@ -23,10 +25,12 @@ inference:
 renderer:
   inner_near: 0.05
   inner_far: 1
-  inner_steps: 384
+  # inner_steps: 384
+  inner_steps: 128
   outer_near: 1
   outer_far: 100
-  outer_steps: 192
+  # outer_steps: 192
+  outer_steps: 64
 
 nets:
   encoding:

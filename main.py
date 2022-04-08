@@ -12,6 +12,7 @@ from torch.nn import functional as F
 from torch.optim import Adam, SGD, LBFGS
 from torch.optim.lr_scheduler import ExponentialLR, LambdaLR, MultiStepLR, LambdaLR
 from torch.utils.tensorboard import SummaryWriter
+from torch.profiler import profile, record_function, ProfilerActivity
 
 from torch.cuda.amp import autocast, GradScaler
 
@@ -61,9 +62,11 @@ def get_valid_positions(N, H, W, K, E, res):
     return mask_full
 
 
-def meta_camera_geometry(scene_path):
+def meta_camera_geometry(scene_path, remove_background_bool):
 
     images, depths, intrinsics, extrinsics, ids = camera_geometry_loader(scene_path, image_scale=0.5)
+    if remove_background_bool:
+        images, depths, ids = remove_background(images, depths, ids, threshold=1)
 
     images_ds = images[:, ::4, ::4, :]
     depths_ds = depths[:, ::4, ::4]
@@ -94,7 +97,8 @@ if __name__ == '__main__':
         )
 
     logger.log('Loading Data...')
-    images, depths, intrinsics, extrinsics = meta_camera_geometry(cfg.scene.scene_path)
+    images, depths, intrinsics, extrinsics = meta_camera_geometry(cfg.scene.scene_path, cfg.scene.remove_background_bool)
+    # images, depths, intrinsics, extrinsics = meta_camera_geometry()
 
 
     logger.log('Initilising Model...')
@@ -146,6 +150,11 @@ if __name__ == '__main__':
             {'name': 'encoding', 'params': list(model.encoder.parameters())},
             {'name': 'net', 'params': list(model.sigma_net.parameters()) + list(model.color_net.parameters()), 'weight_decay': 1e-6},
         ], lr=1e-2, betas=(0.9, 0.99), eps=1e-15)
+
+    # optimizer = torch.optim.Adam([
+    #         {'name': 'encoding', 'params': list(model.encoder.parameters())},
+    #         {'name': 'net', 'params': list(model.sigma_net.parameters()) + list(model.color_net.parameters()), 'weight_decay': 1e-6},
+    #     ], lr=1e-3, betas=(0.9, 0.99), eps=1e-15)
 
     logger.log('Initiating Trainer...')
     trainer = Trainer(

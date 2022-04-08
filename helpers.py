@@ -14,8 +14,9 @@ def mse2psnr(mse):
 
 
 def criterion_dist(weights, z_vals):
+    z_vals_s = (z_vals + torch.min(z_vals)) / (torch.max(z_vals) - torch.min(z_vals))
     w = torch.bmm(weights[:, :, None], weights[:, None, :])
-    s = torch.abs(z_vals[:, :, None] - z_vals[:, None, :])
+    s = torch.abs(z_vals_s[:, :, None] - z_vals_s[:, None, :])
     loss = w * s
     loss = torch.mean(torch.sum(loss, dim=[1, 2]))
     return loss
@@ -23,6 +24,7 @@ def criterion_dist(weights, z_vals):
 
 def criterion_rgb(rgb_, rgb):
     loss = F.huber_loss(rgb_, rgb, delta=0.1)
+    # loss = F.mse_loss(rgb_, rgb)
     return loss
 
 

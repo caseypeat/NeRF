@@ -5,7 +5,7 @@ import  matplotlib.pyplot as plt
 from matplotlib import cm
 
 if __name__ == '__main__':
-    points = np.load('./data/points_log24.npy')
+    points = np.load('./logs/alpha/20220408_141949/pointcloud/10000.npy')
     # points = np.load('./data/points_00001.npy')
     # points = np.load('./data/points.npy')
 
