@@ -65,11 +65,12 @@ class Trainer(object):
         N, H, W, C = self.images.shape
 
         # with torch.profiler.profile(
-        #     schedule=torch.profiler.schedule(wait=1, warmup=1, active=3, repeat=2),
+        #     # activities=[],
+        #     schedule=torch.profiler.schedule(skip_first=10, wait=5, warmup=5, active=5, repeat=1),
         #     on_trace_ready=torch.profiler.tensorboard_trace_handler(self.logger.tensorboard_dir),
         #     record_shapes=True,
         #     profile_memory=True,
-        #     with_stack=True
+        #     # with_stack=True,
         #     ) as prof:
 
         for epoch in range(self.num_epochs):
@@ -84,8 +85,8 @@ class Trainer(object):
                 pointcloud = self.inference.extract_geometry()
                 self.logger.pointcloud(pointcloud.cpu().numpy(), self.iter)
 
-            # self.train_epoch(self.iters_per_epoch, prof)
             self.train_epoch(self.iters_per_epoch)
+            # self.train_epoch(self.iters_per_epoch)
             
             self.logger.log(f'Iteration: {self.iter}')
             for key, val in self.logger.scalars.items():
@@ -96,24 +97,16 @@ class Trainer(object):
         for i in tqdm(range(iters_per_epoch)):
             self.optimizer.zero_grad()
 
-            dist_scalar = 10**(self.iter/self.num_iters * 2 - 4)
-            # dist_scalar = 10**(-4)
-            # dist_scalar = 0
+            # dist_scalar = 10**(self.iter/self.num_iters * 2 - 4)
 
-            loss_rgb, loss_dist = self.train_step()
-            # loss_rgb = self.train_step()
-            loss = loss_rgb + dist_scalar * loss_dist
-            # loss = loss_rgb
+            with torch.cuda.amp.autocast():
+                loss = self.train_step()
+                # loss_rgb, loss_dist = self.train_step()
+                # loss = loss_rgb + dist_scalar * loss_dist
 
-            self.logger.scalar('loss', loss, self.iter)
-            self.logger.scalar('loss_rgb', loss_rgb, self.iter)
-            # self.logger.scalar('psnr_rgb', helpers.mse2psnr(loss_rgb), self.iter)
-            self.logger.scalar('loss_dist', loss_dist, self.iter)
-            self.logger.scalar('dist_scalar', dist_scalar, self.iter)
-
-            self.scaler.scale(loss).backward()
-            self.scaler.step(self.optimizer)
-            self.scaler.update()
+                self.scaler.scale(loss).backward()
+                self.scaler.step(self.optimizer)
+                self.scaler.update()
 
             self.iter += 1
 
@@ -148,5 +141,14 @@ class Trainer(object):
         loss_rgb = helpers.criterion_rgb(rgb, rgb_gt)
         loss_dist = helpers.criterion_dist(weights, z_vals_log)
 
-        return loss_rgb, loss_dist
-        # return loss_rgb
+        dist_scalar = 10**(self.iter/self.num_iters * 2 - 4)
+        loss = loss_rgb + dist_scalar * loss_dist
+
+        self.logger.scalar('loss', loss, self.iter)
+        self.logger.scalar('loss_rgb', loss_rgb, self.iter)
+        self.logger.scalar('loss_dist', loss_dist, self.iter)
+        self.logger.scalar('dist_scalar', dist_scalar, self.iter)
+        self.logger.scalar('psnr_rgb', helpers.psnr(rgb, rgb_gt), self.iter)
+
+        # return loss_rgb, loss_dist
+        return loss

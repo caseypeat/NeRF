@@ -6,6 +6,11 @@ from torch import nn
 from torch.nn import functional as F
 
 
+def psnr(rgb_, rgb):
+    mse = F.mse_loss(rgb_, rgb)
+    return -10.0 * m.log10(mse)
+
+
 def mse2psnr(mse):
     # For numerical stability, avoid a zero mse loss.
     if mse < 1e-5:

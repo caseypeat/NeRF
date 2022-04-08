@@ -12,8 +12,8 @@ trainer:
   num_epochs: 101
   iters_per_epoch: 100
   eval_freq: 20
-  # n_rays: 4096
-  n_rays: 8192
+  n_rays: 4096
+  # n_rays: 8192
 
 inference:
   n_rays: 4096
@@ -26,15 +26,15 @@ renderer:
   inner_near: 0.05
   inner_far: 1
   # inner_steps: 384
-  inner_steps: 128
+  inner_steps: 256
   outer_near: 1
   outer_far: 100
   # outer_steps: 192
-  outer_steps: 64
+  outer_steps: 128
 
 nets:
   encoding:
-    n_levels: 18
+    n_levels: 20
     n_features: 2
     log2_hashmap_size: 24
     precision: 'float32'

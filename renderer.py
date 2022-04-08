@@ -50,14 +50,14 @@ class NerfRenderer(nn.Module):
         s_xyzs = helpers.mipnerf360_scale(xyzs, self.bound)
 
         sigmas, rgbs = self(s_xyzs, dirs)
-        sigmas, rgbs = sigmas.to(torch.float32), rgbs.to(torch.float32)
+        # sigmas, rgbs = sigmas.to(torch.float32), rgbs.to(torch.float32)
 
         # if self.training:
         #     noise = torch.normal(mean=sigmas.new_zeros(sigmas.shape), std=sigmas.new_ones(sigmas.shape) * 0.1)
         #     noise[noise < 0] = 0
         #     sigmas += noise
 
-        image, invdepth, weights = helpers.render_rays_log(sigmas, rgbs, z_vals, z_vals_log)
+        image, invdepth, weights = helpers.render_rays_log(sigmas, rgbs, z_vals.to(torch.float16), z_vals_log.to(torch.float16))
 
         image = image + (1 - torch.sum(weights, dim=-1)[..., None]) * bg_color
 
