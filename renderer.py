@@ -39,59 +39,48 @@ class NerfRenderer(nn.Module):
         raise NotImplementedError()
 
 
+    @torch.no_grad()
+    def efficient_sampling(self, rays_o, rays_d, n_samples):
+        z_vals_log = torch.linspace(m.log10(self.inner_near), m.log10(self.inner_far)-(m.log10(self.inner_far)-m.log10(self.inner_near))/n_samples, n_samples, device=rays_o.device)[None, ...].expand(rays_o.shape[0], -1)
+        z_vals = torch.pow(10, z_vals_log)
+
+        xyzs, dirs = helpers.get_sample_points(rays_o, rays_d, z_vals)
+        s_xyzs = helpers.mipnerf360_scale(xyzs, self.bound)
+
+        sigmas = self.density(s_xyzs)
+
+        delta = z_vals_log.new_zeros(sigmas.shape)  # [N_rays, N_samples]
+        delta[:, :-1] = (z_vals_log[:, 1:] - z_vals_log[:, :-1])
+
+        alpha = 1 - torch.exp(-sigmas * delta)  # [N_rays, N_samples]
+
+        alpha_shift = torch.cat([alpha.new_zeros((alpha.shape[0], 1)), alpha], dim=-1)[:, :-1]  # [N_rays, N_samples]
+        weights = alpha * torch.cumprod(1 - alpha_shift, dim=-1)  # [N_rays, N_samples]
+
+        mask = weights.new_zeros(sigmas.shape, dtype=bool)
+        mask[:, ::n_samples//(self.inner_steps//2)] = True
+
+        _, indices = torch.sort(weights[~mask].view(rays_o.shape[0], -1), dim=-1, descending=True)
+
+        mask[~mask] = (indices < self.inner_steps//2).view(-1)
+
+        z_vals_log_inner = z_vals_log[mask].view(rays_o.shape[0], self.inner_steps)
+
+        return z_vals_log_inner
+
+
+
     def render(self, rays_o, rays_d, bg_color):
 
-        with torch.no_grad():
-
-            inner_steps_pre = 128
-            outer_steps_pre = 64
-
-            # z_vals_log_pre = torch.cat([torch.linspace(m.log10(self.inner_near), m.log10(self.inner_far)-(m.log10(self.inner_far)-m.log10(self.inner_near))/inner_steps_pre, inner_steps_pre, device=rays_o.device), torch.linspace(m.log10(self.outer_near), m.log10(self.outer_far)-(m.log10(self.outer_far)-m.log10(self.outer_near))/outer_steps_pre, outer_steps_pre, device=rays_o.device)], dim=0)[None, ...].expand(rays_o.shape[0], -1)
-            z_vals_log_pre = torch.linspace(m.log10(self.inner_near), m.log10(self.inner_far)-(m.log10(self.inner_far)-m.log10(self.inner_near))/inner_steps_pre, inner_steps_pre, device=rays_o.device)[None, ...].expand(rays_o.shape[0], -1)
-            z_vals_pre = torch.pow(10, z_vals_log_pre)
-
-            xyzs_pre, dirs_pre = helpers.get_sample_points(rays_o, rays_d, z_vals_pre)
-            s_xyzs_pre = helpers.mipnerf360_scale(xyzs_pre, self.bound)
-
-            sigmas_pre = self.density(s_xyzs_pre)
-
-            delta_pre = z_vals_log_pre.new_zeros(sigmas_pre.shape)  # [N_rays, N_samples]
-            delta_pre[:, :-1] = (z_vals_log_pre[:, 1:] - z_vals_log_pre[:, :-1])
-
-            alpha_pre = 1 - torch.exp(-sigmas_pre * delta_pre)  # [N_rays, N_samples]
-
-            alpha_shift_pre = torch.cat([alpha_pre.new_zeros((alpha_pre.shape[0], 1)), alpha_pre], dim=-1)[:, :-1]  # [N_rays, N_samples]
-            weights_pre = alpha_pre * torch.cumprod(1 - alpha_shift_pre, dim=-1)  # [N_rays, N_samples]
-
-            _, indices = torch.sort(weights_pre, dim=-1, descending=True)
-
-            mask = indices.new_zeros(sigmas_pre.shape, dtype=bool)
-            mask[indices < self.inner_steps] = True
-
-            z_vals_log_inner = z_vals_log_pre[mask].view(-1, self.inner_steps)
-            # z_vals = z_vals_pre[mask].view(-1, self.inner_steps)
-
-            z_vals_log = torch.cat([z_vals_log_inner, torch.linspace(m.log10(self.outer_near), m.log10(self.outer_far)-(m.log10(self.outer_far)-m.log10(self.outer_near))/self.outer_steps, self.outer_steps, device=rays_o.device).expand(rays_o.shape[0], -1)], dim=-1)
-            z_vals = torch.pow(10, z_vals_log)
-
-        # if self.outer_steps != 0:
-        #     z_vals_log = torch.cat([torch.linspace(m.log10(self.inner_near), m.log10(self.inner_far)-(m.log10(self.inner_far)-m.log10(self.inner_near))/self.inner_steps, self.inner_steps, device=rays_o.device), torch.linspace(m.log10(self.outer_near), m.log10(self.outer_far)-(m.log10(self.outer_far)-m.log10(self.outer_near))/self.outer_steps, self.outer_steps, device=rays_o.device)], dim=0)[None, ...].expand(rays_o.shape[0], -1)
-        # else:
-        #     z_vals_log = torch.linspace(m.log10(self.inner_near), m.log10(self.inner_far)-(m.log10(self.inner_far)-m.log10(self.inner_near))/self.inner_steps, self.inner_steps, device=rays_o.device)[None, ...].expand(rays_o.shape[0], -1)
-        
-        # z_vals_log = torch.cat([torch.linspace(m.log10(self.inner_near), m.log10(self.inner_far)-(m.log10(self.inner_far)-m.log10(self.inner_near))/self.inner_steps, self.inner_steps, device=rays_o.device), torch.linspace(m.log10(self.outer_near), m.log10(self.outer_far)-(m.log10(self.outer_far)-m.log10(self.outer_near))/self.outer_steps, self.outer_steps, device=rays_o.device)], dim=0)[None, ...].expand(rays_o.shape[0], -1)
-        # z_vals = torch.pow(10, z_vals_log)
+        # z_vals_log_inner = self.efficient_sampling(rays_o, rays_d, n_samples=256)
+        z_vals_log_inner = torch.linspace(m.log10(self.outer_near), m.log10(self.inner_far)-(m.log10(self.inner_far)-m.log10(self.inner_near))/self.inner_steps, self.inner_steps, device=rays_o.device).expand(rays_o.shape[0], -1)
+        z_vals_log = torch.cat([z_vals_log_inner, torch.linspace(m.log10(self.outer_near), m.log10(self.outer_far)-(m.log10(self.outer_far)-m.log10(self.outer_near))/self.outer_steps, self.outer_steps, device=rays_o.device).expand(rays_o.shape[0], -1)], dim=-1)
+        z_vals = torch.pow(10, z_vals_log)
 
         xyzs, dirs = helpers.get_sample_points(rays_o, rays_d, z_vals)
         s_xyzs = helpers.mipnerf360_scale(xyzs, self.bound)
 
         sigmas, rgbs = self(s_xyzs, dirs)
-        # sigmas, rgbs = sigmas.to(torch.float32), rgbs.to(torch.float32)
-
-        # if self.training:
-        #     noise = torch.normal(mean=sigmas.new_zeros(sigmas.shape), std=sigmas.new_ones(sigmas.shape) * 0.1)
-        #     noise[noise < 0] = 0
-        #     sigmas += noise
 
         image, invdepth, weights = helpers.render_rays_log(sigmas, rgbs, z_vals, z_vals_log)
 

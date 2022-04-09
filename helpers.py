@@ -103,7 +103,7 @@ def get_rays(h, w, K, E):
     rays_d = E[:, :3, :3] @ dirs  # [N_rays, 3, 1]
     rays_d = torch.squeeze(rays_d, dim=2)  # [N_rays, 3]
 
-    rays_o = E[:, :3, -1]
+    rays_o = E[:, :3, -1].expand(rays_d.shape[0], -1)
 
     return rays_o, rays_d
 
