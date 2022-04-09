@@ -19,6 +19,9 @@ from torch.cuda.amp import autocast, GradScaler
 from tqdm import tqdm
 from box import Box
 
+import cProfile, pstats, io
+from pstats import SortKey
+
 import helpers
 
 from loaders.camera_geometry_loader import camera_geometry_loader
@@ -176,4 +179,8 @@ if __name__ == '__main__':
         )
 
     logger.log('Beginning Training...\n')
+    # with cProfile.Profile() as pr:
     trainer.train()
+    
+    # ps = pstats.Stats(pr).sort_stats(SortKey.CUMULATIVE)
+    # ps.print_stats()

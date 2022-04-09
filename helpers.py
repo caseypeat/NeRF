@@ -19,9 +19,9 @@ def mse2psnr(mse):
 
 
 def criterion_dist(weights, z_vals):
-    z_vals_s = (z_vals + torch.min(z_vals)) / (torch.max(z_vals) - torch.min(z_vals))
+    # z_vals_s = (z_vals + torch.min(z_vals)) / (torch.max(z_vals) - torch.min(z_vals))
     w = torch.bmm(weights[:, :, None], weights[:, None, :])
-    s = torch.abs(z_vals_s[:, :, None] - z_vals_s[:, None, :])
+    s = torch.abs(z_vals[:, :, None] - z_vals[:, None, :])
     loss = w * s
     loss = torch.mean(torch.sum(loss, dim=[1, 2]))
     return loss

@@ -6,6 +6,7 @@ import cv2
 import time
 import math as m
 import matplotlib.pyplot as plt
+import cProfile
 
 from torch.profiler import profile, record_function, ProfilerActivity
 
@@ -136,10 +137,10 @@ class Trainer(object):
         
         rays_o, rays_d = helpers.get_rays(h, w, K, E)
 
-        rgb, _, weights, z_vals_log = self.model.render(rays_o, rays_d, color_bg)
+        rgb, _, weights, z_vals_log_s = self.model.render(rays_o, rays_d, color_bg)
 
         loss_rgb = helpers.criterion_rgb(rgb, rgb_gt)
-        loss_dist = helpers.criterion_dist(weights, z_vals_log)
+        loss_dist = helpers.criterion_dist(weights, z_vals_log_s)
 
         dist_scalar = 10**(self.iter/self.num_iters * 2 - 4)
         loss = loss_rgb + dist_scalar * loss_dist
