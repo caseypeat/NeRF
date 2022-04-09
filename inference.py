@@ -42,7 +42,7 @@ class Inference(object):
         h = torch.arange(0, H, device='cuda')
         w = torch.arange(0, W, device='cuda')
 
-        h, w = torch.meshgrid(h, w)
+        h, w = torch.meshgrid(h, w, indexing='ij')
 
         h_f = torch.reshape(h, (-1,))
         w_f = torch.reshape(w, (-1,))
@@ -86,8 +86,8 @@ class Inference(object):
 
             n = torch.arange(a, b)
 
-            x = voxels[n//self.voxel_res**2]
-            y = voxels[(n//self.voxel_res) % self.voxel_res]
+            x = voxels[torch.div(n, self.voxel_res**2, rounding_mode='floor')]
+            y = voxels[torch.div(n, self.voxel_res, rounding_mode='floor') % self.voxel_res]
             z = voxels[n % self.voxel_res]
 
             xyz = torch.stack((x, y, z), dim=-1)

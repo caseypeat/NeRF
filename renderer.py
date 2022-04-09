@@ -89,3 +89,48 @@ class NerfRenderer(nn.Module):
         z_vals_log_s = (z_vals_log - m.log10(self.inner_near)) / (m.log10(self.outer_far) - m.log10(self.inner_near))
 
         return image, invdepth, weights, z_vals_log_s
+
+
+
+class NerfRendererNB(nn.Module):
+    def __init__(self,
+                bound=1.125,
+                # z_vals
+                inner_near=0.05,
+                inner_far=1,
+                inner_steps=384,
+                ):
+        super().__init__()
+
+        self.bound = bound
+
+        self.inner_near = inner_near
+        self.inner_far = inner_far
+        self.inner_steps = inner_steps
+
+
+    def forward(self, x, d):
+        raise NotImplementedError()
+
+    def density(self, x):
+        raise NotImplementedError()
+
+
+    def render(self, rays_o, rays_d, bg_color):
+
+        # z_vals_log_inner = self.efficient_sampling(rays_o, rays_d, n_samples=256)
+        z_vals_log = torch.linspace(m.log10(self.inner_near), m.log10(self.inner_far)-(m.log10(self.inner_far)-m.log10(self.inner_near))/self.inner_steps, self.inner_steps, device=rays_o.device).expand(rays_o.shape[0], -1)
+        z_vals = torch.pow(10, z_vals_log)
+
+        xyzs, dirs = helpers.get_sample_points(rays_o, rays_d, z_vals)
+        s_xyzs = helpers.mipnerf360_scale(xyzs, self.bound)
+
+        sigmas, rgbs = self(s_xyzs, dirs)
+
+        image, invdepth, weights = helpers.render_rays_log(sigmas, rgbs, z_vals, z_vals_log)
+
+        image = image + (1 - torch.sum(weights, dim=-1)[..., None]) * bg_color
+
+        z_vals_log_s = (z_vals_log - m.log10(self.inner_near)) / (m.log10(self.inner_far) - m.log10(self.inner_near))
+
+        return image, invdepth, weights, z_vals_log_s

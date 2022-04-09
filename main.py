@@ -32,7 +32,7 @@ from trainer import Trainer
 from logger import Logger
 from inference import Inference
 
-from misc import extract_foreground, remove_background
+from misc import extract_foreground, remove_background, remove_background2
 
 
 @torch.no_grad()
@@ -42,7 +42,7 @@ def get_valid_positions(N, H, W, K, E, res):
 
     for i in tqdm(range(res)):
         d = torch.linspace(-1, 1, res, device='cuda')
-        D = torch.stack(torch.meshgrid(d[i], d, d), dim=-1)
+        D = torch.stack(torch.meshgrid(d[i], d, d, indexing='ij'), dim=-1)
         dist = torch.linalg.norm(D, dim=-1)[:, :, :, None].expand(-1, -1, -1, 3)
         mask = torch.zeros(dist.shape, dtype=bool, device='cuda')
         mask[dist < 1] = True
@@ -80,6 +80,7 @@ def meta_camera_geometry(scene_path, remove_background_bool):
     extrinsics[..., :3, 3] = extrinsics[..., :3, 3] - (xyz_max + xyz_min) / 2
     xyz_min_norm, xyz_max_norm = helpers.calculate_bounds_sphere(images_ds_nb, depths_ds_nb, intrinsics, extrinsics)
     extrinsics[..., :3, 3] = extrinsics[..., :3, 3] / xyz_max_norm
+
     depths = depths / xyz_max_norm
 
     images = torch.Tensor(images)
@@ -112,9 +113,9 @@ if __name__ == '__main__':
         inner_near=cfg.renderer.inner_near,
         inner_far=cfg.renderer.inner_far,
         inner_steps=cfg.renderer.inner_steps,
-        outer_near=cfg.renderer.outer_near,
-        outer_far=cfg.renderer.outer_far,
-        outer_steps=cfg.renderer.outer_steps,
+        # outer_near=cfg.renderer.outer_near,
+        # outer_far=cfg.renderer.outer_far,
+        # outer_steps=cfg.renderer.outer_steps,
 
         # Net args
         n_levels=cfg.nets.encoding.n_levels,
@@ -149,6 +150,12 @@ if __name__ == '__main__':
         )
 
     logger.log('Initiating Optimiser...')
+
+    # optimizer = torch.optim.SGD([
+    #         {'name': 'encoding', 'params': list(model.encoder.parameters())},
+    #         {'name': 'net', 'params': list(model.sigma_net.parameters()) + list(model.color_net.parameters()), 'weight_decay': 1e-6},
+    #     ], lr=1e-1)
+
     optimizer = torch.optim.Adam([
             {'name': 'encoding', 'params': list(model.encoder.parameters())},
             {'name': 'net', 'params': list(model.sigma_net.parameters()) + list(model.color_net.parameters()), 'weight_decay': 1e-6},

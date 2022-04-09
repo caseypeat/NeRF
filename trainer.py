@@ -91,7 +91,7 @@ class Trainer(object):
             
             self.logger.log(f'Iteration: {self.iter}')
             for key, val in self.logger.scalars.items():
-                self.logger.log(f'Scalar: {key} - Value: {np.mean(np.array(val[-self.iters_per_epoch:])).item()}')
+                self.logger.log(f'Scalar: {key} - Value: {np.mean(np.array(val[-self.iters_per_epoch:])).item():.6f}')
             self.logger.log('')
 
     def train_epoch(self, iters_per_epoch):
