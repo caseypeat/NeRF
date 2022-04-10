@@ -10,7 +10,7 @@ from renderer import NerfRenderer, NerfRendererNB
 class NeRFNetwork(NerfRendererNB):
     def __init__(self,
                 # encoding (hashgrid)
-                n_levels=18,
+                n_levels=16,
                 n_features_per_level=2,
                 log2_hashmap_size=24,
                 encoding_precision='float32',
@@ -106,7 +106,7 @@ class NeRFNetwork(NerfRendererNB):
         )
 
     
-    def forward(self, x, d):
+    def forward(self, x, d, mip):
 
         prefix = x.shape[:-1]
         x = x.reshape(-1, 3)
@@ -115,6 +115,9 @@ class NeRFNetwork(NerfRendererNB):
         # sigma
         x = (x + self.bound) / (2 * self.bound) # to [0, 1]
         x = self.encoder(x)
+
+        x = x * mip
+
         h = self.sigma_net(x)
 
         sigma = F.relu(h[..., 0])

@@ -91,6 +91,9 @@ class NerfRenderer(nn.Module):
         return image, invdepth, weights, z_vals_log_s
 
 
+def log_base(x, base):
+    return torch.log(x) / m.log(base)
+
 
 class NerfRendererNB(nn.Module):
     def __init__(self,
@@ -125,7 +128,25 @@ class NerfRendererNB(nn.Module):
         xyzs, dirs = helpers.get_sample_points(rays_o, rays_d, z_vals)
         s_xyzs = helpers.mipnerf360_scale(xyzs, self.bound)
 
-        sigmas, rgbs = self(s_xyzs, dirs)
+        n_levels = 16
+        n_features_per_level = 2
+
+        b = 1.3819
+        Vs = 1 / (n_levels*torch.pow(b, torch.arange(n_levels, device='cuda')))
+        f = 1109
+        Ps = z_vals / f
+
+        # mip = 1 / (1 + torch.exp(10*(log_base(Ps, b)[..., None] - log_base(Vs, b))))
+        # mip = torch.repeat_interleave(mip, n_features_per_level, dim=-1)
+        # mip = mip.reshape(-1, n_levels*n_features_per_level)
+
+        mip = torch.ones((*z_vals.shape, n_levels), device='cuda')
+        # mip[..., 8:] = 0
+        mip = torch.repeat_interleave(mip, n_features_per_level, dim=-1)
+        mip = mip.reshape(-1, n_levels*n_features_per_level)
+
+
+        sigmas, rgbs = self(s_xyzs, dirs, mip)
 
         image, invdepth, weights = helpers.render_rays_log(sigmas, rgbs, z_vals, z_vals_log)
 

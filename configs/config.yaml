@@ -6,7 +6,7 @@ scene:
   remove_background_bool: True
 
 log:
-  root_dir: './logs/efficient_sampling'
+  root_dir: './logs/mip'
 
 trainer:
   num_epochs: 101
