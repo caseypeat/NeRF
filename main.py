@@ -34,6 +34,8 @@ from inference import Inference
 
 from misc import extract_foreground, remove_background, remove_background2
 
+from config import cfg
+
 
 @torch.no_grad()
 def get_valid_positions(N, H, W, K, E, res):
@@ -93,8 +95,8 @@ def meta_camera_geometry(scene_path, remove_background_bool):
 
 if __name__ == '__main__':
 
-    with open('./configs/config.yaml', 'r') as f:
-        cfg = Box(yaml.safe_load(f))
+    # with open('./configs/config.yaml', 'r') as f:
+    #     cfg = Box(yaml.safe_load(f))
 
     logger = Logger(
         root_dir=cfg.log.root_dir,

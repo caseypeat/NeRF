@@ -7,7 +7,7 @@ import tinycudann as tcnn
 from renderer import NerfRenderer, NerfRendererNB
 
 
-class NeRFNetwork(NerfRendererNB):
+class NeRFNetwork(NerfRenderer):
     def __init__(self,
                 # encoding (hashgrid)
                 n_levels=16,
@@ -106,7 +106,8 @@ class NeRFNetwork(NerfRendererNB):
         )
 
     
-    def forward(self, x, d, mip):
+    # def forward(self, x, d, mip):
+    def forward(self, x, d):
 
         prefix = x.shape[:-1]
         x = x.reshape(-1, 3)
@@ -116,7 +117,7 @@ class NeRFNetwork(NerfRendererNB):
         x = (x + self.bound) / (2 * self.bound) # to [0, 1]
         x = self.encoder(x)
 
-        x = x * mip
+        # x = x * mip
 
         h = self.sigma_net(x)
 

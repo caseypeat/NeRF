@@ -6,18 +6,18 @@ scene:
   remove_background_bool: False
 
 log:
-  root_dir: './logs/test1'
+  root_dir: './logs/lambda_test'
 
 trainer:
   num_epochs: 101
   iters_per_epoch: 100
-  eval_freq: 1
+  eval_freq: 10
   n_rays: 2048
   # n_rays: 4096
   # n_rays: 8192
   # n_rays: 16384
-  dist_loss_lambda1: 0.0001
-  dist_loss_lambda2: 0.01
+  dist_loss_lambda1: 0.003
+  dist_loss_lambda2: 0.003
 
 inference:
   n_rays: 4096

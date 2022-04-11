@@ -13,6 +13,8 @@ import helpers
 
 from tqdm import tqdm
 
+from config import cfg
+
 
 class Inference(object):
     def __init__(

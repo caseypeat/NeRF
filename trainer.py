@@ -16,6 +16,8 @@ import helpers
 
 from tqdm import tqdm
 
+from config import cfg
+
 
 class Trainer(object):
     def __init__(
@@ -82,6 +84,7 @@ class Trainer(object):
                 self.logger.image(image.cpu().numpy(), self.iter)
                 self.logger.invdepth(invdepth.cpu().numpy(), self.iter)
                 
+            if epoch % cfg.inference.pointcloud_eval_freq == 0 and epoch != 0:
                 self.logger.log('Generating Pointcloud')
                 pointcloud = self.inference.extract_geometry()
                 self.logger.pointcloud(pointcloud.cpu().numpy(), self.iter)
@@ -142,7 +145,7 @@ class Trainer(object):
         loss_rgb = helpers.criterion_rgb(rgb, rgb_gt)
         loss_dist = helpers.criterion_dist(weights, z_vals_log_s)
 
-        dist_scalar = 10**(self.iter/self.num_iters * 2 - 4)
+        dist_scalar = 10**(self.iter/self.num_iters * (m.log10(cfg.trainer.dist_loss_lambda2) - m.log10(cfg.trainer.dist_loss_lambda1)) + m.log10(cfg.trainer.dist_loss_lambda1))
         loss = loss_rgb + dist_scalar * loss_dist
 
         self.logger.scalar('loss', loss, self.iter)

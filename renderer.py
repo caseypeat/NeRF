@@ -9,6 +9,9 @@ import helpers
 
 from tqdm import tqdm
 
+from config import cfg
+
+
 class NerfRenderer(nn.Module):
     def __init__(self,
                 bound=1.125,

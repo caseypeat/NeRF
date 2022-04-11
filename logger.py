@@ -3,12 +3,15 @@ import torch
 import os
 import cv2
 import time
+import yaml
 
 from datetime import datetime
 
 from torch.utils.tensorboard import SummaryWriter
 
 from misc import color_depthmap
+
+from config import cfg
 
 
 def tensorboard_test(root_dir):
@@ -43,6 +46,11 @@ class Logger(object):
         self.t0 = time.time()
 
         self.scalars = {}
+
+        cfg.to_yaml(os.path.join(self.log_dir, 'config.yaml'))
+
+        # with open(os.path.join(self.log_dir, 'config.yaml'), 'w') as file:
+        #     yaml.dump(cfg.to_dict(), file)
 
     def log(self, string):
         with open(self.log_file, 'a') as f:
