@@ -1,17 +1,18 @@
 
 scene:
-  scene_path: '/home/casey/Documents/PhD/data/synthetic_tree_assets/trees3/renders/vine_C2_1/back_close/cameras.json'
+  # scene_path: '/home/casey/Documents/PhD/data/synthetic_tree_assets/trees3/renders/vine_C2_1/back_close/cameras.json'
+  scene_path: '/home/casey/Documents/PhD/data/conan_scans/ROW_349_EAST_SLOW_0006/scene.json'
   image_scale: 0.5
   bound: 1.125
   remove_background_bool: False
 
 log:
-  root_dir: './logs/test1'
+  root_dir: './logs/real_scenes'
 
 trainer:
   num_epochs: 101
-  iters_per_epoch: 100
-  eval_freq: 1
+  iters_per_epoch: 200
+  eval_freq: 10
   n_rays: 2048
   # n_rays: 4096
   # n_rays: 8192
@@ -21,11 +22,13 @@ trainer:
 
 inference:
   n_rays: 4096
-  image_num: 52
-  voxel_res: 1024
+  image_num: 603
+  voxel_res: 2048
   thresh: 10
-  batch_size: 1_048_576
+  # batch_size: 1_048_576
+  batch_size: 262144
   pointcloud_eval_freq: 100
+  model_freq: 25
 
 renderer:
   inner_near: 0.05
@@ -39,7 +42,7 @@ nets:
   encoding:
     n_levels: 16
     n_features: 2
-    log2_hashmap_size: 22
+    log2_hashmap_size: 24
     precision: 'float32'
   
   encoding_dir:
@@ -55,3 +58,5 @@ nets:
   color:
     num_layers: 3
     hidden_dim: 64
+
+  latent_embedding: True

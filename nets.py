@@ -6,6 +6,8 @@ import tinycudann as tcnn
 
 from renderer import NerfRenderer, NerfRendererNB
 
+from config import cfg
+
 
 class NeRFNetwork(NerfRenderer):
     def __init__(self,
@@ -28,6 +30,8 @@ class NeRFNetwork(NerfRenderer):
                 # color network
                 num_layers_color=3,
                 hidden_dim_color=64,
+
+                N=None,
 
                 **kwargs,
                 ):
@@ -91,7 +95,15 @@ class NeRFNetwork(NerfRenderer):
         self.num_layers_color = num_layers_color
         self.hidden_dim_color = hidden_dim_color
 
-        self.in_dim_color = self.encoder_dir.n_output_dims + self.geo_feat_dim
+        self.N = N
+
+        if cfg.nets.latent_embedding:
+            self.latent_emb_dim = 48
+            self.latent_emb = nn.Parameter(torch.zeros(self.N, self.latent_emb_dim, device='cuda'), requires_grad=True)
+        else:
+            self.latend_emb_dim = 0
+
+        self.in_dim_color = self.encoder_dir.n_output_dims + self.geo_feat_dim + self.latent_emb_dim
 
         self.color_net = tcnn.Network(
             n_input_dims=self.in_dim_color,
@@ -107,11 +119,12 @@ class NeRFNetwork(NerfRenderer):
 
     
     # def forward(self, x, d, mip):
-    def forward(self, x, d):
+    def forward(self, x, d, n):
 
         prefix = x.shape[:-1]
         x = x.reshape(-1, 3)
         d = d.reshape(-1, 3)
+        n = n.reshape(-1)
 
         # sigma
         x = (x + self.bound) / (2 * self.bound) # to [0, 1]
@@ -128,7 +141,9 @@ class NeRFNetwork(NerfRenderer):
         d = (d + 1) / 2 # tcnn SH encoding requires inputs to be in [0, 1]
         d = self.encoder_dir(d)
 
-        h = torch.cat([d, geo_feat], dim=-1)
+        l = self.latent_emb[n]
+
+        h = torch.cat([d, l, geo_feat], dim=-1)
         h = self.color_net(h)
         
         # sigmoid activation for rgb

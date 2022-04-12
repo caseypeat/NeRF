@@ -25,7 +25,8 @@ class Inference(object):
         n_rays,
         voxel_res,
         thresh,
-        batch_size):
+        batch_size,
+        ):
         
         self.model = model
         self.mask = mask
@@ -60,9 +61,11 @@ class Inference(object):
 
             rays_o, rays_d = helpers.get_rays(h_fb, w_fb, K[None, ...], E[None, ...])
 
+            n = torch.full((rays_o.shape[0],), fill_value=cfg.inference.image_num, device='cuda')
+
             color_bg = torch.ones(3, device='cuda') # [3], fixed white background
 
-            image_fb, invdepth_fb, _, _ = self.model.render(rays_o, rays_d, bg_color=color_bg)
+            image_fb, invdepth_fb, _, _ = self.model.render(rays_o, rays_d, n, bg_color=color_bg)
 
             image_f[a:b] = image_fb
             invdepth_f[a:b] = invdepth_fb
@@ -106,3 +109,58 @@ class Inference(object):
                 points = torch.cat((points, new_points))
 
         return points
+
+
+    @torch.no_grad()
+    def extract_geometry_rays(self, H, W, Ks, Es):
+        N = Ks.shape[0]
+
+        points = torch.zeros((0, 3), device='cuda')
+
+        for K, E in zip(Ks, Es):
+
+            K = K.to('cuda')
+            E = E.to('cuda')
+
+            h = torch.arange(0, H, device='cuda')
+            w = torch.arange(0, W, device='cuda')
+
+            h, w = torch.meshgrid(h, w, indexing='ij')
+
+            h_f = torch.reshape(h, (-1,))
+            w_f = torch.reshape(w, (-1,))
+
+            for a in tqdm(range(0, len(h_f), self.n_rays)):
+                b = min(len(h_f), a+self.n_rays)
+
+                h_fb = h_f[a:b]
+                w_fb = w_f[a:b]
+
+                rays_o, rays_d = helpers.get_rays(h_fb, w_fb, K[None, ...], E[None, ...])
+
+                color_bg = torch.ones(3, device='cuda') # [3], fixed white background
+
+                z_vals_log_inner = torch.linspace(m.log10(self.model.inner_near), m.log10(self.model.inner_far)-(m.log10(self.model.inner_far)-m.log10(self.model.inner_near))/self.model.inner_steps, self.model.inner_steps, device=rays_o.device).expand(rays_o.shape[0], -1)
+                z_vals = torch.pow(10, z_vals_log_inner)
+
+                n = torch.full((rays_o.shape[0],), fill_value=cfg.inference.image_num, device='cuda')
+                n_expand = n[:, None].expand(-1, z_vals.shape[-1])
+
+                xyzs, dirs = helpers.get_sample_points(rays_o, rays_d, z_vals)
+                s_xyzs = helpers.mipnerf360_scale(xyzs, cfg.scene.bound)
+
+                sigmas, rgbs = self.model(s_xyzs, dirs, n_expand)
+
+                threshold = 100
+
+                sigmas[sigmas > threshold] = 1e4
+                sigmas[sigmas < threshold] = 0
+
+                image, invdepth, weights = helpers.render_rays_log(sigmas, rgbs, z_vals, z_vals_log_inner)
+
+                s_xyzs_surface = s_xyzs[weights > 0.5].reshape(-1, 3)
+
+                points = torch.cat([points, s_xyzs_surface], dim=0)
+
+        np.save('./data/surface_points.npy', points.cpu().numpy())
+

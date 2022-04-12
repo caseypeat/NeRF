@@ -71,7 +71,7 @@ class Logger(object):
         cv2.imwrite(file_path, np.uint8(invdepth_c[..., np.array([2, 1, 0], dtype=int)]*255))
 
     def pointcloud(self, pointcloud, step):
-        file_path = os.path.join(self.pointcloud_dir, f'pointcloud.npy')
+        file_path = os.path.join(self.pointcloud_dir, f'{step}.npy')
         np.save(file_path, pointcloud)
 
     def model(self, model, step):

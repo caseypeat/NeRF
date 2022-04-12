@@ -73,7 +73,7 @@ class NerfRenderer(nn.Module):
 
 
 
-    def render(self, rays_o, rays_d, bg_color):
+    def render(self, rays_o, rays_d, n, bg_color):
 
         # z_vals_log_inner = self.efficient_sampling(rays_o, rays_d, n_samples=256)
         z_vals_log_inner = torch.linspace(m.log10(self.inner_near), m.log10(self.inner_far)-(m.log10(self.inner_far)-m.log10(self.inner_near))/self.inner_steps, self.inner_steps, device=rays_o.device).expand(rays_o.shape[0], -1)
@@ -83,7 +83,9 @@ class NerfRenderer(nn.Module):
         xyzs, dirs = helpers.get_sample_points(rays_o, rays_d, z_vals)
         s_xyzs = helpers.mipnerf360_scale(xyzs, self.bound)
 
-        sigmas, rgbs = self(s_xyzs, dirs)
+        n_expand = n[:, None].expand(-1, z_vals.shape[-1])
+
+        sigmas, rgbs = self(s_xyzs, dirs, n_expand)
 
         image, invdepth, weights = helpers.render_rays_log(sigmas, rgbs, z_vals, z_vals_log)
 

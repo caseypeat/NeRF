@@ -30,6 +30,7 @@ class Trainer(object):
         intrinsics,
         extrinsics,
         optimizer,
+        scheduler,
         n_rays,
         num_epochs,
         iters_per_epoch,
@@ -46,6 +47,7 @@ class Trainer(object):
         self.extrinsics = extrinsics
 
         self.optimizer = optimizer
+        self.scheduler = scheduler
         self.scaler = torch.cuda.amp.GradScaler()
 
         self.n_rays = n_rays
@@ -89,6 +91,10 @@ class Trainer(object):
                 pointcloud = self.inference.extract_geometry()
                 self.logger.pointcloud(pointcloud.cpu().numpy(), self.iter)
 
+            if epoch % cfg.inference.model_freq == 0 and epoch != 0:
+                self.logger.log('Saving Model...')
+                self.logger.model(self.model, self.iter)
+
             self.train_epoch(self.iters_per_epoch)
             # self.train_epoch(self.iters_per_epoch)
             
@@ -112,6 +118,8 @@ class Trainer(object):
                 self.scaler.step(self.optimizer)
                 self.scaler.update()
 
+                self.scheduler.step()
+
             self.iter += 1
 
             # prof.step()
@@ -128,11 +136,18 @@ class Trainer(object):
         E = self.extrinsics[n].to('cuda')
 
         color_bg = torch.rand(3, device='cuda') # [3], frame-wise random.
+
         if C == 4:
-            rgba_gt = self.images[n, h, w, :].to('cuda')
+            if self.images.dtype == torch.uint8:
+                rgba_gt = (self.images[n, h, w, :].to(torch.float32) / 255).to('cuda')
+            else:
+                rgba_gt = self.images[n, h, w, :].to('cuda')
             rgb_gt = rgba_gt[..., :3] * rgba_gt[..., 3:] + color_bg * (1 - rgba_gt[..., 3:])
         else:
-            rgb_gt = self.images[n, h, w, :].to('cuda')
+            if self.images.dtype == torch.uint8:
+                rgb_gt = (self.images[n, h, w, :].to(torch.float32) / 255).to('cuda')
+            else:
+                rgb_gt = self.images[n, h, w, :].to('cuda')
 
         n = n.to('cuda')
         h = h.to('cuda')
@@ -140,7 +155,7 @@ class Trainer(object):
         
         rays_o, rays_d = helpers.get_rays(h, w, K, E)
 
-        rgb, _, weights, z_vals_log_s = self.model.render(rays_o, rays_d, color_bg)
+        rgb, _, weights, z_vals_log_s = self.model.render(rays_o, rays_d, n, color_bg)
 
         loss_rgb = helpers.criterion_rgb(rgb, rgb_gt)
         loss_dist = helpers.criterion_dist(weights, z_vals_log_s)
