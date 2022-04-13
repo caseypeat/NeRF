@@ -120,7 +120,9 @@ if __name__ == '__main__':
 
     # model.load_state_dict(torch.load('./logs/real_scenes/20220412_210427/model/20000.pth'))
 
-    model = torch.load('./logs/real_scenes/20220412_210427/model/20000.pth')
+    model = torch.load('./logs/real_scenes/20220413_191212/model/50000.pth')
+
+    model.inner_steps = 1024
 
     N, H, W = images.shape[:3]
     # mask = get_valid_positions(N, H, W, intrinsics.to('cuda'), extrinsics.to('cuda'), res=256)

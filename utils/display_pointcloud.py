@@ -7,8 +7,8 @@ from pyparsing import col
 
 if __name__ == '__main__':
     # points = np.load('./logs/efficient_sampling/20220409_215348/pointcloud/pointcloud.npy')
-    # points = np.load('./logs/real_scenes/20220412_165530/pointcloud/30000.npy')
-    points = np.load('./data/surface_points.npy')
+    # points = np.load('./logs/real_scenes/20220413_191212/pointcloud/50000.npy')
+    points = np.load('./data/surface_points_50000_0.03.npy')
     # points = np.load('./data/points_00001.npy')
     # points = np.load('./data/points.npy')
 
@@ -19,7 +19,7 @@ if __name__ == '__main__':
     # sigmas = sigmas[sigmas > thresh][..., None]
     # print(points.shape)
 
-    # points = points[np.broadcast_to(points[..., 0, None], (points.shape[0], 3)) > -0.5].reshape(-1, 3)
+    points = points[np.broadcast_to(points[..., 2, None], (points.shape[0], 3)) > -0.55].reshape(-1, 3)
 
     # points = points[np.all(np.isfinite(points), axis=1)]
     # points = points[np.linalg.norm(points, axis=1) < 1000]
@@ -31,14 +31,15 @@ if __name__ == '__main__':
 
     # colors = np.broadcast_to(points[..., 0, None], (len(points), 3))
     colors = points[..., 2]
-    colors = (colors - np.amin(colors)) / (np.amax(colors - np.amin(colors)))# * 2 - 1
-    # colors[colors < 0] = 0
+    colors = (colors - np.amin(colors)) / (np.amax(colors - np.amin(colors))) * 2 - 0.5
+    colors[colors < 0] = 0
+    colors[colors > 1] = 1
     colors = cm.get_cmap(plt.get_cmap('jet'))(colors)[..., :3]
 
     pcd = o3d.geometry.PointCloud()
     pcd.points = o3d.utility.Vector3dVector(points)
     pcd.colors = o3d.utility.Vector3dVector(colors)
 
-    # o3d.io.write_point_cloud('./data/pointcloud.pcd', pcd)
+    # o3d.io.write_point_cloud('./data/pointcloud_latent_embed2.pcd', pcd)
 
     o3d.visualization.draw([pcd])

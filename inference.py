@@ -162,5 +162,5 @@ class Inference(object):
 
                 points = torch.cat([points, s_xyzs_surface], dim=0)
 
-        np.save('./data/surface_points.npy', points.cpu().numpy())
+        np.save('./data/surface_points_50000_0.03.npy', points.cpu().numpy())
 

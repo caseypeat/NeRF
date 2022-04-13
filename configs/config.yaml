@@ -11,13 +11,13 @@ log:
 
 trainer:
   num_epochs: 101
-  iters_per_epoch: 200
+  iters_per_epoch: 500
   eval_freq: 10
   n_rays: 2048
   # n_rays: 4096
   # n_rays: 8192
   # n_rays: 16384
-  dist_loss_lambda1: 0.0001
+  dist_loss_lambda1: 0.00001
   dist_loss_lambda2: 0.01
 
 inference:
@@ -28,7 +28,7 @@ inference:
   # batch_size: 1_048_576
   batch_size: 262144
   pointcloud_eval_freq: 100
-  model_freq: 25
+  model_freq: 100
 
 renderer:
   inner_near: 0.05
