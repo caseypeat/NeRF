@@ -33,6 +33,9 @@ class Logger(object):
         self.model_dir = os.path.join(self.log_dir, 'model')
         self.tensorboard_dir = os.path.join(self.log_dir, 'tensorboard')
 
+        if not os.path.exists(root_dir):
+            os.mkdir(root_dir)
+
         os.mkdir(self.log_dir)
         os.mkdir(self.image_dir)
         os.mkdir(self.invdepth_dir)
@@ -47,10 +50,7 @@ class Logger(object):
 
         self.scalars = {}
 
-        cfg.to_yaml(os.path.join(self.log_dir, 'config.yaml'))
-
-        # with open(os.path.join(self.log_dir, 'config.yaml'), 'w') as file:
-        #     yaml.dump(cfg.to_dict(), file)
+        cfg.save_yaml(os.path.join(self.log_dir, 'config.yaml'))
 
     def log(self, string):
         with open(self.log_file, 'a') as f:

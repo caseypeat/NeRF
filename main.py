@@ -24,7 +24,7 @@ from pstats import SortKey
 
 import helpers
 
-from loaders.camera_geometry_loader import camera_geometry_loader, camera_geometry_loader_real
+from loaders.camera_geometry_loader import camera_geometry_loader, camera_geometry_loader_real, meta_camera_geometry, meta_camera_geometry_real
 from loaders.synthetic import load_image_set
 
 from nets import NeRFNetwork
@@ -37,90 +37,17 @@ from misc import extract_foreground, remove_background, remove_background2
 from config import cfg
 
 
-@torch.no_grad()
-def get_valid_positions(N, H, W, K, E, res):
-
-    mask_full = torch.zeros((res, res, res), dtype=bool, device='cuda')
-
-    for i in tqdm(range(res)):
-        d = torch.linspace(-1, 1, res, device='cuda')
-        D = torch.stack(torch.meshgrid(d[i], d, d, indexing='ij'), dim=-1)
-        dist = torch.linalg.norm(D, dim=-1)[:, :, :, None].expand(-1, -1, -1, 3)
-        mask = torch.zeros(dist.shape, dtype=bool, device='cuda')
-        mask[dist < 1] = True
-
-        # also mask out parts outside camera coverage
-        rays_d = D - E[:, None, None, :3, -1]
-        dirs_ = torch.inverse(E[:, None, None, :3, :3]) @ rays_d[..., None]
-        dirs_ = K[:, None, None, ...] @ dirs_
-        dirs = dirs_ / dirs_[:, :, :, 2, None, :]
-        mask_dirs = torch.zeros((N, res, res), dtype=int, device='cuda')
-        mask_dirs[((dirs[:, :, :, 0, 0] > 0) & (dirs[:, :, :, 0, 0] < H) & (dirs[:, :, :, 1, 0] > 0) & (dirs[:, :, :, 1, 0] < W) & (dirs_[:, :, :, 2, 0] > 0))] = 1
-        mask_dirs = torch.sum(mask_dirs, dim=0)
-        mask_dirs[mask_dirs > 0] = 1
-        mask_dirs = mask_dirs.to(bool)
-        mask_dirs = mask_dirs[None, :, :, None].expand(-1, -1, -1, 3)
-        mask = torch.logical_and(mask, mask_dirs)
-
-        mask_full[i, :, :] = mask[..., 0]
-
-    return mask_full
-
-
-def meta_camera_geometry(scene_path, remove_background_bool):
-
-    images, depths, intrinsics, extrinsics, ids = camera_geometry_loader(scene_path, image_scale=0.5)
-    if remove_background_bool:
-        images, depths, ids = remove_background(images, depths, ids, threshold=1)
-
-    images_ds = images[:, ::4, ::4, :]
-    depths_ds = depths[:, ::4, ::4]
-    ids_ds = ids[:, ::4, ::4]
-    images_ds_nb, depths_ds_nb, ids_ds_nb = remove_background(images_ds, depths_ds, ids_ds, threshold=1)
-
-    xyz_min, xyz_max = helpers.calculate_bounds(images_ds_nb, depths_ds_nb, intrinsics, extrinsics)
-    extrinsics[..., :3, 3] = extrinsics[..., :3, 3] - (xyz_max + xyz_min) / 2
-    xyz_min_norm, xyz_max_norm = helpers.calculate_bounds_sphere(images_ds_nb, depths_ds_nb, intrinsics, extrinsics)
-    extrinsics[..., :3, 3] = extrinsics[..., :3, 3] / xyz_max_norm
-
-    depths = depths / xyz_max_norm
-
-    images = torch.Tensor(images)
-    depths = torch.Tensor(depths)
-    intrinsics = torch.Tensor(intrinsics)
-    extrinsics = torch.Tensor(extrinsics)
-
-    return images, depths, intrinsics, extrinsics
-
-
-def meta_camera_geometry_real(scene_path):
-
-    images, depths, intrinsics, extrinsics, ids = camera_geometry_loader_real(scene_path, image_scale=0.5)
-
-    extrinsics[..., :3, 3] = extrinsics[..., :3, 3] - np.mean(extrinsics[..., :3, 3], axis=0, keepdims=True)
-
-    extrinsics[..., :3, 3] = extrinsics[..., :3, 3] / 2
-
-    images = torch.ByteTensor(images)
-    intrinsics = torch.Tensor(intrinsics)
-    extrinsics = torch.Tensor(extrinsics)
-
-    return images, None, intrinsics, extrinsics
-
-
 if __name__ == '__main__':
-
-    # with open('./configs/config.yaml', 'r') as f:
-    #     cfg = Box(yaml.safe_load(f))
 
     logger = Logger(
         root_dir=cfg.log.root_dir,
         )
 
     logger.log('Loading Data...')
-    # images, depths, intrinsics, extrinsics = meta_camera_geometry(cfg.scene.scene_path, cfg.scene.remove_background_bool)
-    images, depths, intrinsics, extrinsics = meta_camera_geometry_real(cfg.scene.scene_path)
-    # images, depths, intrinsics, extrinsics = meta_camera_geometry()
+    if cfg.scene.real:
+        images, depths, intrinsics, extrinsics = meta_camera_geometry_real(cfg.scene.scene_path)
+    else:
+        images, depths, intrinsics, extrinsics = meta_camera_geometry(cfg.scene.scene_path, cfg.scene.remove_background_bool)
 
 
     logger.log('Initilising Model...')
@@ -157,7 +84,7 @@ if __name__ == '__main__':
 
     logger.log('Generating Mask...')
     N, H, W = images.shape[:3]
-    mask = get_valid_positions(N, H, W, intrinsics.to('cuda'), extrinsics.to('cuda'), res=256)
+    mask = helpers.get_valid_positions(N, H, W, intrinsics.to('cuda'), extrinsics.to('cuda'), res=256)
     # mask = torch.zeros([256]*3)
 
     logger.log('Initiating Inference...')
@@ -172,24 +99,18 @@ if __name__ == '__main__':
 
     logger.log('Initiating Optimiser...')
 
-    # optimizer = torch.optim.SGD([
-    #         {'name': 'encoding', 'params': list(model.encoder.parameters())},
-    #         {'name': 'net', 'params': list(model.sigma_net.parameters()) + list(model.color_net.parameters()), 'weight_decay': 1e-6},
-    #     ], lr=1e-1)
-
     optimizer = torch.optim.Adam([
-            {'name': 'encoding', 'params': list(model.encoder.parameters()), 'lr': 2e-2},
-            {'name': 'latent_emb', 'params': [model.latent_emb], 'lr': 2e-2},
-            {'name': 'net', 'params': list(model.sigma_net.parameters()) + list(model.color_net.parameters()), 'weight_decay': 1e-6, 'lr': 1e-3},
-        ], betas=(0.9, 0.99), eps=1e-15)
+            {'name': 'encoding', 'params': list(model.encoder.parameters()), 'lr': cfg.optimizer.encoding.lr},
+            {'name': 'latent_emb', 'params': [model.latent_emb], 'lr': cfg.optimizer.latent_emb.lr},
+            {'name': 'net', 'params': list(model.sigma_net.parameters()) + list(model.color_net.parameters()), 'weight_decay': cfg.optimizer.net.weight_decay, 'lr': cfg.optimizer.net.lr},
+        ], betas=cfg.optimizer.betas, eps=cfg.optimizer.eps)
 
-    # optimizer = torch.optim.Adam([
-    #         {'name': 'encoding', 'params': list(model.encoder.parameters())},
-    #         {'name': 'net', 'params': list(model.sigma_net.parameters()) + list(model.color_net.parameters()), 'weight_decay': 1e-6},
-    #     ], lr=1e-3, betas=(0.9, 0.99), eps=1e-15)
-
-    # lmbda = lambda x: 0.1**(x/(cfg.trainer.num_epochs*cfg.trainer.iters_per_epoch))
-    lmbda = lambda x: 1
+    if cfg.scheduler == 'step':
+        lmbda = lambda x: 1
+    elif cfg.scheduler == 'exp_decay':
+        lmbda = lambda x: 0.1**(x/(cfg.trainer.num_epochs*cfg.trainer.iters_per_epoch))
+    else:
+        raise ValueError
     scheduler = LambdaLR(optimizer, lr_lambda=lmbda, last_epoch=-1, verbose=False)
 
     logger.log('Initiating Trainer...')
@@ -213,8 +134,4 @@ if __name__ == '__main__':
         )
 
     logger.log('Beginning Training...\n')
-    # with cProfile.Profile() as pr:
     trainer.train()
-    
-    # ps = pstats.Stats(pr).sort_stats(SortKey.CUMULATIVE)
-    # ps.print_stats()

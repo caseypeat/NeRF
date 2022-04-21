@@ -1,4 +1,5 @@
 import numpy as np
+import torch
 import cv2
 import os
 import sys
@@ -6,27 +7,15 @@ import matplotlib.pyplot as plt
 
 from tqdm import tqdm
 
-# sys.path.insert(0, '..')
-
 import camera_geometry
 from camera_geometry.scan import load_scan
 from camera_geometry.scan.views import load_frames
 
+import helpers
+from misc import remove_background
 
 np.set_printoptions(suppress=True)
 np.set_printoptions(precision=6)
-
-
-# ref: https://github.com/NVlabs/instant-ngp/blob/b76004c8cf478880227401ae763be4c02f80b62f/include/neural-graphics-primitives/nerf_loader.h#L50
-def nerf_matrix_to_ngp(pose, scale=0.33):
-    # for the fox dataset, 0.33 scales camera radius to ~ 2
-    new_pose = np.array([
-        [pose[1, 0], -pose[1, 1], -pose[1, 2], pose[1, 3] * scale],
-        [pose[2, 0], -pose[2, 1], -pose[2, 2], pose[2, 3] * scale],
-        [pose[0, 0], -pose[0, 1], -pose[0, 2], pose[0, 3] * scale],
-        [0, 0, 0, 1],
-    ], dtype=np.float32)
-    return new_pose
     
 
 def camera_geometry_loader(scene_path, image_scale=1, frame_range=None):
@@ -73,6 +62,32 @@ def camera_geometry_loader(scene_path, image_scale=1, frame_range=None):
     return images, depths, intrinsics, extrinsics, ids
 
 
+def meta_camera_geometry(scene_path, remove_background_bool):
+
+    images, depths, intrinsics, extrinsics, ids = camera_geometry_loader(scene_path, image_scale=0.5)
+    if remove_background_bool:
+        images, depths, ids = remove_background(images, depths, ids, threshold=1)
+
+    images_ds = images[:, ::4, ::4, :]
+    depths_ds = depths[:, ::4, ::4]
+    ids_ds = ids[:, ::4, ::4]
+    images_ds_nb, depths_ds_nb, ids_ds_nb = remove_background(images_ds, depths_ds, ids_ds, threshold=1)
+
+    xyz_min, xyz_max = helpers.calculate_bounds(images_ds_nb, depths_ds_nb, intrinsics, extrinsics)
+    extrinsics[..., :3, 3] = extrinsics[..., :3, 3] - (xyz_max + xyz_min) / 2
+    xyz_min_norm, xyz_max_norm = helpers.calculate_bounds_sphere(images_ds_nb, depths_ds_nb, intrinsics, extrinsics)
+    extrinsics[..., :3, 3] = extrinsics[..., :3, 3] / xyz_max_norm
+
+    depths = depths / xyz_max_norm
+
+    images = torch.Tensor(images)
+    depths = torch.Tensor(depths)
+    intrinsics = torch.Tensor(intrinsics)
+    extrinsics = torch.Tensor(extrinsics)
+
+    return images, depths, intrinsics, extrinsics
+
+
 def camera_geometry_loader_real(scene_path, image_scale=1, frame_range=None):
     # scene_path = os.path.join(scene_dir, 'scene.json')
     scene = load_scan(scene_path, image_scale=image_scale, frame_range=frame_range)
@@ -100,3 +115,18 @@ def camera_geometry_loader_real(scene_path, image_scale=1, frame_range=None):
     extrinsics = np.stack(extrinsics_list, axis=0)
 
     return images, None, intrinsics, extrinsics, None
+
+
+def meta_camera_geometry_real(scene_path):
+
+    images, depths, intrinsics, extrinsics, ids = camera_geometry_loader_real(scene_path, image_scale=0.5)
+
+    extrinsics[..., :3, 3] = extrinsics[..., :3, 3] - np.mean(extrinsics[..., :3, 3], axis=0, keepdims=True)
+
+    extrinsics[..., :3, 3] = extrinsics[..., :3, 3] / 2
+
+    images = torch.ByteTensor(images)
+    intrinsics = torch.Tensor(intrinsics)
+    extrinsics = torch.Tensor(extrinsics)
+
+    return images, None, intrinsics, extrinsics

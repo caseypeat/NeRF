@@ -5,6 +5,8 @@ import math as m
 from torch import nn
 from torch.nn import functional as F
 
+from tqdm import tqdm
+
 
 def psnr(rgb_, rgb):
     mse = F.mse_loss(rgb_, rgb)
@@ -158,3 +160,33 @@ def render_rays_log(sigmas, rgbs, z_vals, z_vals_log):
     invdepth = torch.sum(weights / z_vals, -1)  # [N_rays]
 
     return rgb, invdepth, weights
+
+
+@torch.no_grad()
+def get_valid_positions(N, H, W, K, E, res):
+
+    mask_full = torch.zeros((res, res, res), dtype=bool, device='cuda')
+
+    for i in tqdm(range(res)):
+        d = torch.linspace(-1, 1, res, device='cuda')
+        D = torch.stack(torch.meshgrid(d[i], d, d, indexing='ij'), dim=-1)
+        dist = torch.linalg.norm(D, dim=-1)[:, :, :, None].expand(-1, -1, -1, 3)
+        mask = torch.zeros(dist.shape, dtype=bool, device='cuda')
+        mask[dist < 1] = True
+
+        # also mask out parts outside camera coverage
+        rays_d = D - E[:, None, None, :3, -1]
+        dirs_ = torch.inverse(E[:, None, None, :3, :3]) @ rays_d[..., None]
+        dirs_ = K[:, None, None, ...] @ dirs_
+        dirs = dirs_ / dirs_[:, :, :, 2, None, :]
+        mask_dirs = torch.zeros((N, res, res), dtype=int, device='cuda')
+        mask_dirs[((dirs[:, :, :, 0, 0] > 0) & (dirs[:, :, :, 0, 0] < H) & (dirs[:, :, :, 1, 0] > 0) & (dirs[:, :, :, 1, 0] < W) & (dirs_[:, :, :, 2, 0] > 0))] = 1
+        mask_dirs = torch.sum(mask_dirs, dim=0)
+        mask_dirs[mask_dirs > 0] = 1
+        mask_dirs = mask_dirs.to(bool)
+        mask_dirs = mask_dirs[None, :, :, None].expand(-1, -1, -1, 3)
+        mask = torch.logical_and(mask, mask_dirs)
+
+        mask_full[i, :, :] = mask[..., 0]
+
+    return mask_full
