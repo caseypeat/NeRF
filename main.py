@@ -27,7 +27,8 @@ import helpers
 from loaders.camera_geometry_loader import camera_geometry_loader, camera_geometry_loader_real, meta_camera_geometry, meta_camera_geometry_real
 from loaders.synthetic import load_image_set
 
-from nets import NeRFNetwork
+from nets import NeRFNetwork, NeRFNetworkPlanes, NeRFNetworkPlanes2
+from renderer import NerfRendererPlanes
 from trainer import Trainer
 from logger import Logger
 from inference import Inference
@@ -49,43 +50,13 @@ if __name__ == '__main__':
     else:
         images, depths, intrinsics, extrinsics = meta_camera_geometry(cfg.scene.scene_path, cfg.scene.remove_background_bool)
 
-
     logger.log('Initilising Model...')
-    model = NeRFNetwork(
-        # Render args
-        bound = cfg.scene.bound,
-
-        inner_near=cfg.renderer.inner_near,
-        inner_far=cfg.renderer.inner_far,
-        inner_steps=cfg.renderer.inner_steps,
-        outer_near=cfg.renderer.outer_near,
-        outer_far=cfg.renderer.outer_far,
-        outer_steps=cfg.renderer.outer_steps,
-
-        # Net args
-        n_levels=cfg.nets.encoding.n_levels,
-        n_features_per_level=cfg.nets.encoding.n_features,
-        log2_hashmap_size=cfg.nets.encoding.log2_hashmap_size,
-        encoding_precision=cfg.nets.encoding.precision,
-
-        encoding_dir=cfg.nets.encoding_dir.encoding,
-        encoding_dir_degree=cfg.nets.encoding_dir.degree,
-        encoding_dir_precision=cfg.nets.encoding_dir.precision,
-
-        num_layers=cfg.nets.sigma.num_layers,
-        hidden_dim=cfg.nets.sigma.hidden_dim,
-        geo_feat_dim=cfg.nets.sigma.geo_feat_dim,
-
-        num_layers_color=cfg.nets.color.num_layers,
-        hidden_dim_color=cfg.nets.color.hidden_dim,
-
-        N = images.shape[0]
-    ).to('cuda')
+    model = NeRFNetworkPlanes().to('cuda')
 
     logger.log('Generating Mask...')
     N, H, W = images.shape[:3]
-    mask = helpers.get_valid_positions(N, H, W, intrinsics.to('cuda'), extrinsics.to('cuda'), res=256)
-    # mask = torch.zeros([256]*3)
+    # mask = helpers.get_valid_positions(N, H, W, intrinsics.to('cuda'), extrinsics.to('cuda'), res=256)
+    mask = torch.zeros([256]*3)
 
     logger.log('Initiating Inference...')
     inference = Inference(
@@ -99,9 +70,15 @@ if __name__ == '__main__':
 
     logger.log('Initiating Optimiser...')
 
+    # optimizer = torch.optim.Adam([
+    #         {'name': 'encoding', 'params': list(model.encoder.parameters()), 'lr': cfg.optimizer.encoding.lr},
+    #         {'name': 'latent_emb', 'params': [model.latent_emb], 'lr': cfg.optimizer.latent_emb.lr},
+    #         {'name': 'net', 'params': list(model.sigma_net.parameters()) + list(model.color_net.parameters()), 'weight_decay': cfg.optimizer.net.weight_decay, 'lr': cfg.optimizer.net.lr},
+    #     ], betas=cfg.optimizer.betas, eps=cfg.optimizer.eps)
+
     optimizer = torch.optim.Adam([
-            {'name': 'encoding', 'params': list(model.encoder.parameters()), 'lr': cfg.optimizer.encoding.lr},
-            {'name': 'latent_emb', 'params': [model.latent_emb], 'lr': cfg.optimizer.latent_emb.lr},
+            {'name': 'encoding1', 'params': list(model.encoder1.parameters()), 'lr': cfg.optimizer.encoding.lr},
+            {'name': 'encoding2', 'params': list(model.encoder2.parameters()), 'lr': cfg.optimizer.encoding.lr},
             {'name': 'net', 'params': list(model.sigma_net.parameters()) + list(model.color_net.parameters()), 'weight_decay': cfg.optimizer.net.weight_decay, 'lr': cfg.optimizer.net.lr},
         ], betas=cfg.optimizer.betas, eps=cfg.optimizer.eps)
 

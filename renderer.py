@@ -5,11 +5,151 @@ import torch.nn.functional as F
 import open3d as o3d
 import math as m
 
+import tinycudann as tcnn
+
 import helpers
 
 from tqdm import tqdm
 
 from config import cfg
+
+
+
+class NerfRendererPlanes(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+        self.z1 = torch.Tensor((1/(0.3-0.05), 0, 0)).to('cuda')
+        self.z2 = torch.Tensor((1/(0.3-1), 0, 0)).to('cuda')
+
+        self.encoder1 = tcnn.Encoding(
+            n_input_dims=2,
+            encoding_config={
+                "otype": "HashGrid",
+                "n_levels": 16,
+                "n_features_per_level": 2,
+                "log2_hashmap_size": 18,
+                "base_resolution": 16,
+                "per_level_scale": 1.3819,
+            },
+            dtype=torch.float32
+        )
+
+        self.encoder2 = tcnn.Encoding(
+            n_input_dims=2,
+            encoding_config={
+                "otype": "HashGrid",
+                "n_levels": 16,
+                "n_features_per_level": 2,
+                "log2_hashmap_size": 18,
+                "base_resolution": 16,
+                "per_level_scale": 1.3819,
+            },
+            dtype=torch.float32
+        )
+
+        self.geo_feat_dim = 15
+        self.sigma_net = tcnn.Network(
+            n_input_dims=16*2*2,
+            n_output_dims=1 + self.geo_feat_dim,
+            network_config={
+                "otype": "FullyFusedMLP",
+                "activation": "ReLU",
+                "output_activation": "None",
+                "n_neurons": 64,
+                "n_hidden_layers": 1,
+            },
+        )
+
+        self.in_dim_color = self.geo_feat_dim
+        self.color_net = tcnn.Network(
+            n_input_dims=self.in_dim_color,
+            n_output_dims=3,
+            network_config={
+                "otype": "FullyFusedMLP",
+                "activation": "ReLU",
+                "output_activation": "None",
+                "n_neurons": 64,
+                "n_hidden_layers": 2,
+            },
+        )
+
+
+    def forward(self, xy1, xy2):
+
+        xy1 = (xy1 + 1) / 2
+        xy2 = (xy2 + 1) / 2
+
+        xy1_e = self.encoder1(xy1)
+        xy2_e = self.encoder2(xy2)
+        xy_e = torch.cat((xy1_e, xy2_e), dim=-1)
+
+        h = self.sigma_net(xy_e)
+
+        sigma = F.relu(h[..., 0])
+        geo_feat = h[..., 1:]
+
+        h = self.color_net(geo_feat)
+
+        color = torch.sigmoid(h)
+
+        return sigma, color
+
+
+    def density(self, xy1, xy2):
+        
+        xy1 = (xy1 + 2) / 4
+        xy2 = (xy2 + 2) / 4
+
+        xy1_e = self.encoder1(xy1)
+        xy2_e = self.encoder2(xy2)
+        xy_e = torch.cat((xy1_e, xy2_e), dim=-1)
+
+        h = self.sigma_net(xy_e)
+
+        sigma = F.relu(h[..., 0])
+
+        return sigma
+
+
+    def calculate_intersection(self, o, d, p):
+
+        d = d / torch.linalg.norm(d, dim=-1, keepdim=True)
+        
+        # t = (1 - (p[0]*o[..., 0] + p[1]*o[..., 1] + p[2]*o[..., 2])) / (p[0]*d[..., 0] + p[1]*d[..., 1] + p[2]*d[..., 2])
+
+        # x = o[..., 0] * d[..., 0] * t
+        # y = o[..., 1] * d[..., 1] * t
+        # z = o[..., 2] * d[..., 2] * t
+
+        # t = (1 - p[0]*o[..., 0]) / (p[0]*d[..., 0])
+        t = (1 / p[0] - o[..., 0]) / (d[..., 0])
+
+        x = o[..., 0] + d[..., 0] * t
+        y = o[..., 1] + d[..., 1] * t
+        z = o[..., 2] + d[..., 2] * t
+
+        # print(torch.amin(y), torch.amax(y))
+        # print(torch.amin(z), torch.amax(z))
+
+        xy = torch.stack([y, z], dim=-1)
+
+        return xy
+
+
+    def render(self, rays_o, rays_d, bg_color):
+
+        xy1 = self.calculate_intersection(rays_o, rays_d, self.z1)
+        xy2 = self.calculate_intersection(rays_o, rays_d, self.z2)
+
+        sigma, rgb = self(xy1, xy2)
+
+        color = rgb * sigma[..., None]
+        color += (1 - sigma[..., None]) * bg_color
+
+        return color
+
+
 
 
 class NerfRenderer(nn.Module):

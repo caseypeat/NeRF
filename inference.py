@@ -65,15 +65,15 @@ class Inference(object):
 
             color_bg = torch.ones(3, device='cuda') # [3], fixed white background
 
-            image_fb, invdepth_fb, _, _ = self.model.render(rays_o, rays_d, n, bg_color=color_bg)
+            image_fb = self.model.render(rays_o, rays_d, bg_color=color_bg)
 
             image_f[a:b] = image_fb
-            invdepth_f[a:b] = invdepth_fb
+            # invdepth_f[a:b] = invdepth_fb
 
         image = torch.reshape(image_f, (*h.shape, 3))
-        invdepth = torch.reshape(invdepth_f, h.shape)
+        # invdepth = torch.reshape(invdepth_f, h.shape)
 
-        return image, invdepth
+        return image
 
     @torch.no_grad()
     def extract_geometry(self):

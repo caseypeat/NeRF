@@ -82,9 +82,9 @@ class Trainer(object):
 
             if epoch % self.eval_freq == 0 and epoch != 0:
                 self.logger.log('Rending Image...')
-                image, invdepth = self.inference.render_image(H, W, self.intrinsics[self.eval_image_num], self.extrinsics[self.eval_image_num])
+                image = self.inference.render_image(H, W, self.intrinsics[self.eval_image_num], self.extrinsics[self.eval_image_num])
                 self.logger.image(image.cpu().numpy(), self.iter)
-                self.logger.invdepth(invdepth.cpu().numpy(), self.iter)
+                # self.logger.invdepth(invdepth.cpu().numpy(), self.iter)
                 
             if epoch % cfg.inference.pointcloud_eval_freq == 0 and epoch != 0:
                 self.logger.log('Generating Pointcloud')
@@ -129,6 +129,7 @@ class Trainer(object):
         N, H, W, C = self.images.shape
 
         n = torch.randint(0, N, (self.n_rays,))
+        n[n == 52] = 53
         h = torch.randint(0, H, (self.n_rays,))
         w = torch.randint(0, W, (self.n_rays,))
 
@@ -155,18 +156,20 @@ class Trainer(object):
         
         rays_o, rays_d = helpers.get_rays(h, w, K, E)
 
-        rgb, _, weights, z_vals_log_s = self.model.render(rays_o, rays_d, n, color_bg)
+        # rgb, _, weights, z_vals_log_s = self.model.render(rays_o, rays_d, n, color_bg)
+        rgb = self.model.render(rays_o, rays_d, color_bg)
 
         loss_rgb = helpers.criterion_rgb(rgb, rgb_gt)
-        loss_dist = helpers.criterion_dist(weights, z_vals_log_s)
+        # loss_dist = helpers.criterion_dist(weights, z_vals_log_s)
 
-        dist_scalar = 10**(self.iter/self.num_iters * (m.log10(cfg.trainer.dist_loss_lambda2) - m.log10(cfg.trainer.dist_loss_lambda1)) + m.log10(cfg.trainer.dist_loss_lambda1))
-        loss = loss_rgb + dist_scalar * loss_dist
+        # dist_scalar = 10**(self.iter/self.num_iters * (m.log10(cfg.trainer.dist_loss_lambda2) - m.log10(cfg.trainer.dist_loss_lambda1)) + m.log10(cfg.trainer.dist_loss_lambda1))
+        # loss = loss_rgb + dist_scalar * loss_dist
+        loss = loss_rgb
 
         self.logger.scalar('loss', loss, self.iter)
         self.logger.scalar('loss_rgb', loss_rgb, self.iter)
-        self.logger.scalar('loss_dist', loss_dist, self.iter)
-        self.logger.scalar('dist_scalar', dist_scalar, self.iter)
+        # self.logger.scalar('loss_dist', loss_dist, self.iter)
+        # self.logger.scalar('dist_scalar', dist_scalar, self.iter)
         self.logger.scalar('psnr_rgb', helpers.psnr(rgb, rgb_gt), self.iter)
 
         # return loss_rgb, loss_dist

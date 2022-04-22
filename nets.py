@@ -1,12 +1,206 @@
+from math import log2
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
 import tinycudann as tcnn
 
-from renderer import NerfRenderer, NerfRendererNB
+from renderer import NerfRenderer, NerfRendererNB, NerfRendererPlanes
 
 from config import cfg
+
+
+
+class NeRFNetworkPlanes(NerfRendererPlanes):
+    def __init__(self):
+        super().__init__()
+
+        self.z1 = torch.Tensor((1/(0.3-0.05), 0, 0)).to('cuda')
+        self.z2 = torch.Tensor((1/(0.3-1), 0, 0)).to('cuda')
+
+        n_levels = 20
+        n_features_per_level = 2
+        log2_hashmap_size = 22
+
+        self.encoder1 = tcnn.Encoding(
+            n_input_dims=2,
+            encoding_config={
+                "otype": "HashGrid",
+                "n_levels": n_levels,
+                "n_features_per_level": n_features_per_level,
+                "log2_hashmap_size": log2_hashmap_size,
+                "base_resolution": 16,
+                "per_level_scale": 1.3819,
+            },
+            dtype=torch.float32
+        )
+
+        self.encoder2 = tcnn.Encoding(
+            n_input_dims=2,
+            encoding_config={
+                "otype": "HashGrid",
+                "n_levels": n_levels,
+                "n_features_per_level": n_features_per_level,
+                "log2_hashmap_size": log2_hashmap_size,
+                "base_resolution": 16,
+                "per_level_scale": 1.3819,
+            },
+            dtype=torch.float32
+        )
+
+        self.n_neurons = 64
+
+        self.geo_feat_dim = 15
+        self.sigma_net = tcnn.Network(
+            n_input_dims=n_levels*n_features_per_level*2,
+            n_output_dims=1 + self.geo_feat_dim,
+            network_config={
+                "otype": "FullyFusedMLP",
+                "activation": "ReLU",
+                "output_activation": "None",
+                "n_neurons": self.n_neurons,
+                "n_hidden_layers": 1,
+            },
+        )
+
+        self.in_dim_color = self.geo_feat_dim
+        self.color_net = tcnn.Network(
+            n_input_dims=self.in_dim_color,
+            n_output_dims=3,
+            network_config={
+                "otype": "FullyFusedMLP",
+                "activation": "ReLU",
+                "output_activation": "None",
+                "n_neurons": self.n_neurons,
+                "n_hidden_layers": 2,
+            },
+        )
+
+    def forward(self, xy1, xy2):
+
+        xy1 = (xy1 + 1) / 2
+        xy2 = (xy2 + 1) / 2
+
+        xy1_e = self.encoder1(xy1)
+        xy2_e = self.encoder2(xy2)
+        xy_e = torch.cat((xy1_e, xy2_e), dim=-1)
+
+        h = self.sigma_net(xy_e)
+
+        sigma = F.relu(h[..., 0])
+        geo_feat = h[..., 1:]
+
+        h = self.color_net(geo_feat)
+
+        color = torch.sigmoid(h)
+
+        return sigma, color
+
+
+    def density(self, xy1, xy2):
+        
+        xy1 = (xy1 + 2) / 4
+        xy2 = (xy2 + 2) / 4
+
+        xy1_e = self.encoder1(xy1)
+        xy2_e = self.encoder2(xy2)
+        xy_e = torch.cat((xy1_e, xy2_e), dim=-1)
+
+        h = self.sigma_net(xy_e)
+
+        sigma = F.relu(h[..., 0])
+
+        return sigma
+
+
+
+class NeRFNetworkPlanes2(NerfRendererPlanes):
+    def __init__(self):
+        super().__init__()
+
+        self.z1 = torch.Tensor((1/(0.3-0.05), 0, 0)).to('cuda')
+        self.z2 = torch.Tensor((1/(0.3-1), 0, 0)).to('cuda')
+
+        n_levels = 20
+        n_features_per_level = 2
+        log2_hashmap_size = 22
+
+        self.encoder = tcnn.Encoding(
+            n_input_dims=2,
+            encoding_config={
+                "otype": 'Frequency',
+                "degree": 10,
+            },
+            dtype=torch.float32,
+        )
+
+        self.n_neurons = 256
+
+        self.geo_feat_dim = 15
+        self.sigma_net = tcnn.Network(
+            n_input_dims=2*(10+2)*2*2,
+            n_output_dims=1 + self.geo_feat_dim,
+            network_config={
+                # "otype": "FullyFusedMLP",
+                "otype": "CutlassMLP",
+                "activation": "ReLU",
+                "output_activation": "None",
+                "n_neurons": self.n_neurons,
+                "n_hidden_layers": 3,
+            },
+        )
+
+        self.in_dim_color = self.geo_feat_dim
+        self.color_net = tcnn.Network(
+            n_input_dims=self.in_dim_color,
+            n_output_dims=3,
+            network_config={
+                # "otype": "FullyFusedMLP",
+                "otype": "CutlassMLP",
+                "activation": "ReLU",
+                "output_activation": "None",
+                "n_neurons": self.n_neurons,
+                "n_hidden_layers": 4,
+            },
+        )
+
+    def forward(self, xy1, xy2):
+
+        xy1 = (xy1 + 1) / 2
+        xy2 = (xy2 + 1) / 2
+
+        xy1_e = self.encoder(xy1)
+        xy2_e = self.encoder(xy2)
+        xy_e = torch.cat((xy1_e, xy2_e), dim=-1)
+
+        h = self.sigma_net(xy_e)
+
+        sigma = F.relu(h[..., 0])
+        geo_feat = h[..., 1:]
+
+        h = self.color_net(geo_feat)
+
+        color = torch.sigmoid(h)
+
+        return sigma, color
+
+
+    def density(self, xy1, xy2):
+        
+        xy1 = (xy1 + 2) / 4
+        xy2 = (xy2 + 2) / 4
+
+        xy1_e = self.encoder1(xy1)
+        xy2_e = self.encoder2(xy2)
+        xy_e = torch.cat((xy1_e, xy2_e), dim=-1)
+
+        h = self.sigma_net(xy_e)
+
+        sigma = F.relu(h[..., 0])
+
+        return sigma
+
+
 
 
 class NeRFNetwork(NerfRenderer):
