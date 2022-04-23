@@ -162,6 +162,44 @@ def render_rays_log(sigmas, rgbs, z_vals, z_vals_log):
     return rgb, invdepth, weights
 
 
+# def sample_pdf(z_vals, weights, N_importance, alpha=0.0001):
+def sample_pdf(z_vals, weights, N_importance):
+
+    N_rays, N_samples = z_vals.shape
+
+    # weights = torch.cat([weights.new_zeros((N_rays, 1)), weights, weights.new_zeros((N_rays, 1))], dim=-1)
+    # weights = 1/2 * (torch.maximum(weights[..., :-2], weights[..., 1:-1]) + torch.maximum(weights[..., 1:-1], weights[..., 2:]))
+    # weights = weights + alpha / weights.shape[-1]
+    # pdf = weights / torch.sum(weights, dim=-1, keepdim=True)  # [N_rays, N_samples-1]
+    pdf = weights  # [N_rays, N_samples-1]
+    cdf = torch.cumsum(pdf, dim=-1)  # [N_rays, N_samples-1]
+
+    z_vals_mid = (z_vals[:, :-1] + z_vals[:, 1:]) / 2  # [N_rays, N_samples]
+
+    # Take uniform samples
+    u = torch.linspace(0, 1-1/N_importance, N_importance, device=weights.device)  # [N_rays, N_importance]
+    u = u[None, :].expand(N_rays, -1)
+    u = u + torch.rand([N_rays, N_importance], device=weights.device)/N_importance  # [N_rays, N_samples]
+    u = u * (cdf[:, -2, None] - cdf[:, 1, None] - 2e-5)
+    u = u + cdf[:, 1, None] + 1e-5
+
+    inds = torch.searchsorted(cdf, u, right=True)  # [N_rays, N_importance]
+
+    cdf_below = torch.gather(input=cdf, dim=1, index=inds-1)
+    cdf_above = torch.gather(input=cdf, dim=1, index=inds)
+    t = (u - cdf_below) / (cdf_above - cdf_below)
+
+    z_vals_mid_below = torch.gather(input=z_vals_mid, dim=1, index=inds-1)
+    z_vals_mid_above = torch.gather(input=z_vals_mid, dim=1, index=inds)
+    z_vals_im = z_vals_mid_below + (z_vals_mid_above - z_vals_mid_below) * t
+
+    # z_vals_fine = torch.cat([z_vals, z_vals_im], dim=1)  # [N_rays, N_samples+N_importance]
+    # z_vals_fine, _ = torch.sort(z_vals_fine, dim=1)  # [N_rays, N_samples+N_importance]
+    z_vals_fine = z_vals_im
+
+    return z_vals_fine
+
+
 @torch.no_grad()
 def get_valid_positions(N, H, W, K, E, res):
 

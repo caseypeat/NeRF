@@ -61,7 +61,7 @@ class Logger(object):
 
     def image(self, image, step):
         file_path = os.path.join(self.image_dir, f'{step}.jpg')
-        self.writer.add_image('image', image, step, dataformats='HWC')
+        self.writer.add_image('image', image[..., np.array([2, 1, 0], dtype=int)], step, dataformats='HWC')
         cv2.imwrite(file_path, np.uint8(image*255))
 
     def invdepth(self, invdepth, step):

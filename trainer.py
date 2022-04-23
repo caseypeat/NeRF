@@ -78,6 +78,8 @@ class Trainer(object):
         #     # with_stack=True,
         #     ) as prof:
 
+        self.t0_train = time.time()
+
         for epoch in range(self.num_epochs):
 
             if epoch % self.eval_freq == 0 and epoch != 0:
@@ -158,16 +160,21 @@ class Trainer(object):
         rgb, _, weights, z_vals_log_s = self.model.render(rays_o, rays_d, n, color_bg)
 
         loss_rgb = helpers.criterion_rgb(rgb, rgb_gt)
-        loss_dist = helpers.criterion_dist(weights, z_vals_log_s)
+        # loss_dist = helpers.criterion_dist(weights, z_vals_log_s)
 
-        dist_scalar = 10**(self.iter/self.num_iters * (m.log10(cfg.trainer.dist_loss_lambda2) - m.log10(cfg.trainer.dist_loss_lambda1)) + m.log10(cfg.trainer.dist_loss_lambda1))
-        loss = loss_rgb + dist_scalar * loss_dist
+        # dist_scalar = 10**(self.iter/self.num_iters * (m.log10(cfg.trainer.dist_loss_lambda2) - m.log10(cfg.trainer.dist_loss_lambda1)) + m.log10(cfg.trainer.dist_loss_lambda1))
+        # loss = loss_rgb + dist_scalar * loss_dist
+        loss = loss_rgb
 
         self.logger.scalar('loss', loss, self.iter)
         self.logger.scalar('loss_rgb', loss_rgb, self.iter)
-        self.logger.scalar('loss_dist', loss_dist, self.iter)
-        self.logger.scalar('dist_scalar', dist_scalar, self.iter)
+        # self.logger.scalar('loss_dist', loss_dist, self.iter)
+        # self.logger.scalar('dist_scalar', dist_scalar, self.iter)
         self.logger.scalar('psnr_rgb', helpers.psnr(rgb, rgb_gt), self.iter)
+
+        self.logger.scalar('loss (seconds)', loss, int(time.time() - self.t0_train))
+        self.logger.scalar('loss_rgb (seconds)', loss_rgb, int(time.time() - self.t0_train))
+        self.logger.scalar('psnr_rgb (seconds)', helpers.psnr(rgb, rgb_gt), int(time.time() - self.t0_train))
 
         # return loss_rgb, loss_dist
         return loss

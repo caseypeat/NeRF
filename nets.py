@@ -4,12 +4,12 @@ import torch.nn.functional as F
 
 import tinycudann as tcnn
 
-from renderer import NerfRenderer, NerfRendererNB
+from renderer import NerfRenderer, NerfRendererNB, NerfRendererPriority
 
 from config import cfg
 
 
-class NeRFNetwork(NerfRenderer):
+class NeRFNetwork(NerfRendererPriority):
     def __init__(self,
                 # encoding (hashgrid)
                 n_levels=16,

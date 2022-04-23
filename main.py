@@ -53,14 +53,14 @@ if __name__ == '__main__':
     logger.log('Initilising Model...')
     model = NeRFNetwork(
         # Render args
-        bound = cfg.scene.bound,
+        # bound = cfg.scene.bound,
 
-        inner_near=cfg.renderer.inner_near,
-        inner_far=cfg.renderer.inner_far,
-        inner_steps=cfg.renderer.inner_steps,
-        outer_near=cfg.renderer.outer_near,
-        outer_far=cfg.renderer.outer_far,
-        outer_steps=cfg.renderer.outer_steps,
+        # inner_near=cfg.renderer.inner_near,
+        # inner_far=cfg.renderer.inner_far,
+        # inner_steps=cfg.renderer.inner_steps,
+        # outer_near=cfg.renderer.outer_near,
+        # outer_far=cfg.renderer.outer_far,
+        # outer_steps=cfg.renderer.outer_steps,
 
         # Net args
         n_levels=cfg.nets.encoding.n_levels,
