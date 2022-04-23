@@ -1,13 +1,13 @@
 
 scene:
-  scene_path: '/home/casey/Documents/PhD/data/synthetic_tree_assets/trees3/renders/vine_C2_1/back_close/cameras.json'
+  scene_path: /home/casey/Documents/PhD/data/conan_scans/ROW_349_WEST_SLOW_0007/scene.json
   image_scale: 0.5
   bound: 1.125
   remove_background_bool: False
-  real: False
+  real: True
 
 log:
-  root_dir: './logs/priority3'
+  root_dir: './logs/priority3_real'
 
 trainer:
   num_epochs: 31

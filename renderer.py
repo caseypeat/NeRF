@@ -13,8 +13,11 @@ from config import cfg
 
 
 class NerfRendererPriority(nn.Module):
-    def __init__(self,):
+    def __init__(self, intrinsics, extrinsics):
         super().__init__()
+
+        self.intrinsics = nn.Parameter(intrinsics, requires_grad=False)
+        self.extrinsics = nn.Parameter(extrinsics, requires_grad=False)
 
         self.bound = cfg.scene.bound
 

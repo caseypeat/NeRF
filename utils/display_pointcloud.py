@@ -7,12 +7,15 @@ from pyparsing import col
 
 if __name__ == '__main__':
     # points = np.load('./logs/efficient_sampling/20220409_215348/pointcloud/pointcloud.npy')
-    # points = np.load('./logs/priority2/20220422_201817/pointcloud/10000.npy')
+    # points = np.load('./logs/priority3/20220423_144756/pointcloud/3000.npy')
+    # points = np.load('./logs/priority3/20220423_150517/pointcloud/3000.npy')
+    # points = np.load('./logs/priority3_real/20220423_152823/pointcloud/3000.npy')
+    points = np.load('./logs/priority3_real/20220423_164938/pointcloud/3000.npy')
     # points = np.load('./data/surface_points_50000_0.03.npy')
     # points = np.load('./data/points_00001.npy')
-    points = np.load('./data/points.npy')
+    # points = np.load('./data/points.npy')
 
-    thresh = 50
+    thresh = 100
 
     points, sigmas = points[..., :3], points[..., 3]
     points = points[np.broadcast_to(sigmas[..., None], (sigmas.shape[0], 3)) > thresh].reshape(-1, 3)

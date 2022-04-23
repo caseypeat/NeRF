@@ -62,6 +62,9 @@ if __name__ == '__main__':
         # outer_far=cfg.renderer.outer_far,
         # outer_steps=cfg.renderer.outer_steps,
 
+        intrinsics=intrinsics,
+        extrinsics=extrinsics,
+
         # Net args
         n_levels=cfg.nets.encoding.n_levels,
         n_features_per_level=cfg.nets.encoding.n_features,
