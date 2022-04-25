@@ -10,7 +10,7 @@ if __name__ == '__main__':
     # points = np.load('./logs/priority3/20220423_144756/pointcloud/3000.npy')
     # points = np.load('./logs/priority3/20220423_150517/pointcloud/3000.npy')
     # points = np.load('./logs/priority3_real/20220423_152823/pointcloud/3000.npy')
-    points = np.load('./logs/priority3_real/20220423_164938/pointcloud/3000.npy')
+    points = np.load('./logs/long_debug/20220425_203727/pointcloud/3000.npy')
     # points = np.load('./data/surface_points_50000_0.03.npy')
     # points = np.load('./data/points_00001.npy')
     # points = np.load('./data/points.npy')

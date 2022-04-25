@@ -45,7 +45,7 @@ if __name__ == '__main__':
 
     logger.log('Loading Data...')
     if cfg.scene.real:
-        images, depths, intrinsics, extrinsics = meta_camera_geometry_real(cfg.scene.scene_path)
+        images, depths, intrinsics, extrinsics = meta_camera_geometry_real(cfg.scene.scene_path, cfg.scene.frame_range)
     else:
         images, depths, intrinsics, extrinsics = meta_camera_geometry(cfg.scene.scene_path, cfg.scene.remove_background_bool)
 
@@ -87,7 +87,7 @@ if __name__ == '__main__':
 
     logger.log('Generating Mask...')
     N, H, W = images.shape[:3]
-    mask = helpers.get_valid_positions(N, H, W, intrinsics.to('cuda'), extrinsics.to('cuda'), res=256)
+    mask = helpers.get_valid_positions(N, H, W, intrinsics.to('cuda'), extrinsics.to('cuda'), res=128)
     # mask = torch.zeros([256]*3)
 
     logger.log('Initiating Inference...')

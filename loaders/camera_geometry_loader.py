@@ -117,9 +117,9 @@ def camera_geometry_loader_real(scene_path, image_scale=1, frame_range=None):
     return images, None, intrinsics, extrinsics, None
 
 
-def meta_camera_geometry_real(scene_path):
+def meta_camera_geometry_real(scene_path, frame_range):
 
-    images, depths, intrinsics, extrinsics, ids = camera_geometry_loader_real(scene_path, image_scale=0.5)
+    images, depths, intrinsics, extrinsics, ids = camera_geometry_loader_real(scene_path, image_scale=0.5, frame_range=frame_range)
 
     extrinsics[..., :3, 3] = extrinsics[..., :3, 3] - np.mean(extrinsics[..., :3, 3], axis=0, keepdims=True)
 

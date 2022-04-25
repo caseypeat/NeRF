@@ -1,13 +1,14 @@
 
 scene:
-  scene_path: /home/casey/Documents/PhD/data/conan_scans/ROW_349_WEST_SLOW_0007/scene.json
+  scene_path: /home/casey/Documents/PhD/data/conan_scans/ROW_349_WEST_LONG_0002/scene.json
   image_scale: 0.5
   bound: 1.125
   remove_background_bool: False
   real: True
+  frame_range: NULL
 
 log:
-  root_dir: './logs/priority3_real'
+  root_dir: './logs/long'
 
 trainer:
   num_epochs: 31
@@ -39,7 +40,7 @@ inference:
   # n_rays: 4096
   n_rays: 16384
   image_num: 52
-  voxel_res: 2048
+  voxel_res: 1024
   thresh: 10
   # batch_size: 1_048_576
   batch_size: 262144
