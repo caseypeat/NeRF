@@ -11,6 +11,31 @@ from tqdm import tqdm
 
 from config import cfg
 
+# https://github.com/ActiveVisionLab/nerfmm/blob/main/utils/lie_group_helper.py
+def vec2skew(v):
+    """
+    :param v:  (3, ) torch tensor
+    :return:   (3, 3)
+    """
+    zero = torch.zeros(1, dtype=torch.float32, device=v.device)
+    skew_v0 = torch.cat([ zero,    -v[2:3],   v[1:2]])  # (3, 1)
+    skew_v1 = torch.cat([ v[2:3],   zero,    -v[0:1]])
+    skew_v2 = torch.cat([-v[1:2],   v[0:1],   zero])
+    skew_v = torch.stack([skew_v0, skew_v1, skew_v2], dim=0)  # (3, 3)
+    return skew_v  # (3, 3)
+
+
+def Exp(r):
+    """so(3) vector to SO(3) matrix
+    :param r: (3, ) axis-angle, torch tensor
+    :return:  (3, 3)
+    """
+    skew_r = vec2skew(r)  # (3, 3)
+    norm_r = r.norm() + 1e-15
+    eye = torch.eye(3, dtype=torch.float32, device=r.device)
+    R = eye + (torch.sin(norm_r) / norm_r) * skew_r + ((1 - torch.cos(norm_r)) / norm_r**2) * (skew_r @ skew_r)
+    return R
+
 
 class NerfRendererPriority(nn.Module):
     def __init__(self, intrinsics, extrinsics):
@@ -25,6 +50,9 @@ class NerfRendererPriority(nn.Module):
 
         self.steps = cfg.renderer.steps
         # self.downsample = cfg.renderer.downsample
+
+        self.T = nn.Parameter(torch.zeros(3, dtype=torch.float32, device='cuda'), requires_grad=True)
+        self.R = nn.Parameter(torch.zeros(3, dtype=torch.float32, device='cuda'), requires_grad=True)
 
     def forward(self, x, d):
         raise NotImplementedError()
@@ -54,36 +82,6 @@ class NerfRendererPriority(nn.Module):
             c += steps[i]
         weights = weights / torch.sum(weights, dim=-1, keepdim=True)  # [N_rays, N_samples-1]
         return weights
-
-
-    # @torch.no_grad()
-    # def efficient_sampling_first(self, rays_o, rays_d, n_samples):
-    #     z_vals_log = torch.empty((0), device=rays_o.device)
-    #     for i in range(len(self.steps)):
-    #         z_vals_log = torch.cat((z_vals_log, torch.linspace(m.log10(self.bounds[i]), m.log10(self.bounds[i+1])-(m.log10(self.bounds[i+1])-m.log10(self.bounds[i]))/self.steps[i], self.steps[i], device=rays_o.device)))
-    #     z_vals_log = z_vals_log.expand(rays_o.shape[0], -1)
-    #     z_vals = torch.pow(10, z_vals_log)
-
-    #     xyzs, dirs = helpers.get_sample_points(rays_o, rays_d, z_vals)
-    #     s_xyzs = helpers.mipnerf360_scale(xyzs, self.bound)
-
-    #     sigmas = self.density(s_xyzs)
-
-    #     delta = z_vals_log.new_zeros(sigmas.shape)  # [N_rays, N_samples]
-    #     delta[:, :-1] = (z_vals_log[:, 1:] - z_vals_log[:, :-1])
-
-    #     alpha = 1 - torch.exp(-sigmas * delta)  # [N_rays, N_samples]
-
-    #     alpha_shift = torch.cat([alpha.new_zeros((alpha.shape[0], 1)), alpha], dim=-1)[:, :-1]  # [N_rays, N_samples]
-    #     weights = alpha * torch.cumprod(1 - alpha_shift, dim=-1)  # [N_rays, N_samples]
-
-    #     ids = torch.argmax(weights.view(rays_o.shape[0], sum(n_samples)//self.downsample, self.downsample), dim=-1)  # [N_rays, N_samples//downsample]
-    #     ids += torch.arange(sum(n_samples)//self.downsample, device='cuda')[None, :] * self.downsample
-
-    #     z_vals_log = torch.gather(z_vals_log, dim=-1, index=ids)
-    #     z_vals = torch.gather(z_vals, dim=-1, index=ids)
-
-    #     return z_vals_log, z_vals
 
     
     @torch.no_grad()
@@ -116,7 +114,20 @@ class NerfRendererPriority(nn.Module):
 
 
 
-    def render(self, rays_o, rays_d, n, bg_color):
+    def render(self, n, h, w, K, E, bg_color):
+
+        E_c = torch.clone(E)
+
+        # size of front dataset
+        with torch.cuda.amp.autocast(enabled=False):
+            transform = torch.eye(4, dtype=torch.float32, device='cuda')
+            transform[:3, :3] = Exp((torch.sigmoid(self.R)-0.5) * 0.05)
+            transform[:3, 3] = (torch.sigmoid(self.T)-0.5) * 0.05
+            # transform[:3, 3] = self.T
+            # a = E[n < 1176]
+            E_c[n < 1176] = transform @ E_c[n < 1176]
+        
+        rays_o, rays_d = helpers.get_rays(h, w, K, E_c)
 
         z_vals_log, z_vals = self.efficient_sampling(rays_o, rays_d, cfg.renderer.importance_steps)
         # z_vals_log, z_vals = self.get_uniform_z_vals(rays_o, rays_d, self.steps)

@@ -59,13 +59,14 @@ class Inference(object):
             h_fb = h_f[a:b]
             w_fb = w_f[a:b]
 
-            rays_o, rays_d = helpers.get_rays(h_fb, w_fb, K[None, ...], E[None, ...])
+            # rays_o, rays_d = helpers.get_rays(h_fb, w_fb, K[None, ...], E[None, ...])
 
-            n = torch.full((rays_o.shape[0],), fill_value=cfg.inference.image_num, device='cuda')
+            n = torch.full((h_fb.shape[0],), fill_value=cfg.inference.image_num, device='cuda')
 
             color_bg = torch.ones(3, device='cuda') # [3], fixed white background
 
-            image_fb, invdepth_fb, _, _ = self.model.render(rays_o, rays_d, n, bg_color=color_bg)
+            # image_fb, invdepth_fb, _, _ = self.model.render(rays_o, rays_d, n, bg_color=color_bg)
+            image_fb, invdepth_fb, _, _ = self.model.render(n, h_fb, w_fb, K[None, ...].expand(h_fb.shape[0], K.shape[0], K.shape[1]), E[None, ...].expand(h_fb.shape[0], E.shape[0], E.shape[1]), bg_color=color_bg)
 
             image_f[a:b] = image_fb
             invdepth_f[a:b] = invdepth_fb

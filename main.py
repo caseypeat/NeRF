@@ -45,23 +45,32 @@ if __name__ == '__main__':
 
     logger.log('Loading Data...')
     if cfg.scene.real:
-        images, depths, intrinsics, extrinsics = meta_camera_geometry_real(cfg.scene.scene_path)
+        images, depths, intrinsics, extrinsics = meta_camera_geometry_real(cfg.scene.scene_path_front)
+        images_back, depths_back, intrinsics_back, extrinsics_back = meta_camera_geometry_real(cfg.scene.scene_path_back)
+
+        bothsides_transform = torch.Tensor(np.load('./data/bothsides_transform.npy'))
+        extrinsics = bothsides_transform @ extrinsics
+
+        print(torch.amax(extrinsics[:, :3, 3], axis=0), torch.amin(extrinsics[:, :3, 3], axis=0))
+        print(torch.amax(extrinsics_back[:, :3, 3], axis=0), torch.amin(extrinsics_back[:, :3, 3], axis=0))
+        
+        images = torch.cat([images, images_back], dim=0)
+        intrinsics = torch.cat([intrinsics, intrinsics_back], dim=0)
+        extrinsics = torch.cat([extrinsics, extrinsics_back], dim=0)
+
+        extrinsics[..., :3, 3] = extrinsics[..., :3, 3] - torch.mean(extrinsics[..., :3, 3], dim=0, keepdims=True)
+
+        print(torch.amax(extrinsics[:, :3, 3], axis=0), torch.amin(extrinsics[:, :3, 3], axis=0))
+        
+
     else:
         images, depths, intrinsics, extrinsics = meta_camera_geometry(cfg.scene.scene_path, cfg.scene.remove_background_bool)
+
 
 
     logger.log('Initilising Model...')
     model = NeRFNetwork(
         # Render args
-        # bound = cfg.scene.bound,
-
-        # inner_near=cfg.renderer.inner_near,
-        # inner_far=cfg.renderer.inner_far,
-        # inner_steps=cfg.renderer.inner_steps,
-        # outer_near=cfg.renderer.outer_near,
-        # outer_far=cfg.renderer.outer_far,
-        # outer_steps=cfg.renderer.outer_steps,
-
         intrinsics=intrinsics,
         extrinsics=extrinsics,
 
@@ -87,8 +96,8 @@ if __name__ == '__main__':
 
     logger.log('Generating Mask...')
     N, H, W = images.shape[:3]
-    mask = helpers.get_valid_positions(N, H, W, intrinsics.to('cuda'), extrinsics.to('cuda'), res=256)
-    # mask = torch.zeros([256]*3)
+    # mask = helpers.get_valid_positions(N, H, W, intrinsics.to('cuda'), extrinsics.to('cuda'), res=256)
+    mask = torch.zeros([256]*3)
 
     logger.log('Initiating Inference...')
     inference = Inference(
@@ -105,6 +114,7 @@ if __name__ == '__main__':
     optimizer = torch.optim.Adam([
             {'name': 'encoding', 'params': list(model.encoder.parameters()), 'lr': cfg.optimizer.encoding.lr},
             {'name': 'latent_emb', 'params': [model.latent_emb], 'lr': cfg.optimizer.latent_emb.lr},
+            {'name': 'transform', 'params': [model.R, model.T], 'lr': cfg.optimizer.latent_emb.lr},
             {'name': 'net', 'params': list(model.sigma_net.parameters()) + list(model.color_net.parameters()), 'weight_decay': cfg.optimizer.net.weight_decay, 'lr': cfg.optimizer.net.lr},
         ], betas=cfg.optimizer.betas, eps=cfg.optimizer.eps)
 

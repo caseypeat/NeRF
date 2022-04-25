@@ -104,6 +104,8 @@ class Trainer(object):
             for key, val in self.logger.scalars.items():
                 self.logger.log(f'Scalar: {key} - Value: {np.mean(np.array(val[-self.iters_per_epoch:])).item():.6f}')
             self.logger.log('')
+            print(self.model.R)
+            print(self.model.T)
 
     def train_epoch(self, iters_per_epoch):
         for i in tqdm(range(iters_per_epoch)):
@@ -155,9 +157,9 @@ class Trainer(object):
         h = h.to('cuda')
         w = w.to('cuda')
         
-        rays_o, rays_d = helpers.get_rays(h, w, K, E)
+        # rays_o, rays_d = helpers.get_rays(h, w, K, E)
 
-        rgb, _, weights, z_vals_log_s = self.model.render(rays_o, rays_d, n, color_bg)
+        rgb, _, weights, z_vals_log_s = self.model.render(n, h, w, K, E, color_bg)
 
         loss_rgb = helpers.criterion_rgb(rgb, rgb_gt)
         loss_dist = helpers.criterion_dist(weights, z_vals_log_s)

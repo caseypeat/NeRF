@@ -1,18 +1,19 @@
 
 scene:
-  scene_path: /home/casey/Documents/PhD/data/conan_scans/ROW_349_WEST_SLOW_0007/scene.json
-  image_scale: 0.5
+  scene_path_front: /home/casey/Documents/PhD/data/conan_scans/ROW_349_EAST_SLOW_0006/scene.json
+  scene_path_back: /home/casey/Documents/PhD/data/conan_scans/ROW_349_WEST_SLOW_0007/scene.json
+  image_scale: 0.25
   bound: 1.125
   remove_background_bool: False
   real: True
 
 log:
-  root_dir: './logs/priority3_real'
+  root_dir: './logs/bothsides'
 
 trainer:
   num_epochs: 31
   iters_per_epoch: 100
-  eval_freq: 10
+  eval_freq: 1
   # n_rays: 2048
   # n_rays: 4096
   # n_rays: 8192
@@ -38,13 +39,13 @@ scheduler: step
 inference:
   # n_rays: 4096
   n_rays: 16384
-  image_num: 52
+  image_num: 352
   voxel_res: 2048
   thresh: 10
   # batch_size: 1_048_576
   batch_size: 262144
-  pointcloud_eval_freq: 30
-  model_freq: 30
+  pointcloud_eval_freq: 300
+  model_freq: 300
 
 renderer:
   # inner_near: 0.05
