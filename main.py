@@ -48,7 +48,7 @@ if __name__ == '__main__':
         images, depths, intrinsics, extrinsics = meta_camera_geometry_real(cfg.scene.scene_path_front)
         images_back, depths_back, intrinsics_back, extrinsics_back = meta_camera_geometry_real(cfg.scene.scene_path_back)
 
-        bothsides_transform = torch.Tensor(np.load('./data/bothsides_transform.npy'))
+        bothsides_transform = torch.Tensor(np.load('./data/bothsides_transform2.npy'))
         extrinsics = bothsides_transform @ extrinsics
 
         print(torch.amax(extrinsics[:, :3, 3], axis=0), torch.amin(extrinsics[:, :3, 3], axis=0))
@@ -96,11 +96,12 @@ if __name__ == '__main__':
 
     logger.log('Generating Mask...')
     N, H, W = images.shape[:3]
-    # mask = helpers.get_valid_positions(N, H, W, intrinsics.to('cuda'), extrinsics.to('cuda'), res=256)
-    mask = torch.zeros([256]*3)
+    mask = helpers.get_valid_positions(N, H, W, intrinsics.to('cuda'), extrinsics.to('cuda'), res=128)
+    # mask = torch.zeros([256]*3)
 
     logger.log('Initiating Inference...')
     inference = Inference(
+        images=images,
         model=model,
         mask=mask,
         n_rays=cfg.inference.n_rays,

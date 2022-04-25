@@ -24,7 +24,7 @@ from pstats import SortKey
 
 import helpers
 
-from loaders.camera_geometry_loader import camera_geometry_loader, camera_geometry_loader_real
+from loaders.camera_geometry_loader import camera_geometry_loader, camera_geometry_loader_real, meta_camera_geometry_real
 from loaders.synthetic import load_image_set
 
 from nets import NeRFNetwork
@@ -67,24 +67,43 @@ def get_valid_positions(N, H, W, K, E, res):
     return mask_full
 
 
-def meta_camera_geometry_real(scene_path):
+# def meta_camera_geometry_real(scene_path):
 
-    images, depths, intrinsics, extrinsics, ids = camera_geometry_loader_real(scene_path, image_scale=0.5)
+#     images, depths, intrinsics, extrinsics, ids = camera_geometry_loader_real(scene_path, image_scale=0.5)
 
-    extrinsics[..., :3, 3] = extrinsics[..., :3, 3] - np.mean(extrinsics[..., :3, 3], axis=0, keepdims=True)
+#     extrinsics[..., :3, 3] = extrinsics[..., :3, 3] - np.mean(extrinsics[..., :3, 3], axis=0, keepdims=True)
 
-    extrinsics[..., :3, 3] = extrinsics[..., :3, 3] / 2
+#     extrinsics[..., :3, 3] = extrinsics[..., :3, 3] / 2
 
-    images = torch.ByteTensor(images)
-    intrinsics = torch.Tensor(intrinsics)
-    extrinsics = torch.Tensor(extrinsics)
+#     images = torch.ByteTensor(images)
+#     intrinsics = torch.Tensor(intrinsics)
+#     extrinsics = torch.Tensor(extrinsics)
 
-    return images, None, intrinsics, extrinsics
+#     return images, None, intrinsics, extrinsics
 
 
 if __name__ == '__main__':
 
-    images, depths, intrinsics, extrinsics = meta_camera_geometry_real(cfg.scene.scene_path)
+    # images, depths, intrinsics, extrinsics = meta_camera_geometry_real(cfg.scene.scene_path)
+    if cfg.scene.real:
+        images, depths, intrinsics, extrinsics = meta_camera_geometry_real(cfg.scene.scene_path_front)
+        images_back, depths_back, intrinsics_back, extrinsics_back = meta_camera_geometry_real(cfg.scene.scene_path_back)
+
+        bothsides_transform = torch.Tensor(np.load('./data/bothsides_transform2.npy'))
+        extrinsics = bothsides_transform @ extrinsics
+
+        print(torch.amax(extrinsics[:, :3, 3], axis=0), torch.amin(extrinsics[:, :3, 3], axis=0))
+        print(torch.amax(extrinsics_back[:, :3, 3], axis=0), torch.amin(extrinsics_back[:, :3, 3], axis=0))
+
+        print(images.shape)
+        
+        images = torch.cat([images, images_back], dim=0)
+        intrinsics = torch.cat([intrinsics, intrinsics_back], dim=0)
+        extrinsics = torch.cat([extrinsics, extrinsics_back], dim=0)
+
+        extrinsics[..., :3, 3] = extrinsics[..., :3, 3] - torch.mean(extrinsics[..., :3, 3], dim=0, keepdims=True)
+
+        print(torch.amax(extrinsics[:, :3, 3], axis=0), torch.amin(extrinsics[:, :3, 3], axis=0))
 
 
     # model = NeRFNetwork(
@@ -119,16 +138,21 @@ if __name__ == '__main__':
     # ).to('cuda')
 
     # model.load_state_dict(torch.load('./logs/real_scenes/20220412_210427/model/20000.pth'))
+    print(1)
+    model = torch.load('./logs/bothsides/20220425_161521/model/3000.pth')
+    print(2)
 
-    model = torch.load('./logs/real_scenes/20220413_191212/model/50000.pth')
+    # model.inner_steps = 2048
 
-    model.inner_steps = 1024
+    N = model.intrinsics.shape[0]
+    H, W = 750, 1000
 
-    N, H, W = images.shape[:3]
+    # N, H, W = images.shape[:3]
     # mask = get_valid_positions(N, H, W, intrinsics.to('cuda'), extrinsics.to('cuda'), res=256)
     mask = torch.zeros([256]*3)
 
     inference = Inference(
+        images=images,
         model=model,
         mask=mask,
         n_rays=cfg.inference.n_rays,
@@ -139,11 +163,12 @@ if __name__ == '__main__':
 
     ids = []
     for i in range(N):
-        if i > 300 and i < 900:
-            if i % 6 == 2 or i % 6 == 3:
-                if i//6 % 10 == 0:
-                    ids.append(i)
+        # if i > 300 and i < 900:
+        # if i % 6 == 2 or i % 6 == 3 or i % 6 == 4 or i % 6 == 1:
+        if i % 6 == 2 or i % 6 == 3:
+            if i//6 % 10 == 0:
+                ids.append(i)
     print(len(ids))
     ids = torch.Tensor(np.array(ids)).to(int)
 
-    inference.extract_geometry_rays(H, W, intrinsics[ids], extrinsics[ids])
+    inference.extract_geometry_rays(H, W, model.intrinsics[ids], model.extrinsics[ids], ids)

@@ -121,8 +121,8 @@ class NerfRendererPriority(nn.Module):
         # size of front dataset
         with torch.cuda.amp.autocast(enabled=False):
             transform = torch.eye(4, dtype=torch.float32, device='cuda')
-            transform[:3, :3] = Exp((torch.sigmoid(self.R)-0.5) * 0.05)
-            transform[:3, 3] = (torch.sigmoid(self.T)-0.5) * 0.05
+            transform[:3, :3] = Exp((torch.sigmoid(self.R)-0.5) * 0.005)
+            transform[:3, 3] = (torch.sigmoid(self.T)-0.5) * 0.005
             # transform[:3, 3] = self.T
             # a = E[n < 1176]
             E_c[n < 1176] = transform @ E_c[n < 1176]

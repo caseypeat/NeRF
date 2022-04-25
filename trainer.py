@@ -87,15 +87,15 @@ class Trainer(object):
                 image, invdepth = self.inference.render_image(H, W, self.intrinsics[self.eval_image_num], self.extrinsics[self.eval_image_num])
                 self.logger.image(image.cpu().numpy(), self.iter)
                 self.logger.invdepth(invdepth.cpu().numpy(), self.iter)
+
+            if epoch % cfg.inference.model_freq == 0 and epoch != 0:
+                self.logger.log('Saving Model...')
+                self.logger.model(self.model, self.iter)
                 
             if epoch % cfg.inference.pointcloud_eval_freq == 0 and epoch != 0:
                 self.logger.log('Generating Pointcloud')
                 pointcloud = self.inference.extract_geometry()
                 self.logger.pointcloud(pointcloud.cpu().numpy(), self.iter)
-
-            if epoch % cfg.inference.model_freq == 0 and epoch != 0:
-                self.logger.log('Saving Model...')
-                self.logger.model(self.model, self.iter)
 
             self.train_epoch(self.iters_per_epoch)
             # self.train_epoch(self.iters_per_epoch)

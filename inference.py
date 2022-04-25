@@ -19,6 +19,7 @@ from config import cfg
 class Inference(object):
     def __init__(
         self,
+        images,
         model,
         mask,
         # image_scale,
@@ -35,6 +36,8 @@ class Inference(object):
         self.voxel_res = voxel_res
         self.thresh = thresh
         self.batch_size = batch_size
+
+        self.images = images
     
     @torch.no_grad()
     def render_image(self, H, W, K, E):
@@ -113,12 +116,12 @@ class Inference(object):
 
 
     @torch.no_grad()
-    def extract_geometry_rays(self, H, W, Ks, Es):
+    def extract_geometry_rays(self, H, W, Ks, Es, ids):
         N = Ks.shape[0]
 
-        points = torch.zeros((0, 3), device='cuda')
+        points = torch.zeros((0, 6), device='cuda')
 
-        for K, E in zip(Ks, Es):
+        for K, E, id in zip(Ks, Es, ids):
 
             K = K.to('cuda')
             E = E.to('cuda')
@@ -141,10 +144,9 @@ class Inference(object):
 
                 color_bg = torch.ones(3, device='cuda') # [3], fixed white background
 
-                z_vals_log_inner = torch.linspace(m.log10(self.model.inner_near), m.log10(self.model.inner_far)-(m.log10(self.model.inner_far)-m.log10(self.model.inner_near))/self.model.inner_steps, self.model.inner_steps, device=rays_o.device).expand(rays_o.shape[0], -1)
-                z_vals = torch.pow(10, z_vals_log_inner)
+                z_vals_log, z_vals = self.model.efficient_sampling(rays_o, rays_d, cfg.renderer.importance_steps)
 
-                n = torch.full((rays_o.shape[0],), fill_value=cfg.inference.image_num, device='cuda')
+                n = torch.full((rays_o.shape[0],), fill_value=id, device='cuda')
                 n_expand = n[:, None].expand(-1, z_vals.shape[-1])
 
                 xyzs, dirs = helpers.get_sample_points(rays_o, rays_d, z_vals)
@@ -157,11 +159,17 @@ class Inference(object):
                 sigmas[sigmas > threshold] = 1e4
                 sigmas[sigmas < threshold] = 0
 
-                image, invdepth, weights = helpers.render_rays_log(sigmas, rgbs, z_vals, z_vals_log_inner)
+                image, invdepth, weights = helpers.render_rays_log(sigmas, rgbs, z_vals, z_vals_log)
 
                 s_xyzs_surface = s_xyzs[weights > 0.5].reshape(-1, 3)
+                # s_xyzs_surface = s_xyzs[weights > 0.5].reshape(-1, 3)
 
-                points = torch.cat([points, s_xyzs_surface], dim=0)
+                # rgbs_surface = rgbs[weights > 0.5].reshape(-1, 3) * weights[weights > 0.5][..., None]
+                rgbs_surface = self.images[n, h_fb, w_fb][torch.amax(weights, dim=-1) > 0.5].reshape(-1, 3).cuda() / 255
 
-        np.save('./data/surface_points_50000_0.03.npy', points.cpu().numpy())
+                # print(rgbs_surface)
+
+                points = torch.cat([points, torch.cat([s_xyzs_surface, rgbs_surface], dim=1)], dim=0)
+
+        np.save('./data/surface_points_bothsides_color.npy', points.cpu().numpy())
 

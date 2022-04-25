@@ -8,20 +8,35 @@ if __name__ == '__main__':
     # points = np.load('./logs/efficient_sampling/20220409_215348/pointcloud/pointcloud.npy')
     # points = np.load('./logs/priority3/20220423_144756/pointcloud/3000.npy')
     # points = np.load('./logs/priority3/20220423_150517/pointcloud/3000.npy')
-    points = np.load('./logs/priority3_real/20220423_152823/pointcloud/3000.npy')
+    # points = np.load('./logs/priority3_real/20220423_152823/pointcloud/3000.npy')
+    points = np.load('./data/surface_points_bothsides_color.npy')
     # points = np.load('./logs/priority3_real/20220423_164938/pointcloud/3000.npy')
     # points = np.load('./data/surface_points_50000_0.03.npy')
     # points = np.load('./data/points_00001.npy')
     # points = np.load('./data/points.npy')
 
-    thresh = 100
+    print(points.shape)
 
-    points, sigmas = points[..., :3], points[..., 3]
-    points = points[np.broadcast_to(sigmas[..., None], (sigmas.shape[0], 3)) > thresh].reshape(-1, 3)
-    sigmas = sigmas[sigmas > thresh][..., None]
+    points, colors = points[..., :3], points[..., 3:]
 
+    print(colors.shape)
+
+    # thresh = 100
+
+    # points, sigmas = points[..., :3], points[..., 3]
+    # points = points[np.broadcast_to(sigmas[..., None], (sigmas.shape[0], 3)) > thresh].reshape(-1, 3)
+    # sigmas = sigmas[sigmas > thresh][..., None]
+
+    colors = colors[np.broadcast_to(points[..., 2, None], (points.shape[0], 3)) > -0.7].reshape(-1, 3)
     points = points[np.broadcast_to(points[..., 2, None], (points.shape[0], 3)) > -0.7].reshape(-1, 3)
+
+    colors = colors[np.broadcast_to(points[..., 2, None], (points.shape[0], 3)) < 0.3].reshape(-1, 3)
+    points = points[np.broadcast_to(points[..., 2, None], (points.shape[0], 3)) < 0.3].reshape(-1, 3)
+
+    colors = colors[np.broadcast_to(points[..., 1, None], (points.shape[0], 3)) > -0.5].reshape(-1, 3)
     points = points[np.broadcast_to(points[..., 1, None], (points.shape[0], 3)) > -0.5].reshape(-1, 3)
+
+    colors = colors[np.broadcast_to(points[..., 0, None], (points.shape[0], 3)) > -0.25].reshape(-1, 3)
     points = points[np.broadcast_to(points[..., 0, None], (points.shape[0], 3)) > -0.25].reshape(-1, 3)
 
     print(points.shape)
@@ -35,18 +50,18 @@ if __name__ == '__main__':
     # points = 1 - (points - np.amin(points)) / (np.amax(points - np.amin(points)))
 
     # colors = np.broadcast_to(points[..., 0, None], (len(points), 3))
-    colors = points[..., 2]
-    colors = (colors - np.amin(colors)) / (np.amax(colors - np.amin(colors)))
-    colors[colors < 0] = 0
-    colors[colors > 1] = 1
-    colors = cm.get_cmap(plt.get_cmap('jet'))(colors)[..., :3]
+    # colors = points[..., 2]
+    # colors = (colors - np.amin(colors)) / (np.amax(colors - np.amin(colors)))
+    # colors[colors < 0] = 0
+    # colors[colors > 1] = 1
+    # colors = cm.get_cmap(plt.get_cmap('jet'))(colors)[..., :3]
 
     pcd = o3d.geometry.PointCloud()
     pcd.points = o3d.utility.Vector3dVector(points)
     pcd.colors = o3d.utility.Vector3dVector(colors)
 
     # o3d.io.write_point_cloud('./data/pointcloud_latent_embed2.pcd', pcd)
-    pcd_d = pcd.uniform_down_sample(every_k_points=10)
-    pcd_in, ind = pcd_d.remove_radius_outlier(nb_points=16, radius=0.05)
+    # pcd_d = pcd.uniform_down_sample(every_k_points=10)
+    # pcd_in, ind = pcd_d.remove_radius_outlier(nb_points=16, radius=0.05)
 
-    o3d.visualization.draw([pcd_in])
+    o3d.visualization.draw([pcd])
