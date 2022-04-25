@@ -36,6 +36,9 @@ if __name__ == '__main__':
     colors = colors[np.broadcast_to(points[..., 1, None], (points.shape[0], 3)) > -0.5].reshape(-1, 3)
     points = points[np.broadcast_to(points[..., 1, None], (points.shape[0], 3)) > -0.5].reshape(-1, 3)
 
+    colors = colors[np.broadcast_to(points[..., 1, None], (points.shape[0], 3)) < 0.5].reshape(-1, 3)
+    points = points[np.broadcast_to(points[..., 1, None], (points.shape[0], 3)) < 0.5].reshape(-1, 3)
+
     colors = colors[np.broadcast_to(points[..., 0, None], (points.shape[0], 3)) > -0.25].reshape(-1, 3)
     points = points[np.broadcast_to(points[..., 0, None], (points.shape[0], 3)) > -0.25].reshape(-1, 3)
 
@@ -60,7 +63,7 @@ if __name__ == '__main__':
     pcd.points = o3d.utility.Vector3dVector(points)
     pcd.colors = o3d.utility.Vector3dVector(colors)
 
-    # o3d.io.write_point_cloud('./data/pointcloud_latent_embed2.pcd', pcd)
+    o3d.io.write_point_cloud('./data/pointcloud_bothsides.pcd', pcd)
     # pcd_d = pcd.uniform_down_sample(every_k_points=10)
     # pcd_in, ind = pcd_d.remove_radius_outlier(nb_points=16, radius=0.05)
 
