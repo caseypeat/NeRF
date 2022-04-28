@@ -52,6 +52,8 @@ class Inference(object):
 
         image_f = torch.zeros((*h_f.shape, 3))
         invdepth_f = torch.zeros(h_f.shape)
+        weights_f = torch.zeros((*h_f.shape, cfg.renderer.importance_steps))
+        z_vals_s_f = torch.zeros((*h_f.shape, cfg.renderer.importance_steps))
 
         for a in tqdm(range(0, len(h_f), self.n_rays)):
             b = min(len(h_f), a+self.n_rays)
@@ -65,15 +67,19 @@ class Inference(object):
 
             color_bg = torch.ones(3, device='cuda') # [3], fixed white background
 
-            image_fb, invdepth_fb, _, _ = self.model.render(rays_o, rays_d, n, bg_color=color_bg)
+            image_fb, invdepth_fb, weights_fb, z_vals_s_fb = self.model.render(rays_o, rays_d, n, bg_color=color_bg)
 
             image_f[a:b] = image_fb
             invdepth_f[a:b] = invdepth_fb
+            weights_f[a:b] = weights_fb
+            z_vals_s_f[a:b] = z_vals_s_fb
 
         image = torch.reshape(image_f, (*h.shape, 3))
         invdepth = torch.reshape(invdepth_f, h.shape)
+        weights = torch.reshape(weights_f, (*h.shape, cfg.renderer.importance_steps))
+        z_vals_s = torch.reshape(z_vals_s_f, (*h.shape, cfg.renderer.importance_steps))
 
-        return image, invdepth
+        return image, invdepth, weights, z_vals_s
 
     @torch.no_grad()
     def extract_geometry(self):

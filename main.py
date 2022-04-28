@@ -1,4 +1,3 @@
-from logging import root
 import numpy as np
 import torch
 import cv2
