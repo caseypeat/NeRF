@@ -1,3 +1,4 @@
+from turtle import bgcolor
 import numpy as np
 import torch
 import torch.nn as nn
@@ -97,7 +98,6 @@ class Inferencer(object):
             _, _, _, aux_outputs_fb = self.model.render(n_fb, h_fb, w_fb, K[None, ...], E[None, ...], bg_color=color_bg)
 
             z_vals_fb = aux_outputs_fb['z_vals']
-            z_vals_log_fb = aux_outputs_fb['z_vals_log']
             sigmas_thresh_fb = torch.clone(aux_outputs_fb['sigmas'])
 
             sigmas_thresh_fb[sigmas_thresh_fb < thresh] = 0
@@ -153,10 +153,11 @@ class Inferencer(object):
 
 
     @torch.no_grad()
-    def extract_geometry_rays(self, H, W, Ks, Es):
+    def extract_geometry_rays(self, H, W, Ks, Es, thresh=100):
         N = Ks.shape[0]
 
         points = torch.zeros((0, 3), device='cuda')
+        colors = torch.zeros((0, 3), device='cuda')
 
         for K, E in zip(Ks, Es):
 
@@ -165,6 +166,7 @@ class Inferencer(object):
 
             h = torch.arange(0, H, device='cuda')
             w = torch.arange(0, W, device='cuda')
+            
 
             h, w = torch.meshgrid(h, w, indexing='ij')
 
@@ -176,32 +178,27 @@ class Inferencer(object):
 
                 h_fb = h_f[a:b]
                 w_fb = w_f[a:b]
-
-                rays_o, rays_d = helpers.get_rays(h_fb, w_fb, K[None, ...], E[None, ...])
+                n_fb = torch.full(h_fb.shape, fill_value=cfg.inference.image_num, device='cuda')
 
                 color_bg = torch.ones(3, device='cuda') # [3], fixed white background
 
-                z_vals_log_inner = torch.linspace(m.log10(self.model.inner_near), m.log10(self.model.inner_far)-(m.log10(self.model.inner_far)-m.log10(self.model.inner_near))/self.model.inner_steps, self.model.inner_steps, device=rays_o.device).expand(rays_o.shape[0], -1)
-                z_vals = torch.pow(10, z_vals_log_inner)
+                image_fb, _, _, aux_outputs_fb = self.model.render(n_fb, h_fb, w_fb, K[None, ...], E[None, ...], color_bg)
 
-                n = torch.full((rays_o.shape[0],), fill_value=cfg.inference.image_num, device='cuda')
-                n_expand = n[:, None].expand(-1, z_vals.shape[-1])
+                xyzs_fb = aux_outputs_fb['xyzs']
+                rgbs_fb = aux_outputs_fb['rgbs']
+                sigmas_thresh_fb = torch.clone(aux_outputs_fb['sigmas'])
 
-                xyzs, dirs = helpers.get_sample_points(rays_o, rays_d, z_vals)
-                s_xyzs = helpers.mipnerf360_scale(xyzs, cfg.scene.bound)
+                sigmas_thresh_fb[sigmas_thresh_fb < thresh] = 0
+                sigmas_thresh_fb[sigmas_thresh_fb >= thresh] = 1
+                sigmas_thresh_s_fb = (1 - torch.cumsum(sigmas_thresh_fb[..., :-1], dim=-1))
+                sigmas_thresh_s_fb[sigmas_thresh_s_fb < 0] = 0
+                sigmas_thresh_fb[..., 1:] = sigmas_thresh_fb[..., 1:] * sigmas_thresh_s_fb
 
-                sigmas, rgbs = self.model(s_xyzs, dirs, n_expand)
+                points_b = xyzs_fb[sigmas_thresh_fb.to(bool)[..., None].expand(-1, -1, 3) & (torch.linalg.norm(xyzs_fb, dim=-1, keepdim=True).expand(-1, -1, 3) < cfg.scene.inner_bound)].reshape(-1, 3)
+                colors_b = rgbs_fb[sigmas_thresh_fb.to(bool)[..., None].expand(-1, -1, 3) & (torch.linalg.norm(xyzs_fb, dim=-1, keepdim=True).expand(-1, -1, 3) < cfg.scene.inner_bound)].reshape(-1, 3)
 
-                threshold = 100
+                points = torch.cat([points, points_b], dim=0)
+                colors = torch.cat([colors, colors_b], dim=0)
 
-                sigmas[sigmas > threshold] = 1e4
-                sigmas[sigmas < threshold] = 0
-
-                image, invdepth, weights = helpers.render_rays_log(sigmas, rgbs, z_vals, z_vals_log_inner)
-
-                s_xyzs_surface = s_xyzs[weights > 0.5].reshape(-1, 3)
-
-                points = torch.cat([points, s_xyzs_surface], dim=0)
-
-        np.save('./data/surface_points_50000_0.03.npy', points.cpu().numpy())
+        return points.cpu().numpy(), colors.cpu().numpy()
 

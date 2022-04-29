@@ -68,7 +68,7 @@ class NeRFNetwork(NerfRenderer):
         else:
             self.directional_dim = 0
 
-        # Camera latent embedding
+        # camera latent embedding
         self.N = N
         if cfg.nets.latent_embedding.features != 0:
             self.latent_emb_dim = cfg.nets.latent_embedding.features
@@ -99,7 +99,7 @@ class NeRFNetwork(NerfRenderer):
         n = n.reshape(-1)
 
         # sigma
-        x = (x + self.bound) / (2 * self.bound) # to [0, 1]
+        x = (x + self.outer_bound) / (2 * self.outer_bound) # to [0, 1]
         x_hashtable = self.encoder(x)
 
         sigma_network_output = self.sigma_net(x_hashtable)
@@ -132,7 +132,7 @@ class NeRFNetwork(NerfRenderer):
         prefix = x.shape[:-1]
         x = x.reshape(-1, 3)
 
-        x = (x + self.bound) / (2 * self.bound) # to [0, 1]
+        x = (x + self.outer_bound) / (2 * self.outer_bound) # to [0, 1]
         x = self.encoder(x)
         h = self.sigma_net(x)
 

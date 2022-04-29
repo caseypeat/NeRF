@@ -25,7 +25,7 @@ if __name__ == '__main__':
     sigmas = sigmas[sigmas > thresh][..., None]
     print(points.shape)
 
-    points = points[np.broadcast_to(points[..., 2, None], (points.shape[0], 3)) > -0.55].reshape(-1, 3)
+    # points = points[np.broadcast_to(points[..., 2, None], (points.shape[0], 3)) > -0.55].reshape(-1, 3)
 
     # points = points[np.all(np.isfinite(points), axis=1)]
     # points = points[np.linalg.norm(points, axis=1) < 1000]
@@ -37,9 +37,9 @@ if __name__ == '__main__':
 
     # colors = np.broadcast_to(points[..., 0, None], (len(points), 3))
     colors = points[..., 2]
-    colors = (colors - np.amin(colors)) / (np.amax(colors - np.amin(colors))) * 2 - 0.5
-    colors[colors < 0] = 0
-    colors[colors > 1] = 1
+    colors = (colors - np.amin(colors)) / (np.amax(colors - np.amin(colors)))
+    # colors[colors < 0] = 0
+    # colors[colors > 1] = 1
     colors = cm.get_cmap(plt.get_cmap('jet'))(colors)[..., :3]
 
     pcd = o3d.geometry.PointCloud()

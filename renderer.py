@@ -15,8 +15,9 @@ class NerfRenderer(nn.Module):
         self.intrinsics = nn.Parameter(intrinsics, requires_grad=False)
         self.extrinsics = nn.Parameter(extrinsics, requires_grad=False)
 
-        self.bound = cfg.scene.bound
-        self.bounds = cfg.renderer.bounds
+        self.inner_bound = cfg.scene.inner_bound
+        self.outer_bound = cfg.scene.outer_bound
+        self.z_bounds = cfg.renderer.z_bounds
         self.steps = cfg.renderer.steps
 
     def forward(self, x, d):
@@ -30,7 +31,7 @@ class NerfRenderer(nn.Module):
     def get_uniform_z_vals(self, rays_o, rays_d, n_samples):
         z_vals_log = torch.empty((0), device=rays_o.device)
         for i in range(len(self.steps)):
-            z_vals_log = torch.cat((z_vals_log, torch.linspace(m.log10(self.bounds[i]), m.log10(self.bounds[i+1])-(m.log10(self.bounds[i+1])-m.log10(self.bounds[i]))/self.steps[i], self.steps[i], device=rays_o.device)))
+            z_vals_log = torch.cat((z_vals_log, torch.linspace(m.log10(self.z_bounds[i]), m.log10(self.z_bounds[i+1])-(m.log10(self.z_bounds[i+1])-m.log10(self.z_bounds[i]))/self.steps[i], self.steps[i], device=rays_o.device)))
         z_vals_log = z_vals_log.expand(rays_o.shape[0], -1)
         z_vals = torch.pow(10, z_vals_log)
         return z_vals_log, z_vals
@@ -54,7 +55,7 @@ class NerfRenderer(nn.Module):
         z_vals_log, z_vals = self.get_uniform_z_vals(rays_o, rays_d, self.steps)
 
         xyzs, dirs = helpers.get_sample_points(rays_o, rays_d, z_vals)
-        s_xyzs = helpers.mipnerf360_scale(xyzs, self.bound)
+        s_xyzs = helpers.mipnerf360_scale(xyzs, self.inner_bound, self.outer_bound)
 
         sigmas = self.density(s_xyzs)
 
@@ -80,14 +81,14 @@ class NerfRenderer(nn.Module):
         rays_o, rays_d = helpers.get_rays(h, w, K, E)
         z_vals_log, z_vals = self.efficient_sampling(rays_o, rays_d, cfg.renderer.importance_steps)
         xyzs, dirs = helpers.get_sample_points(rays_o, rays_d, z_vals)
-        s_xyzs = helpers.mipnerf360_scale(xyzs, self.bound)
+        s_xyzs = helpers.mipnerf360_scale(xyzs, self.inner_bound, self.outer_bound)
         n_expand = n[:, None].expand(-1, z_vals.shape[-1])
 
         sigmas, rgbs = self(s_xyzs, dirs, n_expand)
 
         image, invdepth, weights = helpers.render_rays_log(sigmas, rgbs, z_vals, z_vals_log)
         image = image + (1 - torch.sum(weights, dim=-1)[..., None]) * bg_color
-        z_vals_log_s = (z_vals_log - m.log10(self.bounds[0])) / (m.log10(self.bounds[-1]) - m.log10(self.bounds[0]))
+        z_vals_log_s = (z_vals_log - m.log10(self.z_bounds[0])) / (m.log10(self.z_bounds[-1]) - m.log10(self.z_bounds[0]))
 
         # auxilary outputs that may be useful for inference of analysis, but not used in training
         aux_outputs = {}
@@ -96,6 +97,7 @@ class NerfRenderer(nn.Module):
         aux_outputs['z_vals_log'] = z_vals_log
         aux_outputs['sigmas'] = sigmas
         aux_outputs['rgbs'] = rgbs
+        aux_outputs['xyzs'] = xyzs
 
         return image, weights, z_vals_log_s, aux_outputs
 

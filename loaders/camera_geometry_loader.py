@@ -14,6 +14,8 @@ from camera_geometry.scan.views import load_frames
 import helpers
 from misc import remove_background
 
+from config import cfg
+
 np.set_printoptions(suppress=True)
 np.set_printoptions(precision=6)
     
@@ -22,49 +24,49 @@ def camera_geometry_loader(scene_path, image_scale=1, frame_range=None):
     # scene_path = os.path.join(scene_dir, 'scene.json')
     scene = load_scan(scene_path, image_scale=image_scale, frame_range=frame_range)
 
-    images_list = []
-    depths_list = []
-    intrinsics_list = []
-    extrinsics_list = []
-    ids_list = []
+    images = []
+    depths = []
+    intrinsics = []
+    extrinsics = []
+    ids = []
 
     frames = load_frames(scene)
 
-    for frame_list in tqdm(frames):
-        for frame in frame_list:
+    for frame in tqdm(frames):
+        for frame in frame:
             image_temp = frame.rgb.astype(np.float32) / 255
-            images_list.append(image_temp)
+            images.append(image_temp)
 
             intrinsic_temp = frame.camera.intrinsic
-            intrinsics_list.append(intrinsic_temp.astype(np.float32))
+            intrinsics.append(intrinsic_temp.astype(np.float32))
 
             extrinsic_temp = frame.camera.parent_to_camera
-            extrinsics_list.append(extrinsic_temp.astype(np.float32))
+            extrinsics.append(extrinsic_temp.astype(np.float32))
 
             if 'depth' in frame.keys():
                 depth_temp = frame.depth.astype(np.float32)
             else:
                 depth_temp = np.ones(image_temp.shape[:-1], dtype=np.float32)
-            depths_list.append(depth_temp)
+            depths.append(depth_temp)
 
             if 'ids' in frame.keys():
                 id_temp = frame.ids / (16.0/65536.0)
             else:
                 ids_temp = np.ones(image_temp.shape[:-1], dtype=np.float32)
-            ids_list.append(id_temp)
+            ids.append(id_temp)
     
-    images = np.stack(images_list, axis=0)
-    intrinsics = np.stack(intrinsics_list, axis=0)
-    extrinsics = np.stack(extrinsics_list, axis=0)
-    depths = np.stack(depths_list, axis=0)
-    ids = np.stack(ids_list, axis=0)
+    images = np.stack(images, axis=0)
+    intrinsics = np.stack(intrinsics, axis=0)
+    extrinsics = np.stack(extrinsics, axis=0)
+    depths = np.stack(depths, axis=0)
+    ids = np.stack(ids, axis=0)
 
     return images, depths, intrinsics, extrinsics, ids
 
 
 def meta_camera_geometry(scene_path, remove_background_bool):
 
-    images, depths, intrinsics, extrinsics, ids = camera_geometry_loader(scene_path, image_scale=0.5)
+    images, depths, intrinsics, extrinsics, ids = camera_geometry_loader(scene_path, image_scale=cfg.scene.image_scale)
     if remove_background_bool:
         images, depths, ids = remove_background(images, depths, ids, threshold=1)
 
@@ -92,38 +94,38 @@ def camera_geometry_loader_real(scene_path, image_scale=1, frame_range=None):
     # scene_path = os.path.join(scene_dir, 'scene.json')
     scene = load_scan(scene_path, image_scale=image_scale, frame_range=frame_range)
 
-    images_list = []
-    intrinsics_list = []
-    extrinsics_list = []
+    images = []
+    intrinsics = []
+    extrinsics = []
 
     frames = load_frames(scene)
 
-    for frame_list in tqdm(frames):
-        for frame in frame_list:
+    for frame in tqdm(frames):
+        for frame in frame:
             image_temp = frame.rgb
-            images_list.append(image_temp)
+            images.append(image_temp)
 
             intrinsic_temp = frame.camera.intrinsic
-            intrinsics_list.append(intrinsic_temp.astype(np.float32))
+            intrinsics.append(intrinsic_temp.astype(np.float32))
 
             extrinsic_temp = frame.camera.parent_to_camera
-            extrinsics_list.append(extrinsic_temp.astype(np.float32))
+            extrinsics.append(extrinsic_temp.astype(np.float32))
 
     
-    images = np.stack(images_list, axis=0)
-    intrinsics = np.stack(intrinsics_list, axis=0)
-    extrinsics = np.stack(extrinsics_list, axis=0)
+    images = np.stack(images, axis=0)
+    intrinsics = np.stack(intrinsics, axis=0)
+    extrinsics = np.stack(extrinsics, axis=0)
 
     return images, None, intrinsics, extrinsics, None
 
 
 def meta_camera_geometry_real(scene_path, frame_range):
 
-    images, depths, intrinsics, extrinsics, ids = camera_geometry_loader_real(scene_path, image_scale=0.5, frame_range=frame_range)
+    images, depths, intrinsics, extrinsics, ids = camera_geometry_loader_real(scene_path, image_scale=cfg.scene.image_scale, frame_range=frame_range)
 
     extrinsics[..., :3, 3] = extrinsics[..., :3, 3] - np.mean(extrinsics[..., :3, 3], axis=0, keepdims=True)
 
-    extrinsics[..., :3, 3] = extrinsics[..., :3, 3] / 2
+    # extrinsics[..., :3, 3] = extrinsics[..., :3, 3] / 2
 
     images = torch.ByteTensor(images)
     intrinsics = torch.Tensor(intrinsics)

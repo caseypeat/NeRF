@@ -83,10 +83,10 @@ def calculate_bounds_sphere(images, depths, intrinsics, extrinsics):
 
 
 ## Transforms
-def mipnerf360_scale(xyzs, bound):
+def mipnerf360_scale(xyzs, bound_inner, bound_outer):
     d = torch.linalg.norm(xyzs, dim=-1)[..., None].expand(-1, -1, 3)
     s_xyzs = torch.clone(xyzs)
-    s_xyzs[d > 1] = s_xyzs[d > 1] * ((bound - (bound - 1) / d[d > 1]) / d[d > 1])
+    s_xyzs[d > bound_inner] = s_xyzs[d > bound_inner] * ((bound_outer - (bound_outer - bound_inner) / d[d > bound_inner]) / d[d > bound_inner])
     return s_xyzs
 
 

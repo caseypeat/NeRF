@@ -1,2 +1,2 @@
 nets:
-  load_path: ./logs/debug_general/20220429_155040/model/2000.pth
+  load_path: ./logs/east_west_both/20220429_210652/model/10000.pth

@@ -1,22 +1,22 @@
 
 scene:
-  scene_path: /home/casey/Documents/PhD/data/conan_scans/ROW_349_WEST_LONG_0002/scene.json
-  image_scale: 0.5
-  bound: 1.125
-  remove_background_bool: False
+  # scene_path: /home/casey/Documents/PhD/data/conan_scans/ROW_349_EAST_SLOW_0006/scene.json
+  scene_path: /home/casey/Documents/PhD/data/conan_scans/ROW_349_WEST_SLOW_0007/scene.json
+  image_scale: 0.333
+  inner_bound: 2
+  outer_bound: 2.5
   real: True
-  frame_range: NULL
+  frame_range: null
 
 log:
-  root_dir: './logs/long'
+  root_dir: './logs/east_west_debug'
+  eval_image_freq: 60
+  eval_pointcloud_freq: 60
+  save_weights_freq: 60
 
 trainer:
-  num_epochs: 31
+  num_epochs: 60
   iters_per_epoch: 100
-  eval_freq: 10
-  # n_rays: 2048
-  # n_rays: 4096
-  # n_rays: 8192
   n_rays: 16384
   dist_loss_lambda1: 1e-5
   dist_loss_lambda2: 1e-2
@@ -37,54 +37,32 @@ optimizer:
 scheduler: step
 
 inference:
-  # n_rays: 4096
   n_rays: 16384
   image_num: 52
   voxel_res: 1024
   thresh: 10
-  # batch_size: 1_048_576
-  batch_size: 262144
-  pointcloud_eval_freq: 30
-  model_freq: 30
+  batch_size: 2097152
 
 renderer:
-  # inner_near: 0.05
-  # inner_far: 1
-  # inner_steps: 384
-  # outer_near: 1
-  # outer_far: 100
-  # outer_steps: 192
-
-  # steps: 2048
-  # downsample: 4
-
-  # steps:
-  #   - 512
-  #   - 256
-  #   - 128
-  #   - 64
-
   steps:
     - 256
     - 128
     - 64
     - 32
-  
-  bounds:
+  z_bounds:
     - 0.1
     - 1
     - 10
     - 100
     - 1000
 
-  # importance_steps: 256
   importance_steps: 128
   alpha: 0.2
 
 nets:
   encoding:
-    n_levels: 16
-    n_features: 2
+    n_levels: 20
+    n_features_per_level: 2
     log2_hashmap_size: 24
     precision: float32
   
@@ -92,6 +70,9 @@ nets:
     encoding: SphericalHarmonics
     degree: 4
     precision: float32
+
+  latent_embedding:
+    features: 48
 
   sigma:
     num_layers: 2
@@ -101,5 +82,3 @@ nets:
   color:
     num_layers: 3
     hidden_dim: 64
-
-  latent_embedding: True
