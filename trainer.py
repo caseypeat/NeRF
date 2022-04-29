@@ -155,9 +155,9 @@ class Trainer(object):
         h = h.to('cuda')
         w = w.to('cuda')
         
-        rays_o, rays_d = helpers.get_rays(h, w, K, E)
+        # rays_o, rays_d = helpers.get_rays(h, w, K, E)
 
-        rgb, _, weights, z_vals_log_s = self.model.render(rays_o, rays_d, n, color_bg)
+        rgb, _, weights, z_vals_log_s = self.model.render(n, h, w, K, E, color_bg)
 
         loss_rgb = helpers.criterion_rgb(rgb, rgb_gt)
         loss_dist = helpers.criterion_dist(weights, z_vals_log_s)

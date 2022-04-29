@@ -76,7 +76,7 @@ class Logger(object):
 
     def model(self, model, step):
         file_path = os.path.join(self.model_dir, f'{step}.pth')
-        torch.save(model, file_path)
+        torch.save(model.state_dict(), file_path)
 
     def scalar(self, name, value, step):
         if isinstance(value, torch.Tensor) or isinstance(value, np.ndarray):

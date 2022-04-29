@@ -119,7 +119,7 @@ class NeRFNetwork(NerfRendererPriority):
 
     
     # def forward(self, x, d, mip):
-    def forward(self, x, d, n):
+    def forward(self, x, d, n, **kwargs):
 
         prefix = x.shape[:-1]
         x = x.reshape(-1, 3)
@@ -130,7 +130,7 @@ class NeRFNetwork(NerfRendererPriority):
         x = (x + self.bound) / (2 * self.bound) # to [0, 1]
         x = self.encoder(x)
 
-        # x = x * mip
+        # x = x * kwargs['mip']
 
         h = self.sigma_net(x)
 

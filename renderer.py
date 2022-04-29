@@ -116,13 +116,37 @@ class NerfRendererPriority(nn.Module):
 
 
 
-    def render(self, rays_o, rays_d, n, bg_color):
+    def render(self, n, h, w, K, E, bg_color):
+
+        rays_o, rays_d = helpers.get_rays(h, w, K, E)
 
         z_vals_log, z_vals = self.efficient_sampling(rays_o, rays_d, cfg.renderer.importance_steps)
         # z_vals_log, z_vals = self.get_uniform_z_vals(rays_o, rays_d, self.steps)
     
         xyzs, dirs = helpers.get_sample_points(rays_o, rays_d, z_vals)
         s_xyzs = helpers.mipnerf360_scale(xyzs, self.bound)
+
+        # rays_o_d, rays_d_d = helpers.get_rays(h, w+1, K, E)
+        # xyzs_d, _ = helpers.get_sample_points(rays_o_d, rays_d_d, z_vals)
+        # s_xyzs_d = helpers.mipnerf360_scale(xyzs_d, self.bound)
+        # deltas = torch.linalg.norm(s_xyzs - s_xyzs_d, dim=-1)
+
+        # # get euclidean distance between samples in mipnerf360 space
+        # # deltas = torch.linalg.norm(s_xyzs[:, 1:, :] - s_xyzs[:, :-1, :], dim=-1)
+        # deltas /= (self.bound * 2)
+
+        # n_levels = cfg.nets.encoding.n_levels
+
+        # b = 1.3819
+        # Vs = 1 / (n_levels*torch.pow(b, torch.arange(n_levels, device='cuda')))
+
+        # mip = 1 / (1 + torch.exp(10*(log_base(deltas, b)[..., None] - log_base(Vs, b))))
+        # mip = torch.repeat_interleave(mip, 2, dim=-1)
+        # # mip = torch.cat([mip, mip.new_zeros((mip.shape[0], 1, mip.shape[2]))], dim=1)
+        # mip = mip.reshape(-1, n_levels*2)
+
+        # if not cfg.mip:
+        #     mip = torch.ones(mip.shape, device='cuda')
 
         n_expand = n[:, None].expand(-1, z_vals.shape[-1])
 
