@@ -7,18 +7,16 @@ from torch.nn import functional as F
 
 from tqdm import tqdm
 
-
+## Losses and Metrics
 def psnr(rgb_, rgb):
     mse = F.mse_loss(rgb_, rgb)
     return -10.0 * m.log10(mse)
-
 
 def mse2psnr(mse):
     # For numerical stability, avoid a zero mse loss.
     if mse < 1e-5:
         mse = 1e-5
     return -10.0 * m.log10(mse)
-
 
 def criterion_dist(weights, z_vals):
     # z_vals_s = (z_vals + torch.min(z_vals)) / (torch.max(z_vals) - torch.min(z_vals))
@@ -28,13 +26,13 @@ def criterion_dist(weights, z_vals):
     loss = torch.mean(torch.sum(loss, dim=[1, 2]))
     return loss
 
-
 def criterion_rgb(rgb_, rgb):
     loss = F.huber_loss(rgb_, rgb, delta=0.1)
     # loss = F.mse_loss(rgb_, rgb)
     return loss
 
 
+## Calculate bounds of scene
 def calculate_bounds(images, depths, intrinsics, extrinsics):
 
     n = np.arange(images.shape[0])
@@ -84,6 +82,15 @@ def calculate_bounds_sphere(images, depths, intrinsics, extrinsics):
     return xyz_min, xyz_max
 
 
+## Transforms
+def mipnerf360_scale(xyzs, bound):
+    d = torch.linalg.norm(xyzs, dim=-1)[..., None].expand(-1, -1, 3)
+    s_xyzs = torch.clone(xyzs)
+    s_xyzs[d > 1] = s_xyzs[d > 1] * ((bound - (bound - 1) / d[d > 1]) / d[d > 1])
+    return s_xyzs
+
+
+## Rendering Pipeline
 def get_rays_np(h, w, K, E):
     """ Ray generation for Oliver's calibration format """
     dirs = np.stack([w+0.5, h+0.5, np.ones_like(w)], -1)  # [N_rays, 3]
@@ -108,17 +115,6 @@ def get_rays(h, w, K, E):
     rays_o = E[:, :3, -1].expand(rays_d.shape[0], -1)
 
     return rays_o, rays_d
-
-
-def mipnerf360_consolidating_weights(W):
-    pass
-
-
-def mipnerf360_scale(xyzs, bound):
-    d = torch.linalg.norm(xyzs, dim=-1)[..., None].expand(-1, -1, 3)
-    s_xyzs = torch.clone(xyzs)
-    s_xyzs[d > 1] = s_xyzs[d > 1] * ((bound - (bound - 1) / d[d > 1]) / d[d > 1])
-    return s_xyzs
 
 
 def get_z_vals_log(begin, end, N_rays, N_samples, device):
@@ -162,15 +158,10 @@ def render_rays_log(sigmas, rgbs, z_vals, z_vals_log):
     return rgb, invdepth, weights
 
 
-# def sample_pdf(z_vals, weights, N_importance, alpha=0.0001):
 def sample_pdf(z_vals, weights, N_importance):
 
     N_rays, N_samples = z_vals.shape
 
-    # weights = torch.cat([weights.new_zeros((N_rays, 1)), weights, weights.new_zeros((N_rays, 1))], dim=-1)
-    # weights = 1/2 * (torch.maximum(weights[..., :-2], weights[..., 1:-1]) + torch.maximum(weights[..., 1:-1], weights[..., 2:]))
-    # weights = weights + alpha / weights.shape[-1]
-    # pdf = weights / torch.sum(weights, dim=-1, keepdim=True)  # [N_rays, N_samples-1]
     pdf = weights  # [N_rays, N_samples-1]
     cdf = torch.cumsum(pdf, dim=-1)  # [N_rays, N_samples-1]
 
@@ -193,13 +184,17 @@ def sample_pdf(z_vals, weights, N_importance):
     z_vals_mid_above = torch.gather(input=z_vals_mid, dim=1, index=inds)
     z_vals_im = z_vals_mid_below + (z_vals_mid_above - z_vals_mid_below) * t
 
-    # z_vals_fine = torch.cat([z_vals, z_vals_im], dim=1)  # [N_rays, N_samples+N_importance]
-    # z_vals_fine, _ = torch.sort(z_vals_fine, dim=1)  # [N_rays, N_samples+N_importance]
     z_vals_fine = z_vals_im
 
     return z_vals_fine
 
 
+## Misc
+
+
+
+
+## get visible points in a scene (probaly rewrite)
 @torch.no_grad()
 def get_valid_positions(N, H, W, K, E, res):
 

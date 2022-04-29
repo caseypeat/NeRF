@@ -3,7 +3,6 @@ import torch
 import os
 import cv2
 import time
-import yaml
 
 from datetime import datetime
 
@@ -27,8 +26,7 @@ def tensorboard_test(root_dir):
 class Logger(object):
     def __init__(self, root_dir):
         self.log_dir = os.path.join(root_dir, datetime.today().strftime('%Y%m%d_%H%M%S'))
-        self.image_dir = os.path.join(self.log_dir, 'image')
-        self.invdepth_dir = os.path.join(self.log_dir, 'invdepth')
+        self.images_dir = os.path.join(self.log_dir, 'images')
         self.pointcloud_dir = os.path.join(self.log_dir, 'pointcloud')
         self.model_dir = os.path.join(self.log_dir, 'model')
         self.tensorboard_dir = os.path.join(self.log_dir, 'tensorboard')
@@ -37,8 +35,7 @@ class Logger(object):
             os.mkdir(root_dir)
 
         os.mkdir(self.log_dir)
-        os.mkdir(self.image_dir)
-        os.mkdir(self.invdepth_dir)
+        os.mkdir(self.images_dir)
         os.mkdir(self.pointcloud_dir)
         os.mkdir(self.model_dir)
         os.mkdir(self.tensorboard_dir)
@@ -59,16 +56,22 @@ class Logger(object):
             print(output_str, end='')
             f.write(output_str)
 
-    def image(self, image, step):
-        file_path = os.path.join(self.image_dir, f'{step}.jpg')
-        self.writer.add_image('image', image[..., np.array([2, 1, 0], dtype=int)], step, dataformats='HWC')
+    def image_color(self, string, image, step):
+        directory_path = os.path.join(self.images_dir, string)
+        if not os.path.exists(directory_path):
+            os.mkdir(directory_path)
+        file_path = os.path.join(directory_path, f'{step}.jpg')
+        self.writer.add_image(string, image[..., np.array([2, 1, 0], dtype=int)], step, dataformats='HWC')
         cv2.imwrite(file_path, np.uint8(image*255))
 
-    def invdepth(self, invdepth, step):
-        invdepth_c = color_depthmap(invdepth)
-        file_path = os.path.join(self.invdepth_dir, f'{step}.jpg')
-        self.writer.add_image('invdepth', invdepth_c, step, dataformats='HWC')
-        cv2.imwrite(file_path, np.uint8(invdepth_c[..., np.array([2, 1, 0], dtype=int)]*255))
+    def image_grey(self, string, grey, step):
+        grey_c = color_depthmap(grey)
+        directory_path = os.path.join(self.images_dir, string)
+        if not os.path.exists(directory_path):
+            os.mkdir(directory_path)
+        file_path = os.path.join(directory_path, f'{step}.jpg')
+        self.writer.add_image(string, grey_c, step, dataformats='HWC')
+        cv2.imwrite(file_path, np.uint8(grey_c[..., np.array([2, 1, 0], dtype=int)]*255))
 
     def pointcloud(self, pointcloud, step):
         file_path = os.path.join(self.pointcloud_dir, f'{step}.npy')

@@ -1,16 +1,8 @@
 import numpy as np
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
-import cv2
 import time
 import math as m
 import matplotlib.pyplot as plt
-import cProfile
-
-from torch.profiler import profile, record_function, ProfilerActivity
-
-from matplotlib import cm
 
 import helpers
 
@@ -24,22 +16,17 @@ class Trainer(object):
         self,
         model,
         logger,
-        inference,
+        inferencer,
         images,
         depths,
         intrinsics,
         extrinsics,
         optimizer,
-        scheduler,
-        n_rays,
-        num_epochs,
-        iters_per_epoch,
-        eval_freq,
-        eval_image_num,):
+        scheduler):
 
         self.model = model
         self.logger = logger
-        self.inference = inference
+        self.inferencer = inferencer
 
         self.images = images
         self.depths = depths
@@ -50,71 +37,61 @@ class Trainer(object):
         self.scheduler = scheduler
         self.scaler = torch.cuda.amp.GradScaler()
 
-        self.n_rays = n_rays
-        self.num_epochs = num_epochs
-        self.iters_per_epoch = iters_per_epoch
+        self.n_rays = cfg.trainer.n_rays
+        self.num_epochs = cfg.trainer.num_epochs
+        self.iters_per_epoch = cfg.trainer.iters_per_epoch
         self.num_iters = self.num_epochs * self.iters_per_epoch
-        self.eval_freq = eval_freq
-        self.eval_image_num = eval_image_num
 
         self.iter = 0
-
-        # self.scalars = {}
-        # self.scalars['loss'] = np.zeros((self.num_iters))
-        # self.scalars['loss_rgb'] = np.zeros((self.num_iters))
-        # self.scalars['loss_dist'] = np.zeros((self.num_iters))
-        # self.scalars['dist_scalar'] = np.zeros((self.num_iters))
 
 
     def train(self):
         N, H, W, C = self.images.shape
 
-        # with torch.profiler.profile(
-        #     # activities=[],
-        #     schedule=torch.profiler.schedule(skip_first=10, wait=5, warmup=5, active=5, repeat=1),
-        #     on_trace_ready=torch.profiler.tensorboard_trace_handler(self.logger.tensorboard_dir),
-        #     record_shapes=True,
-        #     profile_memory=True,
-        #     # with_stack=True,
-        #     ) as prof:
-
         self.t0_train = time.time()
 
         for epoch in range(self.num_epochs):
 
-            if epoch % self.eval_freq == 0 and epoch != 0:
-                self.logger.log('Rending Image...')
-                image, invdepth = self.inference.render_image(H, W, self.intrinsics[self.eval_image_num], self.extrinsics[self.eval_image_num])
-                self.logger.image(image.cpu().numpy(), self.iter)
-                self.logger.invdepth(invdepth.cpu().numpy(), self.iter)
-                
-            if epoch % cfg.inference.pointcloud_eval_freq == 0 and epoch != 0:
-                self.logger.log('Generating Pointcloud')
-                pointcloud = self.inference.extract_geometry()
-                self.logger.pointcloud(pointcloud.cpu().numpy(), self.iter)
-
-            if epoch % cfg.inference.model_freq == 0 and epoch != 0:
-                self.logger.log('Saving Model...')
-                self.logger.model(self.model, self.iter)
-
             self.train_epoch(self.iters_per_epoch)
-            # self.train_epoch(self.iters_per_epoch)
             
+            # Log useful data
+            if cfg.log.eval_image_freq is not None:
+                if (epoch+1) % cfg.log.eval_image_freq == 0:
+                    self.logger.log('Rending Image...')
+                    image, invdepth = self.inferencer.render_image(H, W, self.intrinsics[cfg.inference.image_num], self.extrinsics[cfg.inference.image_num])
+                    self.logger.image_color('image', image.cpu().numpy(), self.iter)
+                    self.logger.image_grey('invdepth', invdepth.cpu().numpy(), self.iter)
+
+            if cfg.log.eval_image_freq is not None:
+                if (epoch+1) % cfg.log.eval_image_freq == 0:
+                    self.logger.log('Rending Invdepth Thresh...')
+                    invdepth_thresh = self.inferencer.render_invdepth_thresh(H, W, self.intrinsics[cfg.inference.image_num], self.extrinsics[cfg.inference.image_num])
+                    self.logger.image_grey('invdepth_thresh', invdepth_thresh.cpu().numpy(), self.iter)
+
+            if cfg.log.eval_pointcloud_freq is not None:
+                if (epoch+1) % cfg.log.eval_pointcloud_freq == 0:
+                    self.logger.log('Generating Pointcloud...')
+                    pointcloud = self.inferencer.extract_geometry(N, H, W, self.intrinsics, self.extrinsics)
+                    self.logger.pointcloud(pointcloud.cpu().numpy(), self.iter)
+
+            if cfg.log.save_weights_freq is not None:
+                if (epoch+1) % cfg.log.save_weights_freq == 0:
+                    self.logger.log('Saving Model...')
+                    self.logger.model(self.model, self.iter)
+            
+            # Output recorded scalars
             self.logger.log(f'Iteration: {self.iter}')
             for key, val in self.logger.scalars.items():
                 self.logger.log(f'Scalar: {key} - Value: {np.mean(np.array(val[-self.iters_per_epoch:])).item():.6f}')
             self.logger.log('')
 
+
     def train_epoch(self, iters_per_epoch):
         for i in tqdm(range(iters_per_epoch)):
             self.optimizer.zero_grad()
 
-            # dist_scalar = 10**(self.iter/self.num_iters * 2 - 4)
-
             with torch.cuda.amp.autocast():
                 loss = self.train_step()
-                # loss_rgb, loss_dist = self.train_step()
-                # loss = loss_rgb + dist_scalar * loss_dist
 
                 self.scaler.scale(loss).backward()
                 self.scaler.step(self.optimizer)
@@ -124,7 +101,6 @@ class Trainer(object):
 
             self.iter += 1
 
-            # prof.step()
 
     def train_step(self):
         self.model.train()
@@ -137,8 +113,9 @@ class Trainer(object):
         K = self.intrinsics[n].to('cuda')
         E = self.extrinsics[n].to('cuda')
 
+        # If image data is stored as uint8, convert to float32 and scale to (0, 1)
+        # is alpha channel is present, add random background color to image data
         color_bg = torch.rand(3, device='cuda') # [3], frame-wise random.
-
         if C == 4:
             if self.images.dtype == torch.uint8:
                 rgba_gt = (self.images[n, h, w, :].to(torch.float32) / 255).to('cuda')
@@ -154,18 +131,21 @@ class Trainer(object):
         n = n.to('cuda')
         h = h.to('cuda')
         w = w.to('cuda')
-        
-        # rays_o, rays_d = helpers.get_rays(h, w, K, E)
 
-        rgb, _, weights, z_vals_log_s = self.model.render(n, h, w, K, E, color_bg)
+        rgb, weights, z_vals_log_s, _ = self.model.render(n, h, w, K, E, color_bg)
 
+        # Calculate losses
         loss_rgb = helpers.criterion_rgb(rgb, rgb_gt)
-        loss_dist = helpers.criterion_dist(weights, z_vals_log_s)
+        if cfg.trainer.dist_loss_lambda1 == 0 or cfg.trainer.dist_loss_lambda2 == 0:
+            loss_dist = 0  # could still calculate loss_dist and multiply with a zero scalar, but has non-trivial computational cost
+            dist_scalar = 0
+            loss = loss_rgb
+        else:
+            loss_dist = helpers.criterion_dist(weights, z_vals_log_s)
+            dist_scalar = 10**(self.iter/self.num_iters * (m.log10(cfg.trainer.dist_loss_lambda2) - m.log10(cfg.trainer.dist_loss_lambda1)) + m.log10(cfg.trainer.dist_loss_lambda1))
+            loss = loss_rgb + dist_scalar * loss_dist
 
-        dist_scalar = 10**(self.iter/self.num_iters * (m.log10(cfg.trainer.dist_loss_lambda2) - m.log10(cfg.trainer.dist_loss_lambda1)) + m.log10(cfg.trainer.dist_loss_lambda1))
-        loss = loss_rgb + dist_scalar * loss_dist
-        # loss = loss_rgb
-
+        # Log scalars
         self.logger.scalar('loss', loss, self.iter)
         self.logger.scalar('loss_rgb', loss_rgb, self.iter)
         self.logger.scalar('loss_dist', loss_dist, self.iter)
@@ -176,5 +156,4 @@ class Trainer(object):
         self.logger.scalar('loss_rgb (seconds)', loss_rgb, int(time.time() - self.t0_train))
         self.logger.scalar('psnr_rgb (seconds)', helpers.psnr(rgb, rgb_gt), int(time.time() - self.t0_train))
 
-        # return loss_rgb, loss_dist
         return loss

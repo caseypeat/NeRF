@@ -1,27 +1,6 @@
 import numpy as np
 import torch
-import cv2
-import commentjson as json
-import yaml
-import os
 import matplotlib.pyplot as plt
-
-from torch import nn
-from torch.nn import functional as F
-from torch.optim import Adam, SGD, LBFGS
-from torch.optim.lr_scheduler import ExponentialLR, LambdaLR, MultiStepLR, LambdaLR
-from torch.utils.tensorboard import SummaryWriter
-from torch.profiler import profile, record_function, ProfilerActivity
-
-from torch.cuda.amp import autocast, GradScaler
-
-from tqdm import tqdm
-from box import Box
-
-import cProfile, pstats, io
-from pstats import SortKey
-
-import helpers
 
 from loaders.camera_geometry_loader import camera_geometry_loader, camera_geometry_loader_real, meta_camera_geometry, meta_camera_geometry_real
 from loaders.synthetic import load_image_set
@@ -29,9 +8,7 @@ from loaders.synthetic import load_image_set
 from nets import NeRFNetwork
 from trainer import Trainer
 from logger import Logger
-from inference import Inference
-
-from misc import extract_foreground, remove_background, remove_background2
+from inference import Inferencer
 
 from config import cfg
 
@@ -51,53 +28,16 @@ if __name__ == '__main__':
 
     logger.log('Initilising Model...')
     model = NeRFNetwork(
-        # Render args
-        # bound = cfg.scene.bound,
-
-        # inner_near=cfg.renderer.inner_near,
-        # inner_far=cfg.renderer.inner_far,
-        # inner_steps=cfg.renderer.inner_steps,
-        # outer_near=cfg.renderer.outer_near,
-        # outer_far=cfg.renderer.outer_far,
-        # outer_steps=cfg.renderer.outer_steps,
-
+        # renderer
         intrinsics=intrinsics,
         extrinsics=extrinsics,
 
-        # Net args
-        n_levels=cfg.nets.encoding.n_levels,
-        n_features_per_level=cfg.nets.encoding.n_features,
-        log2_hashmap_size=cfg.nets.encoding.log2_hashmap_size,
-        encoding_precision=cfg.nets.encoding.precision,
-
-        encoding_dir=cfg.nets.encoding_dir.encoding,
-        encoding_dir_degree=cfg.nets.encoding_dir.degree,
-        encoding_dir_precision=cfg.nets.encoding_dir.precision,
-
-        num_layers=cfg.nets.sigma.num_layers,
-        hidden_dim=cfg.nets.sigma.hidden_dim,
-        geo_feat_dim=cfg.nets.sigma.geo_feat_dim,
-
-        num_layers_color=cfg.nets.color.num_layers,
-        hidden_dim_color=cfg.nets.color.hidden_dim,
-
+        # net
         N = images.shape[0]
     ).to('cuda')
 
-    logger.log('Generating Mask...')
-    N, H, W = images.shape[:3]
-    mask = helpers.get_valid_positions(N, H, W, intrinsics.to('cuda'), extrinsics.to('cuda'), res=128)
-    # mask = torch.zeros([256]*3)
-
     logger.log('Initiating Inference...')
-    inference = Inference(
-        model=model,
-        mask=mask,
-        n_rays=cfg.inference.n_rays,
-        voxel_res=cfg.inference.voxel_res,
-        thresh=cfg.inference.thresh,
-        batch_size=cfg.inference.batch_size,
-        )
+    inferencer = Inferencer(model)
 
     logger.log('Initiating Optimiser...')
 
@@ -113,27 +53,20 @@ if __name__ == '__main__':
         lmbda = lambda x: 0.1**(x/(cfg.trainer.num_epochs*cfg.trainer.iters_per_epoch))
     else:
         raise ValueError
-    scheduler = LambdaLR(optimizer, lr_lambda=lmbda, last_epoch=-1, verbose=False)
+    scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lmbda, last_epoch=-1, verbose=False)
 
     logger.log('Initiating Trainer...')
     trainer = Trainer(
         model=model,
         logger=logger,
-        inference=inference,
+        inferencer=inferencer,
         images=images,
         depths=depths,
         intrinsics=intrinsics,
         extrinsics=extrinsics,
 
         optimizer=optimizer,
-        scheduler=scheduler,
-
-        n_rays=cfg.trainer.n_rays,
-        num_epochs=cfg.trainer.num_epochs,
-        iters_per_epoch=cfg.trainer.iters_per_epoch,
-        eval_freq=cfg.trainer.eval_freq,
-        eval_image_num=cfg.inference.image_num,
-        )
+        scheduler=scheduler)
 
     logger.log('Beginning Training...\n')
     trainer.train()

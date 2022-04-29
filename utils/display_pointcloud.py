@@ -1,21 +1,24 @@
 import numpy as np
 import open3d as o3d
 import  matplotlib.pyplot as plt
+import sys
 
 from matplotlib import cm
-from pyparsing import col
 
 if __name__ == '__main__':
     # points = np.load('./logs/efficient_sampling/20220409_215348/pointcloud/pointcloud.npy')
     # points = np.load('./logs/priority3/20220423_144756/pointcloud/3000.npy')
     # points = np.load('./logs/priority3/20220423_150517/pointcloud/3000.npy')
     # points = np.load('./logs/priority3_real/20220423_152823/pointcloud/3000.npy')
-    points = np.load('./logs/long_debug/20220425_203727/pointcloud/3000.npy')
+    # points = np.load('./logs/long_debug/20220425_203727/pointcloud/3000.npy')
     # points = np.load('./data/surface_points_50000_0.03.npy')
     # points = np.load('./data/points_00001.npy')
     # points = np.load('./data/points.npy')
 
-    thresh = 100
+    filepath = sys.argv[1]
+    thresh = int(sys.argv[2])
+
+    points = np.load(filepath)
 
     points, sigmas = points[..., :3], points[..., 3]
     points = points[np.broadcast_to(sigmas[..., None], (sigmas.shape[0], 3)) > thresh].reshape(-1, 3)

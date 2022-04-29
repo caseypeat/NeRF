@@ -4,54 +4,30 @@ import torch.nn.functional as F
 
 import tinycudann as tcnn
 
-from renderer import NerfRenderer, NerfRendererNB, NerfRendererPriority
+from renderer import NerfRenderer
 
 from config import cfg
 
 
-class NeRFNetwork(NerfRendererPriority):
-    def __init__(self,
-                # encoding (hashgrid)
-                n_levels=16,
-                n_features_per_level=2,
-                log2_hashmap_size=24,
-                encoding_precision='float32',
-
-                # directional encoding
-                encoding_dir="SphericalHarmonics",
-                encoding_dir_degree=4,
-                encoding_dir_precision='float32',
-
-                # sigma network
-                num_layers=2,
-                hidden_dim=64,
-                geo_feat_dim=15,
-                 
-                # color network
-                num_layers_color=3,
-                hidden_dim_color=64,
-
-                N=None,
-
-                **kwargs,
-                ):
+class NeRFNetwork(NerfRenderer):
+    def __init__(self, N, **kwargs):
         super().__init__(**kwargs)
 
-        if encoding_precision == 'float16':
+        if cfg.nets.encoding.precision == 'float16':
             self.encoding_precision = torch.float16
-        elif encoding_precision == 'float32':
+        elif cfg.nets.encoding.precision == 'float32':
             self.encoding_precision = torch.float32
         else:
             return ValueError
 
-
+        # hastable encoding
         self.encoder = tcnn.Encoding(
             n_input_dims=3,
             encoding_config={
                 "otype": "HashGrid",
-                "n_levels": n_levels,
-                "n_features_per_level": n_features_per_level,
-                "log2_hashmap_size": log2_hashmap_size,
+                "n_levels": cfg.nets.encoding.n_levels,
+                "n_features_per_level": cfg.nets.encoding.n_features_per_level,
+                "log2_hashmap_size": cfg.nets.encoding.log2_hashmap_size,
                 "base_resolution": 16,
                 "per_level_scale": 1.3819,
             },
@@ -59,52 +35,49 @@ class NeRFNetwork(NerfRendererPriority):
         )
 
         # sigma network
-        self.num_layers = num_layers
-        self.hidden_dim = hidden_dim
-        self.geo_feat_dim = geo_feat_dim
-
         self.sigma_net = tcnn.Network(
-            n_input_dims=n_levels*n_features_per_level,
-            n_output_dims=1 + geo_feat_dim,
+            n_input_dims=cfg.nets.encoding.n_levels*cfg.nets.encoding.n_features_per_level,
+            n_output_dims=1 + cfg.nets.sigma.geo_feat_dim,
             network_config={
                 "otype": "FullyFusedMLP",
                 "activation": "ReLU",
                 "output_activation": "None",
-                "n_neurons": hidden_dim,
-                "n_hidden_layers": num_layers - 1,
+                "n_neurons": cfg.nets.sigma.hidden_dim,
+                "n_hidden_layers": cfg.nets.sigma.num_layers - 1,
             },
         )
 
-        if encoding_dir_precision == 'float16':
-            self.encoding_dir_precision = torch.float16
-        elif encoding_dir_precision == 'float32':
-            self.encoding_dir_precision = torch.float32
+        # directional encoding
+        if cfg.nets.encoding_dir.degree != 0:
+            if cfg.nets.encoding_dir.precision == 'float16':
+                self.encoding_dir_precision = torch.float16
+            elif cfg.nets.encoding_dir.precision == 'float32':
+                self.encoding_dir_precision = torch.float32
+            else:
+                return ValueError
+
+            self.encoder_dir = tcnn.Encoding(
+                n_input_dims=3,
+                encoding_config={
+                    "otype": cfg.nets.encoding_dir.encoding,
+                    "degree": cfg.nets.encoding_dir.degree,
+                },
+                dtype=self.encoding_dir_precision,
+            )
+            self.directional_dim = self.encoder_dir.n_output_dims
         else:
-            return ValueError
+            self.directional_dim = 0
 
-        self.encoder_dir = tcnn.Encoding(
-            n_input_dims=3,
-            encoding_config={
-                "otype": encoding_dir,
-                "degree": encoding_dir_degree,
-            },
-            dtype=self.encoding_dir_precision,
-        )
-
-        # color network
-        self.num_layers_color = num_layers_color
-        self.hidden_dim_color = hidden_dim_color
-
+        # Camera latent embedding
         self.N = N
-
-        if cfg.nets.latent_embedding:
-            self.latent_emb_dim = 48
+        if cfg.nets.latent_embedding.features != 0:
+            self.latent_emb_dim = cfg.nets.latent_embedding.features
             self.latent_emb = nn.Parameter(torch.zeros(self.N, self.latent_emb_dim, device='cuda'), requires_grad=True)
         else:
             self.latend_emb_dim = 0
 
-        self.in_dim_color = self.encoder_dir.n_output_dims + self.geo_feat_dim + self.latent_emb_dim
-
+        # color network
+        self.in_dim_color = cfg.nets.sigma.geo_feat_dim + self.directional_dim + self.latent_emb_dim
         self.color_net = tcnn.Network(
             n_input_dims=self.in_dim_color,
             n_output_dims=3,
@@ -112,13 +85,12 @@ class NeRFNetwork(NerfRendererPriority):
                 "otype": "FullyFusedMLP",
                 "activation": "ReLU",
                 "output_activation": "None",
-                "n_neurons": hidden_dim_color,
-                "n_hidden_layers": num_layers_color - 1,
+                "n_neurons": cfg.nets.color.hidden_dim,
+                "n_hidden_layers": cfg.nets.color.num_layers - 1,
             },
         )
 
     
-    # def forward(self, x, d, mip):
     def forward(self, x, d, n, **kwargs):
 
         prefix = x.shape[:-1]
@@ -128,26 +100,27 @@ class NeRFNetwork(NerfRendererPriority):
 
         # sigma
         x = (x + self.bound) / (2 * self.bound) # to [0, 1]
-        x = self.encoder(x)
+        x_hashtable = self.encoder(x)
 
-        # x = x * kwargs['mip']
+        sigma_network_output = self.sigma_net(x_hashtable)
 
-        h = self.sigma_net(x)
-
-        sigma = F.relu(h[..., 0])
-        geo_feat = h[..., 1:]
+        sigma = F.relu(sigma_network_output[..., 0])
+        geo_feat = sigma_network_output[..., 1:]
 
         # color
-        d = (d + 1) / 2 # tcnn SH encoding requires inputs to be in [0, 1]
-        d = self.encoder_dir(d)
+        color_network_input = geo_feat
+        if self.directional_dim != 0:
+            d = (d + 1) / 2 # tcnn SH encoding requires inputs to be in [0, 1]
+            d = self.encoder_dir(d)
+            color_network_input = torch.cat([color_network_input, d], dim=-1)
+        if self.latent_emb_dim != 0:
+            l = self.latent_emb[n]
+            color_network_input = torch.cat([color_network_input, l], dim=1)
 
-        l = self.latent_emb[n]
-
-        h = torch.cat([d, l, geo_feat], dim=-1)
-        h = self.color_net(h)
+        color_network_output = self.color_net(color_network_input)
         
         # sigmoid activation for rgb
-        color = torch.sigmoid(h)
+        color = torch.sigmoid(color_network_output)
     
         sigma = sigma.reshape(*prefix)
         color = color.reshape(*prefix, -1)
