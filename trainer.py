@@ -132,7 +132,7 @@ class Trainer(object):
         h = h.to('cuda')
         w = w.to('cuda')
 
-        rgb, weights, z_vals_log_s, _ = self.model.render(n, h, w, K, E, color_bg)
+        rgb, weights, z_vals_log_s, aux_outputs = self.model.render(n, h, w, K, E, color_bg)
 
         # Calculate losses
         loss_rgb = helpers.criterion_rgb(rgb, rgb_gt)
@@ -155,5 +155,8 @@ class Trainer(object):
         self.logger.scalar('loss (seconds)', loss, int(time.time() - self.t0_train))
         self.logger.scalar('loss_rgb (seconds)', loss_rgb, int(time.time() - self.t0_train))
         self.logger.scalar('psnr_rgb (seconds)', helpers.psnr(rgb, rgb_gt), int(time.time() - self.t0_train))
+
+        self.logger.scalar('R', torch.linalg.norm(aux_outputs['R']), self.iter)
+        self.logger.scalar('T', torch.linalg.norm(aux_outputs['T']), self.iter)
 
         return loss

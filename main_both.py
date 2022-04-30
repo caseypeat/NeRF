@@ -51,6 +51,7 @@ if __name__ == '__main__':
     optimizer = torch.optim.Adam([
             {'name': 'encoding', 'params': list(model.encoder.parameters()), 'lr': cfg.optimizer.encoding.lr},
             {'name': 'latent_emb', 'params': [model.latent_emb], 'lr': cfg.optimizer.latent_emb.lr},
+            {'name': 'transform', 'params': [model.R, model.T], 'lr': cfg.optimizer.latent_emb.lr},
             {'name': 'net', 'params': list(model.sigma_net.parameters()) + list(model.color_net.parameters()), 'weight_decay': cfg.optimizer.net.weight_decay, 'lr': cfg.optimizer.net.lr},
         ], betas=cfg.optimizer.betas, eps=cfg.optimizer.eps)
 

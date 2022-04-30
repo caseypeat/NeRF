@@ -8,12 +8,41 @@ import helpers
 from config import cfg
 
 
+# https://github.com/ActiveVisionLab/nerfmm/blob/main/utils/lie_group_helper.py
+def vec2skew(v):
+    """
+    :param v:  (3, ) torch tensor
+    :return:   (3, 3)
+    """
+    zero = torch.zeros(1, dtype=torch.float32, device=v.device)
+    skew_v0 = torch.cat([ zero,    -v[2:3],   v[1:2]])  # (3, 1)
+    skew_v1 = torch.cat([ v[2:3],   zero,    -v[0:1]])
+    skew_v2 = torch.cat([-v[1:2],   v[0:1],   zero])
+    skew_v = torch.stack([skew_v0, skew_v1, skew_v2], dim=0)  # (3, 3)
+    return skew_v  # (3, 3)
+
+
+def Exp(r):
+    """so(3) vector to SO(3) matrix
+    :param r: (3, ) axis-angle, torch tensor
+    :return:  (3, 3)
+    """
+    skew_r = vec2skew(r)  # (3, 3)
+    norm_r = r.norm() + 1e-15
+    eye = torch.eye(3, dtype=torch.float32, device=r.device)
+    R = eye + (torch.sin(norm_r) / norm_r) * skew_r + ((1 - torch.cos(norm_r)) / norm_r**2) * (skew_r @ skew_r)
+    return R
+
+
 class NerfRenderer(nn.Module):
     def __init__(self, intrinsics, extrinsics):
         super().__init__()
 
         self.intrinsics = nn.Parameter(intrinsics, requires_grad=False)
         self.extrinsics = nn.Parameter(extrinsics, requires_grad=False)
+
+        # self.T = nn.Parameter(torch.zeros(3, dtype=torch.float32, device='cuda'), requires_grad=True)
+        # self.R = nn.Parameter(torch.zeros(3, dtype=torch.float32, device='cuda'), requires_grad=True)
 
         self.inner_bound = cfg.scene.inner_bound
         self.outer_bound = cfg.scene.outer_bound
@@ -78,6 +107,15 @@ class NerfRenderer(nn.Module):
 
     def render(self, n, h, w, K, E, bg_color):
 
+        # E_c = torch.clone(E)
+        # with torch.cuda.amp.autocast(enabled=False):
+        #     transform = torch.eye(4, dtype=torch.float32, device='cuda')
+        #     transform[:3, :3] = Exp(self.R)
+        #     transform[:3, 3] = self.T
+        #     # transform[:3, 3] = self.T
+        #     # a = E[n < 1176]
+        #     E_c[n < 1176] = transform @ E_c[n < 1176]
+
         rays_o, rays_d = helpers.get_rays(h, w, K, E)
         z_vals_log, z_vals = self.efficient_sampling(rays_o, rays_d, cfg.renderer.importance_steps)
         xyzs, dirs = helpers.get_sample_points(rays_o, rays_d, z_vals)
@@ -98,6 +136,8 @@ class NerfRenderer(nn.Module):
         aux_outputs['sigmas'] = sigmas
         aux_outputs['rgbs'] = rgbs
         aux_outputs['xyzs'] = xyzs
+        aux_outputs['R'] = torch.clone(self.R)
+        aux_outputs['T'] = torch.clone(self.T)
 
         return image, weights, z_vals_log_s, aux_outputs
 

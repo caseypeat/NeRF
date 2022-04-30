@@ -17,7 +17,18 @@ from config import cfg
 
 if __name__ == '__main__':
 
-    images, depths, intrinsics, extrinsics = meta_camera_geometry_real(cfg.scene.scene_path, cfg.scene.frame_range)
+    images_a, depths_a, intrinsics_a, extrinsics_a = meta_camera_geometry_real(cfg.scene.scene_path_a, cfg.scene.frame_range)
+    images_b, depths_b, intrinsics_b, extrinsics_b = meta_camera_geometry_real(cfg.scene.scene_path_b, cfg.scene.frame_range)
+
+    transform = np.load('./data/transforms/east_west.npy')
+    extrinsics_a = torch.Tensor(transform) @ extrinsics_a
+
+    images = torch.cat([images_a, images_b], dim=0)
+    depths = None
+    intrinsics = torch.cat([intrinsics_a, intrinsics_b], dim=0)
+    extrinsics = torch.cat([extrinsics_a, extrinsics_b], dim=0)
+
+    extrinsics[..., :3, 3] = extrinsics[..., :3, 3] - torch.mean(extrinsics[..., :3, 3], dim=0, keepdims=True)
 
     N, H, W, C = images.shape
 
@@ -37,9 +48,8 @@ if __name__ == '__main__':
     ids = []
     for i in range(N):
         # if i % 6 == 2 or i % 6 == 3 or i % 6 == 4 or i % 6 == 1:
-        if (i > int(images.shape[0]*0.25) and i < int(images.shape[0]*0.75)):
-            # if i % 6 == 2 or i % 6 == 3:
-            if i % 6 == 2 or i % 6 == 3 or i % 6 == 4 or i % 6 == 1:
+        if (i > int(images_a.shape[0]*0.25) and i < int(images_a.shape[0]*0.75)) or (i > images_a.shape[0] + int(images_b.shape[0]*0.25) and i < images_a.shape[0] + int(images_b.shape[0]*0.75)):
+            if i % 6 == 2 or i % 6 == 3:
                 if i//6 % 10 == 0:
                     ids.append(i)
     print(len(ids))
@@ -54,4 +64,4 @@ if __name__ == '__main__':
 
     o3d.visualization.draw_geometries([pcd])
 
-    o3d.io.write_point_cloud('./data/pointcloud_6000_east.pcd', pcd)
+    o3d.io.write_point_cloud('./data/poincloud_both_10000_miss.pcd', pcd)
