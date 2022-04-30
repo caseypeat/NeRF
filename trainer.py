@@ -156,7 +156,7 @@ class Trainer(object):
         self.logger.scalar('loss_rgb (seconds)', loss_rgb, int(time.time() - self.t0_train))
         self.logger.scalar('psnr_rgb (seconds)', helpers.psnr(rgb, rgb_gt), int(time.time() - self.t0_train))
 
-        self.logger.scalar('R', torch.linalg.norm(aux_outputs['R']), self.iter)
-        self.logger.scalar('T', torch.linalg.norm(aux_outputs['T']), self.iter)
+        # self.logger.scalar('R', torch.linalg.norm(aux_outputs['R']), self.iter)
+        # self.logger.scalar('T', torch.linalg.norm(aux_outputs['T']), self.iter)
 
         return loss

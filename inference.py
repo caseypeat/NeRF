@@ -125,7 +125,8 @@ class Inferencer(object):
 
         num_samples = self.voxel_res**3
 
-        points = torch.zeros((0, 4), device='cuda')
+        points = torch.zeros((0, 3), device='cuda')
+        colors = torch.zeros((0, 3), device='cuda')
 
         for a in tqdm(range(0, num_samples, self.batch_size)):
             b = min(num_samples, a+self.batch_size)
@@ -136,20 +137,26 @@ class Inferencer(object):
             y = voxels[torch.div(n, self.voxel_res, rounding_mode='floor') % self.voxel_res]
             z = voxels[n % self.voxel_res]
 
-            xyz = torch.stack((x, y, z), dim=-1)
+            xyz = torch.stack((x, y, z), dim=-1).cuda()
 
             x_i = ((x+1)/2*mask.shape[0]).to(int)
             y_i = ((y+1)/2*mask.shape[1]).to(int)
             z_i = ((z+1)/2*mask.shape[2]).to(int)
 
             xyz = xyz[mask[x_i, y_i, z_i]].view(-1, 3)
+            
+            dirs = torch.Tensor(np.array([0, 0, 1]))[None, ...].expand(xyz.shape[0], 3).cuda()
+            n_i = torch.zeros((xyz.shape[0]), dtype=int).cuda()
 
             if xyz.shape[0] > 0:
-                sigmas = self.model.density(xyz).to(torch.float32)
-                new_points = torch.cat((xyz[sigmas[..., None].expand(-1, 3) > self.thresh].view(-1, 3), sigmas[sigmas > self.thresh][..., None]), dim=-1)
+                sigmas, rgbs = self.model(xyz, dirs, n_i)
+                # new_points = torch.cat((xyz[sigmas[..., None].expand(-1, 3) > self.thresh].view(-1, 3), sigmas[sigmas > self.thresh][..., None]), dim=-1)
+                new_points = xyz[sigmas[..., None].expand(-1, 3) > self.thresh].view(-1, 3)
                 points = torch.cat((points, new_points))
+                new_colors = rgbs[sigmas[..., None].expand(-1, 3) > self.thresh].view(-1, 3)
+                colors = torch.cat((colors, new_colors))
 
-        return points
+        return points, colors
 
 
     @torch.no_grad()

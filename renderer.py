@@ -136,8 +136,8 @@ class NerfRenderer(nn.Module):
         aux_outputs['sigmas'] = sigmas
         aux_outputs['rgbs'] = rgbs
         aux_outputs['xyzs'] = xyzs
-        aux_outputs['R'] = torch.clone(self.R)
-        aux_outputs['T'] = torch.clone(self.T)
+        # aux_outputs['R'] = torch.clone(self.R)
+        # aux_outputs['T'] = torch.clone(self.T)
 
         return image, weights, z_vals_log_s, aux_outputs
 

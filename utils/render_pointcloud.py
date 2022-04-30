@@ -52,6 +52,6 @@ if __name__ == '__main__':
     pcd.points = o3d.utility.Vector3dVector(points)
     pcd.colors = o3d.utility.Vector3dVector(colors)
 
-    o3d.visualization.draw_geometries([pcd])
+    # o3d.visualization.draw_geometries([pcd])
 
-    o3d.io.write_point_cloud('./data/pointcloud_6000_east.pcd', pcd)
+    o3d.io.write_point_cloud('./data/pointcloud_8000_east_0.1.pcd', pcd)

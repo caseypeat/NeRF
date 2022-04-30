@@ -23,7 +23,7 @@ if __name__ == '__main__':
     images_a, depths_a, intrinsics_a, extrinsics_a = meta_camera_geometry_real(cfg.scene.scene_path_a, cfg.scene.frame_range)
     images_b, depths_b, intrinsics_b, extrinsics_b = meta_camera_geometry_real(cfg.scene.scene_path_b, cfg.scene.frame_range)
 
-    transform = np.load('./data/transforms/east_west.npy')
+    transform = np.load('./data/transforms/east_west_refine.npy')
     extrinsics_a = torch.Tensor(transform) @ extrinsics_a
 
     images = torch.cat([images_a, images_b], dim=0)
@@ -51,7 +51,7 @@ if __name__ == '__main__':
     optimizer = torch.optim.Adam([
             {'name': 'encoding', 'params': list(model.encoder.parameters()), 'lr': cfg.optimizer.encoding.lr},
             {'name': 'latent_emb', 'params': [model.latent_emb], 'lr': cfg.optimizer.latent_emb.lr},
-            {'name': 'transform', 'params': [model.R, model.T], 'lr': cfg.optimizer.latent_emb.lr},
+            # {'name': 'transform', 'params': [model.R, model.T], 'lr': cfg.optimizer.latent_emb.lr},
             {'name': 'net', 'params': list(model.sigma_net.parameters()) + list(model.color_net.parameters()), 'weight_decay': cfg.optimizer.net.weight_decay, 'lr': cfg.optimizer.net.lr},
         ], betas=cfg.optimizer.betas, eps=cfg.optimizer.eps)
 

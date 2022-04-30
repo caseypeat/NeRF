@@ -89,8 +89,8 @@ if __name__ == '__main__':
 
 
     result_ransac, result_icp = allign_pointclouds(pcd_a, pcd_b, voxel_size=0.01)
-    pcd_a.transform(result_ransac.transformation)
-    o3d.visualization.draw_geometries([pcd_a, pcd_b])
+    # pcd_a.transform(result_ransac.transformation)
+    # o3d.visualization.draw_geometries([pcd_a, pcd_b])
     # pcd_a.transform(result_icp.transformation)
     # o3d.visualization.draw_geometries([pcd_a, pcd_b])
     # np.save('./data/transforms/east_west.npy', result_icp.transformation)
@@ -117,7 +117,7 @@ if __name__ == '__main__':
 
     losses = []
 
-    for i in tqdm(range(500)):
+    for i in tqdm(range(1000)):
         optimizer.zero_grad()
 
         n = torch.randint(0, N, (n_rays,))
@@ -213,7 +213,11 @@ if __name__ == '__main__':
     transform[:3, :3] = Exp(R)
     transform[:3, 3] = T
 
+    transform_comb = np.array(transform.detach().cpu()) @ np.array(transform_icp.detach().cpu())
+
     # pcd_a.transform(np.array(transform_icp.detach().cpu()))
-    pcd_a.transform(np.array(transform.detach().cpu()))
+    pcd_a.transform(transform_comb)
     o3d.visualization.draw_geometries([pcd_a, pcd_b])
+
+    np.save('./data/transforms/east_west_refine.npy', transform_comb)
 

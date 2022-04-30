@@ -1,15 +1,15 @@
 
 scene:
-  scene_path: /home/casey/Documents/PhD/data/conan_scans/ROW_349_EAST_SLOW_0006/scene.json
-  # scene_path: /home/casey/Documents/PhD/data/conan_scans/ROW_349_WEST_SLOW_0007/scene.json
-  image_scale: 0.5
+  scene_path_a: /home/casey/Documents/PhD/data/conan_scans/ROW_349_EAST_SLOW_0006/scene.json
+  scene_path_b: /home/casey/Documents/PhD/data/conan_scans/ROW_349_WEST_SLOW_0007/scene.json
+  image_scale: 0.33
   inner_bound: 2
   outer_bound: 2.5
   real: True
   frame_range: null
 
 log:
-  root_dir: './logs/east_west2'
+  root_dir: './logs/east_west_both_debug'
   eval_image_freq: 60
   eval_pointcloud_freq: 60
   save_weights_freq: 60
@@ -41,8 +41,8 @@ inference:
   n_rays: 8192
   # n_rays: 16384
   image_num: 303
-  voxel_res: 1024
-  thresh: 10
+  voxel_res: 2048
+  thresh: 100
   batch_size: 2097152
 
 renderer:
