@@ -42,12 +42,91 @@ def Exp(r):
     return R
 
 
+def vec2skew_vec(v):
+    """
+    :param v:  (N, 3, ) torch tensor
+    :return:   (N, 3, 3)
+    """
+    zero = torch.zeros((v.shape[0], 1), dtype=torch.float32, device=v.device)
+    skew_v0 = torch.cat([ zero,    -v[:, 2:3],   v[:, 1:2]], dim=-1)  # (N, 3)
+    skew_v1 = torch.cat([ v[:, 2:3],   zero,    -v[:, 0:1]], dim=-1)
+    skew_v2 = torch.cat([-v[:, 1:2],   v[:, 0:1],   zero], dim=-1)
+    skew_v = torch.stack([skew_v0, skew_v1, skew_v2], dim=1)  # (N, 3_, 3)
+    return skew_v  # (N, 3, 3)
+
+
+def Exp_vec(r):
+    """so(3) vector to SO(3) matrix
+    :param r: (N, 3, ) axis-angle, torch tensor
+    :return:  (N, 3, 3)
+    """
+    skew_r = vec2skew_vec(r)  # (N, 3, 3)
+    norm_r = torch.linalg.norm(r, dim=1) + 1e-15
+    norm_r = norm_r[:, None, None]
+    eye = torch.eye(3, dtype=torch.float32, device=r.device)[None, :, :].expand(r.shape[0], 3, 3)
+    R = eye + ((torch.sin(norm_r) / norm_r) * skew_r + ((1 - torch.cos(norm_r)) / norm_r**2) * (skew_r @ skew_r))
+    return R
+
+
+
+def sample_dist(dist, batch_size):
+    pdf = dist / torch.sum(dist, dim=0, keepdim=True)
+    cdf = torch.cumsum(pdf, dim=0)
+    l = torch.linspace(0+1/cdf.shape[0]/2, 1-1/cdf.shape[0]/2, cdf.shape[0])
+    u = torch.rand((batch_size,))
+    u = u * (cdf[-2] - cdf[1] - 2e-5)
+    u = u + cdf[1] + 1e-5
+    inds = torch.searchsorted(cdf, u, right=True)
+    cdf_below = torch.gather(input=cdf, dim=0, index=inds-1)
+    cdf_above = torch.gather(input=cdf, dim=0, index=inds)
+    t = (u - cdf_below) / (cdf_above - cdf_below)
+
+    l_below = torch.gather(input=l, dim=0, index=inds-1)
+    l_above = torch.gather(input=l, dim=0, index=inds)
+    s = l_below + (l_above - l_below) * t
+    return s
+
+
+def sample_rt(r_dist, t_dist, batch_size):
+    R = torch.zeros((batch_size, 3))
+    R[:, 0] = sample_dist(r_dist[:, 0], batch_size) * 2 - 1
+    R[:, 1] = sample_dist(r_dist[:, 1], batch_size) * 2 - 1
+    R[:, 2] = sample_dist(r_dist[:, 2], batch_size) * 2 - 1
+
+    T = torch.zeros((batch_size, 3))
+    T[:, 0] = sample_dist(t_dist[:, 0], batch_size) * 4 - 2
+    T[:, 1] = sample_dist(t_dist[:, 1], batch_size) * 4 - 2
+    T[:, 2] = sample_dist(t_dist[:, 2], batch_size) * 4 - 2
+
+    return R, T
+
+
 
 if __name__ == '__main__':
 
-    thresh = 100
+    # dist = torch.arange(10)
+    # s = sample_dist(dist, 10000)
+    # hist, bounds = np.histogram(s.numpy())
+    # print(hist)
+    # print(bounds)
+    # plt.plot(bounds[:-1], hist)
+    # plt.show()
+    # print(torch.mean(s))
+    # exit()
 
-    # images, depths, intrinsics, extrinsics = meta_camera_geometry_real(cfg.scene.scene_path, cfg.scene.frame_range)
+    # R_test = torch.rand((2, 3))
+    # T_test = torch.rand((2, 3))
+
+    # a_ = Exp(R_test[0])
+    # print(a_)
+    # a = Exp_vec(R_test)
+    # print(a[0])
+    # print(a[1])
+
+
+    # exit()
+
+    thresh = 100
 
     N_a = 1176
     model_a = NeRFNetwork(
@@ -88,24 +167,19 @@ if __name__ == '__main__':
     pcd_b.paint_uniform_color([0, 1, 1])
 
 
-    result_ransac, result_icp = allign_pointclouds(pcd_a, pcd_b, voxel_size=0.01)
-    # pcd_a.transform(result_ransac.transformation)
-    # o3d.visualization.draw_geometries([pcd_a, pcd_b])
-    # pcd_a.transform(result_icp.transformation)
-    # o3d.visualization.draw_geometries([pcd_a, pcd_b])
-    # np.save('./data/transforms/east_west.npy', result_icp.transformation)
+    # result_ransac, result_icp = allign_pointclouds(pcd_a, pcd_b, voxel_size=0.01)
 
-    transform_icp = torch.Tensor(result_ransac.transformation).cuda()
+    # transform_icp = torch.Tensor(result_ransac.transformation).cuda()
     # transform_icp = torch.Tensor(np.load('./data/transforms/east_west.npy')).cuda()
     # transform_icp = torch.Tensor(np.eye(4)).cuda()
-    # z = np.array(pcd_a.points)
-    # y = o3d.utility.Vector3dVector((np.array(transform.cpu()) @ np.concatenate([z, np.ones((z.shape[0], 1))], axis=1).T).T[:, :3])
-    # x = o3d.geometry.PointCloud()
-    # x.points = y
-    # o3d.visualization.draw_geometries([x, pcd_b])
 
-    R = torch.nn.Parameter(torch.zeros((3,)), requires_grad=True)
-    T = torch.nn.Parameter(torch.zeros((3,)), requires_grad=True)
+    dim = 1000
+
+    # R_dist = torch.nn.Parameter(torch.full((dim, 3), 1/dim), requires_grad=True)
+    # T_dist = torch.nn.Parameter(torch.full((dim, 3), 1/dim), requires_grad=True)
+
+    R_dist = torch.nn.Parameter(torch.zeros((dim, 3)), requires_grad=True)
+    T_dist = torch.nn.Parameter(torch.zeros((dim, 3)), requires_grad=True)
 
     n_rays = 4096
 
@@ -113,16 +187,11 @@ if __name__ == '__main__':
     H, W = 1500, 2000
 
     # optimizer = torch.optim.SGD([{'params': [R, T]}], lr=1e-6, momentum=0.9)
-    optimizer = torch.optim.Adam([{'params': [R, T]}], lr=1e-3)
-
-    num_iters = 1000
-
-    lmbda = lambda x: 0.1**(x/(num_iters))
-    scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lmbda, last_epoch=-1, verbose=False)
+    optimizer = torch.optim.Adam([{'params': [R_dist, T_dist]}], lr=1e-4)
 
     losses = []
 
-    for i in tqdm(range(num_iters)):
+    for i in tqdm(range(1000)):
         optimizer.zero_grad()
 
         n = torch.randint(0, N, (n_rays,))
@@ -143,6 +212,8 @@ if __name__ == '__main__':
 
         N_rays, N_samples = z_vals.shape[:2]
 
+
+
         sigmas_a = model_a.density(s_xyzs_a)
 
         delta = z_vals_log.new_zeros([N_rays, N_samples])  # [N_rays, N_samples]
@@ -153,17 +224,24 @@ if __name__ == '__main__':
         alpha_shift = torch.cat([alpha.new_zeros((alpha.shape[0], 1)), alpha], dim=-1)[:, :-1]  # [N_rays, N_samples]
         weights_a = alpha * torch.cumprod(1 - alpha_shift, dim=-1)  # [N_rays, N_samples]
 
-        transform = torch.eye(4, dtype=torch.float32, device='cuda')
-        transform[:3, :3] = Exp(R)
-        transform[:3, 3] = T
 
-        b = xyzs_a.reshape(-1, 3)
-        b1 = torch.cat([b, n.new_ones((b.shape[0], 1))], dim=1)
-        b2 = (transform_icp @ b1.T).T
-        b3 = (transform @ b2.T).T
-        xyzs_b = b3[:, :3].reshape(*xyzs_a.shape)
+        R, T = sample_rt(torch.sigmoid(R_dist), torch.sigmoid(T_dist), n_rays)
 
-        # xyzs_a = transform @ torch.cat([xyzs_b.view(-1, 3), xyzs_b.new_zeros()
+        # (n_rays, 4, 4)
+        transform = torch.clone(torch.eye(4, dtype=torch.float32, device='cuda')[None, :, :].expand(n_rays, 4, 4))
+        transform[:, :3, :3] = Exp_vec(R)
+        transform[:, :3, 3] = T
+
+        b1 = torch.cat([xyzs_a, n.new_ones((*xyzs_a.shape[:-1], 1))], dim=-1)  # (n_rays, n_samples, 4)
+        b2 = (torch.bmm(transform, b1.permute(0, 2, 1))).permute(0, 2, 1)  # (n_rays, n_samples, 4)
+        xyzs_b = b2[..., :3].reshape(*xyzs_a.shape)
+
+        # b = xyzs_a.reshape(-1, 3)
+        # b1 = torch.cat([b, n.new_ones((b.shape[0], 1))], dim=1)
+        # b2 = (transform_icp @ b1.T).T
+        # b3 = (transform @ b2.T).T
+        # xyzs_b = b3[:, :3].reshape(*xyzs_a.shape)
+
         s_xyzs_b = helpers.mipnerf360_scale(xyzs_b, model_b.inner_bound, model_b.outer_bound)
 
         sigmas_b = model_b.density(s_xyzs_b)
@@ -178,8 +256,6 @@ if __name__ == '__main__':
         alpha_shift = torch.cat([alpha.new_zeros((alpha.shape[0], 1)), alpha], dim=-1)[:, :-1]  # [N_rays, N_samples]
         weights_b = alpha * torch.cumprod(1 - alpha_shift, dim=-1)  # [N_rays, N_samples]
 
-        # wa = (weights_a+1e-6) / (torch.sum((weights_a+1e-6), dim=-1, keepdim=True))
-        # wb = (weights_b+1e-6) / (torch.sum((weights_b+1e-6), dim=-1, keepdim=True))
 
         wa = torch.clone(weights_a)
         wa[:, -1] = 1 - torch.sum(weights_a, dim=-1)
@@ -194,38 +270,26 @@ if __name__ == '__main__':
 
         loss.backward()
         optimizer.step()
-        scheduler.step()
 
         losses.append(loss.item())
 
-        # weights_mse = torch.sqrt(torch.square(weights_a) + torch.square(weights_b)) + 1e-6
-        # weights_mse = weights_mse / (torch.sum(weights_mse, dim=-1, keepdim=True))
-
-        # loss = helpers.criterion_dist(weights_mse, z_vals)
-
-        # loss = F.mse_loss(weights_a, weights_b)
         if i % 100 == 0:
             if i == 0:
                 print(f'{loss.item():.6f}')
-                print(R)
-                print(T)
+                # print(R)
+                # print(T)
             else:
                 print(f'{(sum(losses[-100:]) / 100):.6f}')
-                print(R)
-                print(T)
+                # print(R)
+                # print(T)
 
-        # print('done')
-        # exit()
 
-    transform = torch.eye(4, dtype=torch.float32, device='cuda')
-    transform[:3, :3] = Exp(R)
-    transform[:3, 3] = T
+    # transform = torch.eye(4, dtype=torch.float32, device='cuda')
+    # transform[:3, :3] = Exp(R)
+    # transform[:3, 3] = T
 
-    transform_comb = np.array(transform.detach().cpu()) @ np.array(transform_icp.detach().cpu())
+    # transform_comb = np.array(transform.detach().cpu()) @ np.array(transform_icp.detach().cpu())
 
-    # pcd_a.transform(np.array(transform_icp.detach().cpu()))
-    pcd_a.transform(transform_comb)
-    o3d.visualization.draw_geometries([pcd_a, pcd_b])
-
-    # np.save('./data/transforms/east_west_refine.npy', transform_comb)
+    # pcd_a.transform(transform)
+    # o3d.visualization.draw_geometries([pcd_a, pcd_b])
 
