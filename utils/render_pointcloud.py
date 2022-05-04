@@ -38,15 +38,18 @@ if __name__ == '__main__':
     for i in range(N):
         # if i % 6 == 2 or i % 6 == 3 or i % 6 == 4 or i % 6 == 1:
         if (i > int(images.shape[0]*0.25) and i < int(images.shape[0]*0.75)):
+            if i % 6 == 2:
             # if i % 6 == 2 or i % 6 == 3:
-            if i % 6 == 2 or i % 6 == 3 or i % 6 == 4 or i % 6 == 1:
-                if i//6 % 10 == 0:
+            # if i % 6 == 2 or i % 6 == 3 or i % 6 == 4 or i % 6 == 1:
+                if i//6 % 100 == 0:
                     ids.append(i)
     print(len(ids))
     ids = torch.Tensor(np.array(ids)).to(int)
     # ids = torch.Tensor(np.array([303, 304])).to(int)
 
-    points, colors = inferencer.extract_geometry_rays(H, W, intrinsics[ids], extrinsics[ids], thresh=100)
+    points, colors = inferencer.extract_geometry_rays_weights2(H, W, intrinsics[ids], extrinsics[ids], 0.1)
+
+    print(points.shape, colors.shape)
 
     pcd = o3d.geometry.PointCloud()
     pcd.points = o3d.utility.Vector3dVector(points)
@@ -54,4 +57,4 @@ if __name__ == '__main__':
 
     # o3d.visualization.draw_geometries([pcd])
 
-    o3d.io.write_point_cloud('./data/pointcloud_8000_east_0.1.pcd', pcd)
+    o3d.io.write_point_cloud('./data/east_west/east_0.5_t.pcd', pcd)

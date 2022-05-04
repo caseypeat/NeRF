@@ -187,10 +187,12 @@ if __name__ == '__main__':
         wb = torch.clone(weights_b)
         wb[:, -1] = 1 - torch.sum(weights_b, dim=-1)
 
-        w = torch.bmm(wa[:, :, None], wb[:, None, :])
-        s = torch.abs(z_vals_log[:, :, None] - z_vals_log[:, None, :])
-        loss = w * s
-        loss = torch.mean(torch.sum(loss, dim=[1, 2]))
+        # w = torch.bmm(wa[:, :, None], wb[:, None, :])
+        # s = torch.abs(z_vals_log[:, :, None] - z_vals_log[:, None, :])
+        # loss = w * s
+        # loss = torch.mean(torch.sum(loss, dim=[1, 2]))
+
+        loss = F.mse_loss(wa, wb)
 
         loss.backward()
         optimizer.step()
@@ -224,6 +226,7 @@ if __name__ == '__main__':
     transform_comb = np.array(transform.detach().cpu()) @ np.array(transform_icp.detach().cpu())
 
     # pcd_a.transform(np.array(transform_icp.detach().cpu()))
+    o3d.visualization.draw_geometries([pcd_a, pcd_b])
     pcd_a.transform(transform_comb)
     o3d.visualization.draw_geometries([pcd_a, pcd_b])
 

@@ -117,6 +117,58 @@ class Inferencer(object):
 
 
     @torch.no_grad()
+    def render_invdepth_thresh_weights(self, H, W, K, E):
+
+        # _f : flattened
+        # _b : batched
+
+        K = K.to('cuda')
+        E = E.to('cuda')
+
+        h = torch.arange(0, H, device='cuda')
+        w = torch.arange(0, W, device='cuda')
+
+        h, w = torch.meshgrid(h, w, indexing='ij')
+
+        h_f = torch.reshape(h, (-1,))
+        w_f = torch.reshape(w, (-1,))
+
+        invdepth_thresh_f = torch.zeros(h_f.shape)
+
+        for a in tqdm(range(0, len(h_f), self.n_rays)):
+            b = min(len(h_f), a+self.n_rays)
+
+            h_fb = h_f[a:b]
+            w_fb = w_f[a:b]
+            n_fb = torch.full(h_fb.shape, fill_value=cfg.inference.image_num, device='cuda')
+
+            color_bg = torch.ones(3, device='cuda') # [3], fixed white background
+
+            _, weights_fb, _, aux_outputs_fb = self.model.render(n_fb, h_fb, w_fb, K[None, ...], E[None, ...], bg_color=color_bg)
+
+            z_vals_fb = aux_outputs_fb['z_vals']
+
+            weights_cdf_fb = torch.cumsum(weights_fb, dim=-1)
+
+            thresh = 0.5
+            weights_cdf_thresh_fb = torch.clone(weights_cdf_fb)
+            weights_cdf_thresh_fb[weights_cdf_thresh_fb < thresh] = 0
+            weights_cdf_thresh_fb[weights_cdf_thresh_fb >= thresh] = 1
+            weights_cdf_thresh_s_fb = (1 - torch.cumsum(weights_cdf_thresh_fb[..., :-1], dim=-1))
+            weights_cdf_thresh_s_fb[weights_cdf_thresh_s_fb < 0] = 0
+            weights_cdf_thresh_fb[..., 1:] = weights_cdf_thresh_fb[..., 1:] * weights_cdf_thresh_s_fb
+
+            invdepth_thresh_fb = 1 / torch.sum(weights_cdf_thresh_fb * z_vals_fb, dim=-1)
+            invdepth_thresh_fb[torch.sum(weights_cdf_thresh_fb, dim=-1) == 0] = 0
+
+            invdepth_thresh_f[a:b] = invdepth_thresh_fb
+
+        invdepth_thresh = torch.reshape(invdepth_thresh_f, h.shape)
+
+        return invdepth_thresh
+
+
+    @torch.no_grad()
     def extract_geometry(self, N, H, W, K, E):
 
         mask = helpers.get_valid_positions(N, H, W, K.to('cuda'), E.to('cuda'), res=128)
@@ -203,6 +255,155 @@ class Inferencer(object):
 
                 points_b = xyzs_fb[sigmas_thresh_fb.to(bool)[..., None].expand(-1, -1, 3) & (torch.linalg.norm(xyzs_fb, dim=-1, keepdim=True).expand(-1, -1, 3) < cfg.scene.inner_bound)].reshape(-1, 3)
                 colors_b = rgbs_fb[sigmas_thresh_fb.to(bool)[..., None].expand(-1, -1, 3) & (torch.linalg.norm(xyzs_fb, dim=-1, keepdim=True).expand(-1, -1, 3) < cfg.scene.inner_bound)].reshape(-1, 3)
+
+                points = torch.cat([points, points_b], dim=0)
+                colors = torch.cat([colors, colors_b], dim=0)
+
+        return points.cpu().numpy(), colors.cpu().numpy()
+
+
+    @torch.no_grad()
+    def extract_geometry_rays_weights(self, H, W, Ks, Es, thresh=0.5):
+        N = Ks.shape[0]
+
+        points = torch.zeros((0, 3), device='cuda')
+        colors = torch.zeros((0, 3), device='cuda')
+
+        for K, E in zip(Ks, Es):
+
+            K = K.to('cuda')
+            E = E.to('cuda')
+
+            h = torch.arange(0, H, device='cuda')
+            w = torch.arange(0, W, device='cuda')
+            
+
+            h, w = torch.meshgrid(h, w, indexing='ij')
+
+            h_f = torch.reshape(h, (-1,))
+            w_f = torch.reshape(w, (-1,))
+
+            for a in tqdm(range(0, len(h_f), self.n_rays)):
+                b = min(len(h_f), a+self.n_rays)
+
+                h_fb = h_f[a:b]
+                w_fb = w_f[a:b]
+                n_fb = torch.full(h_fb.shape, fill_value=cfg.inference.image_num, device='cuda')
+
+                color_bg = torch.ones(3, device='cuda') # [3], fixed white background
+
+                image_fb, weights_fb, _, aux_outputs_fb = self.model.render(n_fb, h_fb, w_fb, K[None, ...], E[None, ...], color_bg)
+
+                xyzs_fb = aux_outputs_fb['xyzs']
+                rgbs_fb = aux_outputs_fb['rgbs']
+                z_vals_fb = aux_outputs_fb['z_vals']
+
+                weights_cdf_fb = torch.cumsum(weights_fb, dim=-1)
+
+                weights_cdf_thresh_fb = torch.clone(weights_cdf_fb)
+                weights_cdf_thresh_fb[weights_cdf_thresh_fb < thresh] = 0
+                weights_cdf_thresh_fb[weights_cdf_thresh_fb >= thresh] = 1
+                weights_cdf_thresh_s_fb = (1 - torch.cumsum(weights_cdf_thresh_fb[..., :-1], dim=-1))
+                weights_cdf_thresh_s_fb[weights_cdf_thresh_s_fb < 0] = 0
+                weights_cdf_thresh_fb[..., 1:] = weights_cdf_thresh_fb[..., 1:] * weights_cdf_thresh_s_fb
+
+                points_b = xyzs_fb[weights_cdf_thresh_fb.to(bool)[..., None].expand(-1, -1, 3) & (torch.linalg.norm(xyzs_fb, dim=-1, keepdim=True).expand(-1, -1, 3) < cfg.scene.inner_bound)].reshape(-1, 3)
+                colors_b = rgbs_fb[weights_cdf_thresh_fb.to(bool)[..., None].expand(-1, -1, 3) & (torch.linalg.norm(xyzs_fb, dim=-1, keepdim=True).expand(-1, -1, 3) < cfg.scene.inner_bound)].reshape(-1, 3)
+
+                points = torch.cat([points, points_b], dim=0)
+                colors = torch.cat([colors, colors_b], dim=0)
+
+        return points.cpu().numpy(), colors.cpu().numpy()
+
+
+    @torch.no_grad()
+    def extract_geometry_rays_weights2(self, H, W, Ks, Es, max_sigma):
+        N = Ks.shape[0]
+
+        points = torch.zeros((0, 3), device='cuda')
+        colors = torch.zeros((0, 3), device='cuda')
+
+        for K, E in zip(Ks, Es):
+
+            K = K.to('cuda')
+            E = E.to('cuda')
+
+            h = torch.arange(0, H, device='cuda')
+            w = torch.arange(0, W, device='cuda')
+            
+
+            h, w = torch.meshgrid(h, w, indexing='ij')
+
+            h_f = torch.reshape(h, (-1,))
+            w_f = torch.reshape(w, (-1,))
+
+            for a in tqdm(range(0, len(h_f), self.n_rays)):
+                b = min(len(h_f), a+self.n_rays)
+
+                h_fb = h_f[a:b]
+                w_fb = w_f[a:b]
+                n_fb = torch.full(h_fb.shape, fill_value=cfg.inference.image_num, device='cuda')
+
+                color_bg = torch.ones(3, device='cuda') # [3], fixed white background
+
+                image_fb, weights_fb, _, aux_outputs_fb = self.model.render(n_fb, h_fb, w_fb, K[None, ...], E[None, ...], color_bg)
+
+                xyzs_fb = aux_outputs_fb['xyzs']
+                rgbs_fb = aux_outputs_fb['rgbs']
+                z_vals_fb = aux_outputs_fb['z_vals']
+                z_vals_log_fb = aux_outputs_fb['z_vals_log']
+
+                delta = z_vals_fb.new_zeros(z_vals_fb.shape)
+                delta[:-1] = z_vals_fb[1:] - z_vals_fb[:-1]
+
+                weights_cdf_fb = torch.cumsum(weights_fb*delta, dim=-1)
+                # print(weights_cdf_fb.shape)
+                # for i in range(weights_fb.shape[0]):
+                #     if weights_cdf_fb[i, -1] > 0.9:
+                #         pdf = weights_fb[i].cpu().numpy()
+                #         cdf = weights_cdf_fb[i].cpu().numpy()
+                #         z = z_vals_fb[i].cpu().numpy()
+
+                #         mask = z < 1
+
+                #         if cdf[mask][-1] > 0.9:
+
+                #             fig, ax = plt.subplots(1, 2)
+                #             ax[0].plot(z[mask], pdf[mask])
+                #             ax[1].plot(z[mask], cdf[mask])
+                #             plt.show()
+
+                thresh_a = 0.2
+                weights_cdf_thresh_a_fb = torch.clone(weights_cdf_fb)
+                weights_cdf_thresh_a_fb[weights_cdf_thresh_a_fb < thresh_a] = 0
+                weights_cdf_thresh_a_fb[weights_cdf_thresh_a_fb >= thresh_a] = 1
+                weights_cdf_thresh_a_s_fb = (1 - torch.cumsum(weights_cdf_thresh_a_fb[..., :-1], dim=-1))
+                weights_cdf_thresh_a_s_fb[weights_cdf_thresh_a_s_fb < 0] = 0
+                weights_cdf_thresh_a_fb[..., 1:] = weights_cdf_thresh_a_fb[..., 1:] * weights_cdf_thresh_a_s_fb
+                
+                thresh_m = 0.5
+                weights_cdf_thresh_m_fb = torch.clone(weights_cdf_fb)
+                weights_cdf_thresh_m_fb[weights_cdf_thresh_m_fb < thresh_m] = 0
+                weights_cdf_thresh_m_fb[weights_cdf_thresh_m_fb >= thresh_m] = 1
+                weights_cdf_thresh_m_s_fb = (1 - torch.cumsum(weights_cdf_thresh_m_fb[..., :-1], dim=-1))
+                weights_cdf_thresh_m_s_fb[weights_cdf_thresh_m_s_fb < 0] = 0
+                weights_cdf_thresh_m_fb[..., 1:] = weights_cdf_thresh_m_fb[..., 1:] * weights_cdf_thresh_m_s_fb
+                
+                thresh_b = 0.8
+                weights_cdf_thresh_b_fb = torch.clone(weights_cdf_fb)
+                weights_cdf_thresh_b_fb[weights_cdf_thresh_b_fb < thresh_b] = 0
+                weights_cdf_thresh_b_fb[weights_cdf_thresh_b_fb >= thresh_b] = 1
+                weights_cdf_thresh_b_s_fb = (1 - torch.cumsum(weights_cdf_thresh_b_fb[..., :-1], dim=-1))
+                weights_cdf_thresh_b_s_fb[weights_cdf_thresh_b_s_fb < 0] = 0
+                weights_cdf_thresh_b_fb[..., 1:] = weights_cdf_thresh_b_fb[..., 1:] * weights_cdf_thresh_b_s_fb
+
+                depth_a = torch.sum(weights_cdf_thresh_a_fb * z_vals_fb, dim=-1)
+                depth_b = torch.sum(weights_cdf_thresh_b_fb * z_vals_fb, dim=-1)
+                mask = torch.abs(depth_a - depth_b) < max_sigma
+
+
+                points_b = xyzs_fb[weights_cdf_thresh_m_fb.to(bool)[..., None].expand(-1, -1, 3) & (torch.linalg.norm(xyzs_fb, dim=-1, keepdim=True).expand(-1, -1, 3) < cfg.scene.inner_bound) & mask[:, None, None].expand(-1, weights_cdf_fb.shape[1], 3)].reshape(-1, 3)
+                colors_b = rgbs_fb[weights_cdf_thresh_m_fb.to(bool)[..., None].expand(-1, -1, 3) & (torch.linalg.norm(xyzs_fb, dim=-1, keepdim=True).expand(-1, -1, 3) < cfg.scene.inner_bound) & mask[:, None, None].expand(-1, weights_cdf_fb.shape[1], 3)].reshape(-1, 3)
 
                 points = torch.cat([points, points_b], dim=0)
                 colors = torch.cat([colors, colors_b], dim=0)

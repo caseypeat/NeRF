@@ -38,7 +38,8 @@ if __name__ == '__main__':
 
     image, invdepth = inferencer.render_image(H, W, model.intrinsics[cfg.inference.image_num], model.extrinsics[cfg.inference.image_num])
     invdepth_thesh = inferencer.render_invdepth_thresh(H, W, model.intrinsics[cfg.inference.image_num], model.extrinsics[cfg.inference.image_num])
-    output = np.concatenate([image.cpu().numpy()[..., np.array([2, 1, 0], dtype=int)], color_depthmap(invdepth.cpu().numpy(), 4, 0), color_depthmap(invdepth_thesh.cpu().numpy(), 4, 0)], axis=0).transpose(1, 0, 2)
+    invdepth_thesh_weights = inferencer.render_invdepth_thresh_weights(H, W, model.intrinsics[cfg.inference.image_num], model.extrinsics[cfg.inference.image_num])
+    output = np.concatenate([image.cpu().numpy()[..., np.array([2, 1, 0], dtype=int)], color_depthmap(invdepth_thesh_weights.cpu().numpy(), 4, 0), color_depthmap(invdepth_thesh.cpu().numpy(), 4, 0)], axis=0).transpose(1, 0, 2)[::-1, :, :]
 
     # cv2.imwrite(f'./data/demo_clip2/{i:03d}.png', np.uint8(disp[..., np.array([2, 1, 0], dtype=int)] * 255))
 

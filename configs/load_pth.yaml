@@ -1,5 +1,9 @@
 nets:
-  load_path: ./logs/east_west_both_debug/20220430_181628/model/6000.pth
+  # load_path: ./logs/east_west_both_debug/20220430_181628/model/6000.pth
+  load_path: ./logs/east_west/20220429_175050/model/6000.pth
+
+inference:
+  image_num: 303
 
 inference:
   voxel_res: 2048
