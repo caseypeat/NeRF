@@ -28,7 +28,7 @@ class Logger(object):
     def __init__(self, root_dir):
         self.log_dir = os.path.join(root_dir, datetime.today().strftime('%Y%m%d_%H%M%S'))
         self.images_dir = os.path.join(self.log_dir, 'images')
-        self.pointcloud_dir = os.path.join(self.log_dir, 'pointcloud')
+        self.pointcloud_dir = os.path.join(self.log_dir, 'pointclouds')
         self.model_dir = os.path.join(self.log_dir, 'model')
         self.tensorboard_dir = os.path.join(self.log_dir, 'tensorboard')
 
@@ -76,13 +76,22 @@ class Logger(object):
         self.writer.add_image(string, grey_c, step, dataformats='HWC')
         cv2.imwrite(file_path, np.uint8(grey_c[..., np.array([2, 1, 0], dtype=int)]*255))
 
-    def pointcloud(self, points, step):
-        file_path = os.path.join(self.pointcloud_dir, f'{step}.pcd')
-        points, colors = points[..., :3], points[..., 3:]
+    def pointcloud(self, pointcloud, step):
+        directory_path_np = os.path.join(self.pointcloud_dir, 'numpy')
+        if not os.path.exists(directory_path_np):
+            os.mkdir(directory_path_np)
+        file_path_np = os.path.join(directory_path_np, f'{step}.npy')
+        np.save(file_path_np, pointcloud)
+        
+        directory_path_pcd = os.path.join(self.pointcloud_dir, 'pcd')
+        if not os.path.exists(directory_path_pcd):
+            os.mkdir(directory_path_pcd)
+        file_path_pcd = os.path.join(directory_path_pcd, f'{step}.pcd')
+
         pcd = o3d.geometry.PointCloud()
-        pcd.points = o3d.utility.Vector3dVector(points)
-        pcd.colors = o3d.utility.Vector3dVector(colors)
-        o3d.io.write_point_cloud(file_path, pcd)
+        pcd.points = o3d.utility.Vector3dVector(pointcloud['points'][np.broadcast_to(pointcloud['depth_variance'], pointcloud['points'].shape) < 0.2].reshape(-1, 3))
+        pcd.colors = o3d.utility.Vector3dVector(pointcloud['colors'][np.broadcast_to(pointcloud['depth_variance'], pointcloud['colors'].shape) < 0.2].reshape(-1, 3))
+        o3d.io.write_point_cloud(file_path_pcd, pcd)
 
     def model(self, model, step):
         file_path = os.path.join(self.model_dir, f'{step}.pth')

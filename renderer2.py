@@ -147,7 +147,7 @@ class NerfRenderer(nn.Module):
         xyzs, dirs = self.get_sample_points(rays_o, rays_d, z_vals)
         s_xyzs = self.mipnerf360_scale(xyzs, self.inner_bound, self.outer_bound)
 
-        sigmas = self.model.density(s_xyzs, self.outer_bound)
+        sigmas, _ = self.model.density(s_xyzs, self.outer_bound)
 
         delta = z_vals_log.new_zeros(sigmas.shape)  # [N_rays, N_samples]
         delta[:, :-1] = (z_vals_log[:, 1:] - z_vals_log[:, :-1])
@@ -174,7 +174,7 @@ class NerfRenderer(nn.Module):
         s_xyzs = self.mipnerf360_scale(xyzs, self.inner_bound, self.outer_bound)
         n_expand = n[:, None].expand(-1, z_vals.shape[-1])
 
-        sigmas, rgbs = self.model(s_xyzs, dirs, n_expand, self.outer_bound)
+        sigmas, rgbs, aux_outputs_net = self.model(s_xyzs, dirs, n_expand, self.outer_bound)
 
         image, invdepth, weights = self.render_rays_log(sigmas, rgbs, z_vals, z_vals_log)
         image = image + (1 - torch.sum(weights, dim=-1)[..., None]) * bg_color
@@ -188,5 +188,6 @@ class NerfRenderer(nn.Module):
         aux_outputs['sigmas'] = sigmas.detach()
         aux_outputs['rgbs'] = rgbs.detach()
         aux_outputs['xyzs'] = xyzs.detach()
+        aux_outputs['x_hashtable'] = aux_outputs_net['x_hashtable']
 
         return image, weights, z_vals_log_s, aux_outputs

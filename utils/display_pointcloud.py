@@ -16,14 +16,19 @@ if __name__ == '__main__':
     # points = np.load('./data/points.npy')
 
     filepath = sys.argv[1]
-    thresh = int(sys.argv[2])
+    thresh = float(sys.argv[2])
 
-    points = np.load(filepath)
+    pointcloud = np.load(filepath, allow_pickle=True).item()
 
-    points, colors = points[..., :3], points[..., 3:]
-    # points = points[np.broadcast_to(sigmas[..., None], (sigmas.shape[0], 3)) > thresh].reshape(-1, 3)
+    # points, colors = points[..., :3], points[..., 3:]
+    points = pointcloud['points']
+    colors = pointcloud['colors']
+    depth_variance = pointcloud['depth_variance']
+
+    points = points[np.broadcast_to(depth_variance, (depth_variance.shape[0], 3)) < thresh].reshape(-1, 3)
+    colors = colors[np.broadcast_to(depth_variance, (depth_variance.shape[0], 3)) < thresh].reshape(-1, 3)
     # sigmas = sigmas[sigmas > thresh][..., None]
-    print(points.shape)
+    # print(points.shape)
 
     # points = points[np.broadcast_to(points[..., 2, None], (points.shape[0], 3)) > -0.55].reshape(-1, 3)
 

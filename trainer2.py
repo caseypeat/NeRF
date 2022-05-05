@@ -86,8 +86,8 @@ class Trainer(object):
                 if (epoch+1) % self.eval_pointcloud_freq == 0:
                     self.logger.log('Generating Pointcloud...')
                     n, h, w, K, E, _, _ = self.dataloader.get_pointcloud_batch(self.inferencer.image_num)
-                    pointcloud = self.inferencer.extract_surface_geometry(n, h, w, K, E, thresh=0.02)
-                    self.logger.pointcloud(pointcloud.cpu().numpy(), self.iter)
+                    pointcloud = self.inferencer.extract_surface_geometry(n, h, w, K, E)
+                    self.logger.pointcloud(pointcloud, self.iter)
 
             if self.save_weights_freq is not None:
                 if (epoch+1) % self.save_weights_freq == 0:

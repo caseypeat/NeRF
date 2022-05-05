@@ -140,7 +140,10 @@ class NeRFNetwork(nn.Module):
         sigma = sigma.reshape(*prefix)
         color = color.reshape(*prefix, -1)
 
-        return sigma, color
+        aux_outputs_net = {}
+        aux_outputs_net['x_hashtable'] = x_hashtable.reshape(*prefix, -1).detach()
+
+        return sigma, color, aux_outputs_net
 
     def density(self, x, outer_bound):
 
@@ -148,11 +151,14 @@ class NeRFNetwork(nn.Module):
         x = x.reshape(-1, 3)
 
         x = (x + outer_bound) / (2 * outer_bound) # to [0, 1]
-        x = self.encoder(x)
-        h = self.sigma_net(x)
+        x_hashtable = self.encoder(x)
+        sigma_network_output = self.sigma_net(x_hashtable)
 
-        sigma = F.relu(h[..., 0])
+        sigma = F.relu(sigma_network_output[..., 0])
 
         sigma = sigma.reshape(*prefix)
 
-        return sigma
+        aux_outputs_net = {}
+        aux_outputs_net['x_hashtable'] = x_hashtable.reshape(*prefix, -1).detach()
+
+        return sigma, aux_outputs_net

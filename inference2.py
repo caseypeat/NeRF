@@ -164,7 +164,7 @@ class Inferencer(object):
         
 
     @torch.no_grad()
-    def extract_surface_geometry(self, n, h, w, K, E, thresh=0.05):
+    def extract_surface_geometry(self, n, h, w, K, E):
 
         n_f = torch.reshape(n, (-1,))
         h_f = torch.reshape(h, (-1,))
@@ -175,6 +175,8 @@ class Inferencer(object):
 
         points = torch.zeros((0, 3), device='cuda')
         colors = torch.zeros((0, 3), device='cuda')
+        depth_variance = torch.zeros((0, 1), device='cuda')
+        x_hashtable = torch.zeros((0, 40), device='cuda')
 
         for a in tqdm(range(0, len(n_f), self.n_rays)):
             b = min(len(n_f), a+self.n_rays)
@@ -193,6 +195,7 @@ class Inferencer(object):
             xyzs_fb = aux_outputs_fb['xyzs']
             rgbs_fb = aux_outputs_fb['rgbs']
             z_vals_fb = aux_outputs_fb['z_vals']
+            x_hashtable_fb = aux_outputs_fb['x_hashtable']
 
             weights_thresh_start_fb = self.calculate_cumlative_weights_thresh(weights_fb, 0.2)
             weights_thresh_mid_fb = self.calculate_cumlative_weights_thresh(weights_fb, 0.5)
@@ -200,19 +203,30 @@ class Inferencer(object):
 
             depth_start = torch.sum(weights_thresh_start_fb * z_vals_fb, dim=-1)
             depth_end = torch.sum(weights_thresh_end_fb * z_vals_fb, dim=-1)
-
-            impulse_mask = torch.abs(depth_start - depth_end)[:, None, None].expand(-1, weights_fb.shape[1], 3) < thresh
-            mid_transmittance_mask = weights_thresh_mid_fb.to(bool)[..., None].expand(-1, -1, 3)
-            inside_inner_bound_mask = torch.linalg.norm(xyzs_fb, dim=-1, keepdim=True).expand(-1, -1, 3) < self.renderer.inner_bound
+            depth_variance_fb = torch.abs(depth_start - depth_end)[:, None, None].expand(-1, weights_fb.shape[1], 1)
+            
+            impulse_mask = depth_variance_fb < 0.1
+            mid_transmittance_mask = weights_thresh_mid_fb.to(bool)[..., None]
+            inside_inner_bound_mask = torch.linalg.norm(xyzs_fb, dim=-1, keepdim=True) < self.renderer.inner_bound
             mask = (impulse_mask & mid_transmittance_mask & inside_inner_bound_mask)
 
-            points_b = xyzs_fb[mask].reshape(-1, 3)
-            colors_b = rgbs_fb[mask].reshape(-1, 3)
+            points_b = xyzs_fb[mask.expand(*xyzs_fb.shape)].reshape(-1, 3)
+            colors_b = rgbs_fb[mask.expand(*rgbs_fb.shape)].reshape(-1, 3)
+            depth_variance_b = depth_variance_fb[mask].reshape(-1, 1)
+            x_hashtable_b = x_hashtable_fb[mask.expand(*x_hashtable_fb.shape)].reshape(-1, 40)
 
             points = torch.cat([points, points_b], dim=0)
             colors = torch.cat([colors, colors_b], dim=0)
+            depth_variance = torch.cat([depth_variance, depth_variance_b], dim=0)
+            x_hashtable = torch.cat([x_hashtable, x_hashtable_b], dim=0)
 
-        return torch.cat([points, colors], dim=-1)
+        pointcloud = {}
+        pointcloud['points'] = points.cpu().numpy()
+        pointcloud['colors'] = colors.cpu().numpy()
+        pointcloud['depth_variance'] = depth_variance.cpu().numpy()
+        pointcloud['x_hashtable'] = x_hashtable.cpu().numpy()
+
+        return pointcloud
 
 
 
