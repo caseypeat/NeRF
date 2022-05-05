@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+import open3d as o3d
 import os
 import cv2
 import time
@@ -75,9 +76,13 @@ class Logger(object):
         self.writer.add_image(string, grey_c, step, dataformats='HWC')
         cv2.imwrite(file_path, np.uint8(grey_c[..., np.array([2, 1, 0], dtype=int)]*255))
 
-    def pointcloud(self, pointcloud, step):
-        file_path = os.path.join(self.pointcloud_dir, f'{step}.npy')
-        np.save(file_path, pointcloud)
+    def pointcloud(self, points, step):
+        file_path = os.path.join(self.pointcloud_dir, f'{step}.pcd')
+        points, colors = points[..., :3], points[..., 3:]
+        pcd = o3d.geometry.PointCloud()
+        pcd.points = o3d.utility.Vector3dVector(points)
+        pcd.colors = o3d.utility.Vector3dVector(colors)
+        o3d.io.write_point_cloud(file_path, pcd)
 
     def model(self, model, step):
         file_path = os.path.join(self.model_dir, f'{step}.pth')

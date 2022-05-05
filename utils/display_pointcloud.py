@@ -20,9 +20,9 @@ if __name__ == '__main__':
 
     points = np.load(filepath)
 
-    points, sigmas = points[..., :3], points[..., 3]
-    points = points[np.broadcast_to(sigmas[..., None], (sigmas.shape[0], 3)) > thresh].reshape(-1, 3)
-    sigmas = sigmas[sigmas > thresh][..., None]
+    points, colors = points[..., :3], points[..., 3:]
+    # points = points[np.broadcast_to(sigmas[..., None], (sigmas.shape[0], 3)) > thresh].reshape(-1, 3)
+    # sigmas = sigmas[sigmas > thresh][..., None]
     print(points.shape)
 
     # points = points[np.broadcast_to(points[..., 2, None], (points.shape[0], 3)) > -0.55].reshape(-1, 3)
@@ -30,17 +30,17 @@ if __name__ == '__main__':
     # points = points[np.all(np.isfinite(points), axis=1)]
     # points = points[np.linalg.norm(points, axis=1) < 1000]
     # print(points.shape)
-    print(np.amax(points))
-    print(np.amin(points))
+    # print(np.amax(points))
+    # print(np.amin(points))
 
     # points = 1 - (points - np.amin(points)) / (np.amax(points - np.amin(points)))
 
     # colors = np.broadcast_to(points[..., 0, None], (len(points), 3))
-    colors = points[..., 2]
-    colors = (colors - np.amin(colors)) / (np.amax(colors - np.amin(colors)))
+    # colors = points[..., 2]
+    # colors = (colors - np.amin(colors)) / (np.amax(colors - np.amin(colors)))
     # colors[colors < 0] = 0
     # colors[colors > 1] = 1
-    colors = cm.get_cmap(plt.get_cmap('jet'))(colors)[..., :3]
+    # colors = cm.get_cmap(plt.get_cmap('jet'))(colors)[..., :3]
 
     pcd = o3d.geometry.PointCloud()
     pcd.points = o3d.utility.Vector3dVector(points)
