@@ -89,8 +89,8 @@ class Logger(object):
         file_path_pcd = os.path.join(directory_path_pcd, f'{step}.pcd')
 
         pcd = o3d.geometry.PointCloud()
-        pcd.points = o3d.utility.Vector3dVector(pointcloud['points'][np.broadcast_to(pointcloud['depth_variance'], pointcloud['points'].shape) < 0.2].reshape(-1, 3))
-        pcd.colors = o3d.utility.Vector3dVector(pointcloud['colors'][np.broadcast_to(pointcloud['depth_variance'], pointcloud['colors'].shape) < 0.2].reshape(-1, 3))
+        pcd.points = o3d.utility.Vector3dVector(pointcloud['points'][np.broadcast_to(pointcloud['depth_variance'], pointcloud['points'].shape) < 0.02].reshape(-1, 3))
+        pcd.colors = o3d.utility.Vector3dVector(pointcloud['colors'][np.broadcast_to(pointcloud['depth_variance'], pointcloud['colors'].shape) < 0.02].reshape(-1, 3))
         o3d.io.write_point_cloud(file_path_pcd, pcd)
 
     def model(self, model, step):

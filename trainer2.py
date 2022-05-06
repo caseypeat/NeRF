@@ -72,15 +72,15 @@ class Trainer(object):
                     self.logger.log('Rending Image...')
                     n, h, w, K, E, _, _ = self.dataloader.get_image_batch(self.inferencer.image_num)
                     image, invdepth = self.inferencer.render_image(n, h, w, K, E)
-                    self.logger.image_color('image', image.cpu().numpy(), self.iter)
-                    self.logger.image_grey('invdepth', invdepth.cpu().numpy(), self.iter)
+                    self.logger.image_color('image', image, self.iter)
+                    self.logger.image_grey('invdepth', invdepth, self.iter)
 
             if self.eval_image_freq is not None:
                 if (epoch+1) % self.eval_image_freq == 0:
                     self.logger.log('Rending Invdepth Thresh...')
                     n, h, w, K, E, _, _ = self.dataloader.get_image_batch(self.inferencer.image_num)
                     invdepth_thresh = self.inferencer.render_invdepth_thresh(n, h, w, K, E, thresh=0.02)
-                    self.logger.image_grey('invdepth_thresh', invdepth_thresh.cpu().numpy(), self.iter)
+                    self.logger.image_grey('invdepth_thresh', invdepth_thresh, self.iter)
 
             if self.eval_pointcloud_freq is not None:
                 if (epoch+1) % self.eval_pointcloud_freq == 0:
