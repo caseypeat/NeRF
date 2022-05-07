@@ -59,6 +59,7 @@ if __name__ == '__main__':
         N = N_a
     ).to('cuda')
     model_a.load_state_dict(torch.load('./logs/east_west/20220429_175050/model/6000.pth'))
+    # model_a.load_state_dict(torch.load('./logs/hashtable_outputs/20220506_162403/model/10000.pth'), strict=False)
 
     points_a = np.load('./logs/east_west/20220429_175050/pointcloud/6000.npy')
     points_a, sigmas_a = points_a[..., :3], points_a[..., 3]
@@ -78,6 +79,7 @@ if __name__ == '__main__':
         N = N_b
     ).to('cuda')
     model_b.load_state_dict(torch.load('./logs/east_west/20220429_183352/model/6000.pth'))
+    # model_b.load_state_dict(torch.load('./logs/hashtable_outputs/20220506_143522/model/10000.pth'), strict=False)
 
     points_b = np.load('./logs/east_west/20220429_183352/pointcloud/6000.npy')
     points_b, sigmas_b = points_b[..., :3], points_b[..., 3]
@@ -187,12 +189,12 @@ if __name__ == '__main__':
         wb = torch.clone(weights_b)
         wb[:, -1] = 1 - torch.sum(weights_b, dim=-1)
 
-        # w = torch.bmm(wa[:, :, None], wb[:, None, :])
-        # s = torch.abs(z_vals_log[:, :, None] - z_vals_log[:, None, :])
-        # loss = w * s
-        # loss = torch.mean(torch.sum(loss, dim=[1, 2]))
+        w = torch.bmm(wa[:, :, None], wb[:, None, :])
+        s = torch.abs(z_vals_log[:, :, None] - z_vals_log[:, None, :])
+        loss = w * s
+        loss = torch.mean(torch.sum(loss, dim=[1, 2]))
 
-        loss = F.mse_loss(wa, wb)
+        # loss = F.mse_loss(wa, wb)
 
         loss.backward()
         optimizer.step()

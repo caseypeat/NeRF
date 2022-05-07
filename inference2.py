@@ -188,3 +188,48 @@ class Inferencer(object):
 
         return pointcloud
 
+
+    @torch.no_grad()
+    def extract_dense_geometry(self, N, H, W, K, E):
+
+        mask = helpers.get_valid_positions(N, H, W, K, E, res=128)
+
+        voxels = torch.linspace(-1+1/self.voxel_res, 1-1/self.voxel_res, self.voxel_res, device='cpu')
+
+        num_samples = self.voxel_res**3
+
+        points = torch.zeros((0, 3), device='cpu')
+        colors = torch.zeros((0, 3), device='cpu')
+
+        for a in tqdm(range(0, num_samples, self.batch_size)):
+            b = min(num_samples, a+self.batch_size)
+
+            n = torch.arange(a, b)
+
+            x = voxels[torch.div(n, self.voxel_res**2, rounding_mode='floor')]
+            y = voxels[torch.div(n, self.voxel_res, rounding_mode='floor') % self.voxel_res]
+            z = voxels[n % self.voxel_res]
+
+            xyz = torch.stack((x, y, z), dim=-1).cuda()
+
+            x_i = ((x+1)/2*mask.shape[0]).to(int)
+            y_i = ((y+1)/2*mask.shape[1]).to(int)
+            z_i = ((z+1)/2*mask.shape[2]).to(int)
+
+            xyz = xyz[mask[x_i, y_i, z_i]].view(-1, 3)
+            
+            dirs = torch.Tensor(np.array([0, 0, 1]))[None, ...].expand(xyz.shape[0], 3).cuda()
+            n_i = torch.zeros((xyz.shape[0]), dtype=int).cuda()
+
+            if xyz.shape[0] > 0:
+                sigmas, rgbs = self.model(xyz, dirs, n_i)
+                new_points = xyz[sigmas[..., None].expand(-1, 3) > self.thresh].view(-1, 3)
+                points = torch.cat((points, new_points))
+                new_colors = rgbs[sigmas[..., None].expand(-1, 3) > self.thresh].view(-1, 3)
+                colors = torch.cat((colors, new_colors))
+
+        pointcloud = {}
+        pointcloud['points'] = points.numpy()
+        pointcloud['colors'] = colors.numpy()
+
+        return points, colors

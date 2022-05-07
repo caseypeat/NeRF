@@ -1,8 +1,8 @@
 
 scene:
   scene_paths:
-  #  - /home/casey/Documents/PhD/data/conan_scans/ROW_349_EAST_SLOW_0006/scene.json
-   - /home/casey/Documents/PhD/data/conan_scans/ROW_349_WEST_SLOW_0007/scene.json
+   - /home/casey/Documents/PhD/data/conan_scans/ROW_349_EAST_SLOW_0006/scene.json
+  #  - /home/casey/Documents/PhD/data/conan_scans/ROW_349_WEST_SLOW_0007/scene.json
   frame_ranges:
   #  - - 100
   #    - 120
