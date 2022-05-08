@@ -8,14 +8,17 @@ from camera_geometry.scan.views import load_frames
 
 
 class CameraGeometryLoader(object):
-    def __init__(self, scene_paths, frame_ranges, image_scale):
+    def __init__(self, scene_paths, frame_ranges, image_scale, load_images=True):
+
+        self.load_images = load_images
+
         scene_list = []
         frames_list = []
 
         self.N = 0
 
         for scene_path, frame_range in zip(scene_paths, frame_ranges):
-            scene = load_scan(scene_path, frame_range=frame_range, image_scale=image_scale)
+            scene = load_scan(scene_path, frame_range=frame_range, image_scale=image_scale, load_images=False)
             frames = load_frames(scene)
 
             scene_list.append(scene)
@@ -24,7 +27,8 @@ class CameraGeometryLoader(object):
             self.N += len(frames) * len(frames[0])
             self.H, self.W = frames[0][0].rgb.shape[:2]
 
-        self.images = torch.full([self.N, self.H, self.W, 4], fill_value=255, dtype=torch.uint8)
+        if self.load_images:
+            self.images = torch.full([self.N, self.H, self.W, 4], fill_value=255, dtype=torch.uint8)
         self.intrinsics = torch.zeros([self.N, 3, 3], dtype=torch.float32)
         self.extrinsics = torch.zeros([self.N, 4, 4], dtype=torch.float32)
 
@@ -32,12 +36,16 @@ class CameraGeometryLoader(object):
         for scene, frames in zip(scene_list, frames_list):
             for rig in tqdm(frames):
                 for frame in rig:
-                    self.images[i, :, :, :3] = torch.ByteTensor(frame.rgb)
+                    if self.load_images:
+                        self.images[i, :, :, :3] = torch.ByteTensor(frame.rgb)
                     self.intrinsics[i] = torch.Tensor(frame.camera.intrinsic)
                     self.extrinsics[i] = torch.Tensor(frame.camera.extrinsic)
                     i += 1
 
         self.translation_center = torch.mean(self.extrinsics[..., :3, 3], dim=0, keepdims=True)
+
+        del scene_list
+        del frames_list
 
 
     def format_groundtruth(self, gt, background=None):
@@ -69,7 +77,10 @@ class CameraGeometryLoader(object):
 
         E[..., :3, 3] = E[..., :3, 3] - self.translation_center.to(device)
 
-        rgb_gt, color_bg = self.format_groundtruth(self.images[n, h, w, :].to(device), background)
+        if self.load_images:
+            rgb_gt, color_bg = self.format_groundtruth(self.images[n, h, w, :].to(device), background)
+        else:
+            rgb_gt, color_bg = None, None
 
         n = n.to(device)
         h = h.to(device)
@@ -94,6 +105,7 @@ class CameraGeometryLoader(object):
 
         return self.get_custom_batch(n, h, w, background=(1, 1, 1))
 
+
     def get_pointcloud_batch(self, device='cuda'):
 
         n = []
@@ -109,6 +121,15 @@ class CameraGeometryLoader(object):
         n, h, w = torch.meshgrid(n, h, w, indexing='ij')
 
         return self.get_custom_batch(n, h, w, background=(1, 1, 1))
+
+
+    def get_calibration(self, device='cuda'):
+        K = self.intrinsics.to(device)
+        E = self.extrinsics.to(device)
+
+        E[..., :3, 3] = E[..., :3, 3] - self.translation_center.to(device)
+
+        return self.N, self.H, self.W, K, E
 
 if __name__ == '__main__':
     scene_path = '/home/casey/Documents/PhD/data/conan_scans/ROW_349_EAST_SLOW_0006/scene.json'

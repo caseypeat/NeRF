@@ -65,30 +65,110 @@ class Transform(nn.Module):
         return xyzs_b
 
 
+class ExtractDenseGeometry():
+    def __init__(
+        self,
+        model,
+        dataloader,
+        mask_res,
+        voxel_res,
+        batch_size,
+        thresh,
+        outer_bound,
+        ):
 
-# class NerfRendererModels(NerfRenderer):
-#     def __init__(self, **kwargs):
-#         super().__init__()
+        self.model = model
+        self.dataloader = dataloader
+        self.mask_res = mask_res
+        self.voxel_res = voxel_res
+        self.batch_size = batch_size
+        self.thresh = thresh
+        self.outer_bound = outer_bound
 
 
-#     def render_models(self, n, h, w, K, E, bg_color, model_a, model_b):
+    @torch.no_grad()
+    def get_valid_positions(self, N, H, W, K, E, res):
 
-#         rays_o, rays_d = self.get_rays(h, w, K, E)
-#         z_vals_log, z_vals = self.efficient_sampling(rays_o, rays_d, self.steps_importance, self.alpha_importance)
-#         xyzs, dirs = self.get_sample_points(rays_o, rays_d, z_vals)
-#         s_xyzs = self.mipnerf360_scale(xyzs, self.inner_bound, self.outer_bound)
-#         n_expand = n[:, None].expand(-1, z_vals.shape[-1])
+        mask_full = torch.zeros((res, res, res), dtype=bool, device='cuda')
 
-#         sigmas_a, rgbs_a, _ = model_a(s_xyzs, dirs, n_expand, self.outer_bound)
-#         sigmas_b, rgbs_b, _ = model_b(s_xyzs, dirs, n_expand, self.outer_bound)
-#         sigmas = sigmas_a + sigmas_b
-#         rgbs = rgbs_a + rgbs_b
+        for i in tqdm(range(res)):
+            d = torch.linspace(-1, 1, res, device='cuda')
+            D = torch.stack(torch.meshgrid(d[i], d, d, indexing='ij'), dim=-1)
+            dist = torch.linalg.norm(D, dim=-1)[:, :, :, None].expand(-1, -1, -1, 3)
+            mask = torch.zeros(dist.shape, dtype=bool, device='cuda')
+            mask[dist < 1] = True
 
-#         image, invdepth, weights = self.render_rays_log(sigmas, rgbs, z_vals, z_vals_log)
-#         image = image + (1 - torch.sum(weights, dim=-1)[..., None]) * bg_color
-#         z_vals_log_s = (z_vals_log - m.log10(self.z_bounds[0])) / (m.log10(self.z_bounds[-1]) - m.log10(self.z_bounds[0]))
+            # mask out parts outside camera coverage
+            rays_d = D - E[:, None, None, :3, -1]
+            dirs_ = torch.inverse(E[:, None, None, :3, :3]) @ rays_d[..., None]
+            dirs_ = K[:, None, None, ...] @ dirs_
+            dirs = dirs_ / dirs_[:, :, :, 2, None, :]
+            mask_dirs = torch.zeros((N, res, res), dtype=int, device='cuda')
+            mask_dirs[((dirs[:, :, :, 0, 0] > 0) & (dirs[:, :, :, 0, 0] < H) & (dirs[:, :, :, 1, 0] > 0) & (dirs[:, :, :, 1, 0] < W) & (dirs_[:, :, :, 2, 0] > 0))] = 1
+            mask_dirs = torch.sum(mask_dirs, dim=0)
+            mask_dirs[mask_dirs > 0] = 1
+            mask_dirs = mask_dirs.to(bool)
+            mask_dirs = mask_dirs[None, :, :, None].expand(-1, -1, -1, 3)
+            mask = torch.logical_and(mask, mask_dirs)
 
-#         return image, weights
+            mask_full[i, :, :] = mask[..., 0]
+
+        return mask_full
+
+
+    @torch.no_grad()
+    def extract_dense_geometry(self, N, H, W, K, E):
+
+        mask = self.get_valid_positions(N, H, W, K, E, res=self.mask_res)
+
+        voxels = torch.linspace(-1+1/self.voxel_res, 1-1/self.voxel_res, self.voxel_res, device='cpu')
+
+        num_samples = self.voxel_res**3
+
+        points = torch.zeros((0, 3), device='cpu')
+        colors = torch.zeros((0, 3), device='cpu')
+
+        for a in tqdm(range(0, num_samples, self.batch_size)):
+            b = min(num_samples, a+self.batch_size)
+
+            n = torch.arange(a, b)
+
+            x = voxels[torch.div(n, self.voxel_res**2, rounding_mode='floor')]
+            y = voxels[torch.div(n, self.voxel_res, rounding_mode='floor') % self.voxel_res]
+            z = voxels[n % self.voxel_res]
+
+            xyz = torch.stack((x, y, z), dim=-1).cuda()
+
+            x_i = ((x+1)/2*mask.shape[0]).to(int)
+            y_i = ((y+1)/2*mask.shape[1]).to(int)
+            z_i = ((z+1)/2*mask.shape[2]).to(int)
+
+            xyz = xyz[mask[x_i, y_i, z_i]].view(-1, 3)
+            
+            dirs = torch.Tensor(np.array([0, 0, 1]))[None, ...].expand(xyz.shape[0], 3).cuda()
+            n_i = torch.zeros((xyz.shape[0]), dtype=int).cuda()
+
+            if xyz.shape[0] > 0:
+                sigmas, rgbs, _ = self.model(xyz, dirs, n_i, self.outer_bound)
+                new_points = xyz[sigmas[..., None].expand(-1, 3) > self.thresh].view(-1, 3).cpu()
+                points = torch.cat((points, new_points))
+                new_colors = rgbs[sigmas[..., None].expand(-1, 3) > self.thresh].view(-1, 3).cpu()
+                colors = torch.cat((colors, new_colors))
+
+        pointcloud = {}
+        pointcloud['points'] = points.numpy()
+        pointcloud['colors'] = colors.numpy()
+
+        return points, colors
+
+
+    @torch.no_grad()
+    def generate_dense_pointcloud(self):
+        N, H, W, K, E = self.dataloader.get_calibration()
+        points, _ = self.extract_dense_geometry(N, H, W, K, E)
+        pcd = o3d.geometry.PointCloud()
+        pcd.points = o3d.utility.Vector3dVector(points)
+        return pcd
 
 
 class TrainerPose(object):
@@ -167,8 +247,6 @@ class TrainerPose(object):
             self.losses.append(loss.item())
 
             if i % 100 == 0:
-                # print(self.transform.R)
-                # print(self.transform.T)
                 if i == 0:
                     print(f'{loss.item():.6f}')
                 else:
@@ -176,20 +254,6 @@ class TrainerPose(object):
 
 
 if __name__ == '__main__':
-
-    pcd_a = o3d.io.read_point_cloud('./logs/hashtable_outputs/20220506_162403/pointclouds/pcd/10000.pcd')
-    pcd_b = o3d.io.read_point_cloud('./logs/hashtable_outputs/20220506_143522/pointclouds/pcd/10000.pcd')
-
-    # print(np.array(pcd_a.points).shape)
-    
-    # result_ransac, result_icp = allign_pointclouds(pcd_a.uniform_down_sample(100), pcd_b.uniform_down_sample(100), voxel_size=0.01)
-
-    # o3d.visualization.draw_geometries([pcd_a.transform(result_ransac.transformation), pcd_b])
-
-    init_transform = np.load('./data/transforms/east_west.npy')
-    # o3d.visualization.draw_geometries([pcd_a.transform(init_transform), pcd_b])
-
-    transform = Transform(torch.Tensor(init_transform)).cuda()
 
     cfg_a = OverwriteableConfig('./logs/hashtable_outputs/20220506_162403/config.yaml')
     cfg_b = OverwriteableConfig('./logs/hashtable_outputs/20220506_143522/config.yaml')
@@ -233,8 +297,29 @@ if __name__ == '__main__':
     dataloader_a = CameraGeometryLoader(
         ['/home/casey/Documents/PhD/data/conan_scans/ROW_349_EAST_SLOW_0006/scene.json'],
         [None],
-        0.5
+        0.5,
         )
+
+    dataloader_b = CameraGeometryLoader(
+        ['/home/casey/Documents/PhD/data/conan_scans/ROW_349_WEST_SLOW_0007/scene.json'],
+        [None],
+        0.5,
+        )
+
+    pcd_a = o3d.io.read_point_cloud('./logs/hashtable_outputs/20220506_162403/pointclouds/pcd/10000.pcd')
+    pcd_b = o3d.io.read_point_cloud('./logs/hashtable_outputs/20220506_143522/pointclouds/pcd/10000.pcd')
+
+    dense_inference_a = ExtractDenseGeometry(model_a, dataloader_a, 128, 512, cfg_a.renderer.importance_steps*4096, 100, cfg_a.scene.outer_bound)
+    pcd_dense_a = dense_inference_a.generate_dense_pointcloud()
+    dense_inference_b = ExtractDenseGeometry(model_b, dataloader_b, 128, 512, cfg_b.renderer.importance_steps*4096, 100, cfg_b.scene.outer_bound)
+    pcd_dense_b = dense_inference_b.generate_dense_pointcloud()
+
+    result_ransac, result_icp = allign_pointclouds(pcd_dense_a, pcd_dense_b, voxel_size=0.01)
+
+    # init_transform = np.load('./data/transforms/east_west.npy')
+    init_transform = np.array(result_ransac.transformation)
+
+    transform = Transform(torch.Tensor(init_transform)).cuda()
 
     renderer = NerfRenderer(
         model=model_a,
