@@ -23,6 +23,7 @@ if __name__ == '__main__':
     dataloader = CameraGeometryLoader(
         scene_paths=cfg.scene.scene_paths,
         frame_ranges=cfg.scene.frame_ranges,
+        transforms=cfg.scene.transforms,
         image_scale=cfg.scene.image_scale,
         )
 

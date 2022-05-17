@@ -179,7 +179,8 @@ class TrainerPose(object):
         model_b,
         dataloader_a,
         renderer,
-        num_iters):
+        num_iters,
+        n_rays):
 
         self.num_iters = num_iters
         
@@ -191,11 +192,11 @@ class TrainerPose(object):
 
         self.renderer = renderer
 
-        self.n_rays = 4096
+        self.n_rays = n_rays
 
         self.optimizer = torch.optim.Adam([{'params': [self.transform.R, self.transform.T]}], lr=1e-3)
 
-        lmbda = lambda x: 0.1**(x/(self.num_iters))
+        lmbda = lambda x: 0.01**(x/(self.num_iters))
         self.scheduler = torch.optim.lr_scheduler.LambdaLR(self.optimizer, lr_lambda=lmbda, last_epoch=-1, verbose=False)
 
         self.losses = []
@@ -297,11 +298,13 @@ if __name__ == '__main__':
     dataloader_a = CameraGeometryLoader(
         ['/home/casey/Documents/PhD/data/conan_scans/ROW_349_EAST_SLOW_0006/scene.json'],
         [None],
+        [None],
         0.5,
         )
 
     dataloader_b = CameraGeometryLoader(
         ['/home/casey/Documents/PhD/data/conan_scans/ROW_349_WEST_SLOW_0007/scene.json'],
+        [None],
         [None],
         0.5,
         )
@@ -309,15 +312,26 @@ if __name__ == '__main__':
     pcd_a = o3d.io.read_point_cloud('./logs/hashtable_outputs/20220506_162403/pointclouds/pcd/10000.pcd')
     pcd_b = o3d.io.read_point_cloud('./logs/hashtable_outputs/20220506_143522/pointclouds/pcd/10000.pcd')
 
-    dense_inference_a = ExtractDenseGeometry(model_a, dataloader_a, 128, 512, cfg_a.renderer.importance_steps*4096, 100, cfg_a.scene.outer_bound)
+    n_rays = 8192
+    num_iters = 2000
+
+    dense_inference_a = ExtractDenseGeometry(model_a, dataloader_a, 128, 512, cfg_a.renderer.importance_steps*n_rays, 100, cfg_a.scene.outer_bound)
     pcd_dense_a = dense_inference_a.generate_dense_pointcloud()
-    dense_inference_b = ExtractDenseGeometry(model_b, dataloader_b, 128, 512, cfg_b.renderer.importance_steps*4096, 100, cfg_b.scene.outer_bound)
+    dense_inference_b = ExtractDenseGeometry(model_b, dataloader_b, 128, 512, cfg_b.renderer.importance_steps*n_rays, 100, cfg_b.scene.outer_bound)
     pcd_dense_b = dense_inference_b.generate_dense_pointcloud()
 
     result_ransac, result_icp = allign_pointclouds(pcd_dense_a, pcd_dense_b, voxel_size=0.01)
 
     # init_transform = np.load('./data/transforms/east_west.npy')
+
     init_transform = np.array(result_ransac.transformation)
+
+    pcd_a.transform(init_transform)
+    o3d.visualization.draw_geometries([pcd_a, pcd_b])
+
+    np.save('./data/both_sides_demo4/transform_init.npy', init_transform)
+
+    exit()
 
     transform = Transform(torch.Tensor(init_transform)).cuda()
 
@@ -337,7 +351,8 @@ if __name__ == '__main__':
         model_b=model_b,
         dataloader_a=dataloader_a,
         renderer=renderer,
-        num_iters=1000,
+        num_iters=num_iters,
+        n_rays=n_rays
         )
 
     trainer.train()
@@ -349,5 +364,18 @@ if __name__ == '__main__':
 
     pcd_a.transform(np.array(transform.init_transform.detach().cpu()))
     o3d.visualization.draw_geometries([pcd_a, pcd_b])
+
+    pcd_both = o3d.geometry.PointCloud()
+    pcd_both += pcd_a
+    pcd_both += pcd_b
+    o3d.io.write_point_cloud('./data/both_sides_demo/ransac_allign.pcd', pcd_both)
+
     pcd_a.transform(np.array(transform_r.detach().cpu()))
     o3d.visualization.draw_geometries([pcd_a, pcd_b])
+
+    pcd_both = o3d.geometry.PointCloud()
+    pcd_both += pcd_a
+    pcd_both += pcd_b
+    o3d.io.write_point_cloud('./data/both_sides_demo/nerf_allign.pcd', pcd_both)
+
+    np.save('./data/both_sides_demo/transform_refine.npy', transform_comb)

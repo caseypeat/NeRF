@@ -58,7 +58,7 @@ class Logger(object):
             f.write(output_str)
 
     def image_color(self, string, image, step):
-        image = image.transpose(1, 0, 2)[::-1]
+        image = image.transpose(1, 0, 2)[:, ::-1]
         directory_path = os.path.join(self.images_dir, string)
         if not os.path.exists(directory_path):
             os.mkdir(directory_path)
@@ -68,7 +68,7 @@ class Logger(object):
 
     def image_grey(self, string, grey, step):
         grey_c = color_depthmap(grey)
-        grey_c = grey_c.transpose(1, 0, 2)[::-1]
+        grey_c = grey_c.transpose(1, 0, 2)[:, ::-1]
         directory_path = os.path.join(self.images_dir, string)
         if not os.path.exists(directory_path):
             os.mkdir(directory_path)

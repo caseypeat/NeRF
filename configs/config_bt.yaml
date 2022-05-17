@@ -1,24 +1,31 @@
 
 scene:
-  scene_path: /home/casey/Documents/PhD/data/conan_scans/ROW_349_EAST_SLOW_0006/scene.json
-  # scene_path: /home/casey/Documents/PhD/data/conan_scans/ROW_349_WEST_SLOW_0007/scene.json
-  image_scale: 0.5
+  scene_paths:
+   - /home/casey/Documents/PhD/data/conan_scans/ROW_349_EAST_SLOW_0006/scene.json
+   - /home/casey/Documents/PhD/data/conan_scans/ROW_349_WEST_SLOW_0007/scene.json
+  frame_ranges:
+   - null
+   - null
+  transforms:
+  #  - ./data/both_sides_demo3/transform_refine.npy
+   - ./data/both_sides_demo4/transform_init.npy
+   - null
+  image_scale: 0.25
   inner_bound: 2
   outer_bound: 2.5
-  real: True
-  frame_range: null
 
 log:
-  root_dir: './logs/east_west2'
-  eval_image_freq: 60
-  eval_pointcloud_freq: 60
-  save_weights_freq: 60
+  root_dir: './logs/bt_test'
+  eval_image_freq: end
+  eval_pointcloud_freq: null
+  save_weights_freq: null
 
 trainer:
-  num_epochs: 60
+  num_epochs: 10
   iters_per_epoch: 100
-  n_rays: 8192
-  # n_rays: 16384
+  # n_rays: 2048
+  # n_rays: 4096
+  n_rays: 16384
   dist_loss_lambda1: 1e-5
   dist_loss_lambda2: 1e-2
 
@@ -38,19 +45,14 @@ optimizer:
 scheduler: step
 
 inference:
-  n_rays: 8192
-  # n_rays: 16384
-  image_num: 303
-  voxel_res: 1024
-  thresh: 10
-  batch_size: 2097152
+  image_num: 33
 
 renderer:
   steps:
-    - 512
     - 256
     - 128
     - 64
+    - 32
   z_bounds:
     - 0.1
     - 1
@@ -58,7 +60,7 @@ renderer:
     - 100
     - 1000
 
-  importance_steps: 256
+  importance_steps: 128
   alpha: 0.2
 
 nets:

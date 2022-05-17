@@ -8,21 +8,29 @@ from camera_geometry.scan.views import load_frames
 
 
 class CameraGeometryLoader(object):
-    def __init__(self, scene_paths, frame_ranges, image_scale, load_images=True):
+    def __init__(self, scene_paths, frame_ranges, transforms, image_scale, load_images=True):
 
         self.load_images = load_images
 
         scene_list = []
         frames_list = []
+        transform_list = []
 
         self.N = 0
 
-        for scene_path, frame_range in zip(scene_paths, frame_ranges):
+        for scene_path, frame_range, transform_path in zip(scene_paths, frame_ranges, transforms):
             scene = load_scan(scene_path, frame_range=frame_range, image_scale=image_scale, load_images=False)
             frames = load_frames(scene)
+            if transform_path is not None:
+                transform = np.load(transform_path)
+                print(1)
+            else:
+                transform = np.eye(4)
+
 
             scene_list.append(scene)
             frames_list.append(frames)
+            transform_list.append(transform)
 
             self.N += len(frames) * len(frames[0])
             self.H, self.W = frames[0][0].rgb.shape[:2]
@@ -33,13 +41,13 @@ class CameraGeometryLoader(object):
         self.extrinsics = torch.zeros([self.N, 4, 4], dtype=torch.float32)
 
         i = 0
-        for scene, frames in zip(scene_list, frames_list):
+        for scene, frames, transform in zip(scene_list, frames_list, transform_list):
             for rig in tqdm(frames):
                 for frame in rig:
                     if self.load_images:
                         self.images[i, :, :, :3] = torch.ByteTensor(frame.rgb)
                     self.intrinsics[i] = torch.Tensor(frame.camera.intrinsic)
-                    self.extrinsics[i] = torch.Tensor(frame.camera.extrinsic)
+                    self.extrinsics[i] =  torch.Tensor(transform) @ torch.Tensor(frame.camera.extrinsic)
                     i += 1
 
         self.translation_center = torch.mean(self.extrinsics[..., :3, 3], dim=0, keepdims=True)
