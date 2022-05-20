@@ -6,12 +6,13 @@ import cv2
 import time
 
 from datetime import datetime
+from omegaconf import OmegaConf
 
 from torch.utils.tensorboard import SummaryWriter
 
 from misc import color_depthmap
 
-from config import cfg
+# from config import cfg
 
 
 def tensorboard_test(root_dir):
@@ -25,12 +26,15 @@ def tensorboard_test(root_dir):
 
 
 class Logger(object):
-    def __init__(self, root_dir):
+    def __init__(self, root_dir, cfg):
+        self.root_dir = root_dir
         self.log_dir = os.path.join(root_dir, datetime.today().strftime('%Y%m%d_%H%M%S'))
         self.images_dir = os.path.join(self.log_dir, 'images')
         self.pointcloud_dir = os.path.join(self.log_dir, 'pointclouds')
         self.model_dir = os.path.join(self.log_dir, 'model')
         self.tensorboard_dir = os.path.join(self.log_dir, 'tensorboard')
+
+        self.cfg = cfg
 
         if not os.path.exists(root_dir):
             os.mkdir(root_dir)
@@ -48,7 +52,7 @@ class Logger(object):
 
         self.scalars = {}
 
-        cfg.save_yaml(os.path.join(self.log_dir, 'config.yaml'))
+        OmegaConf.save(config=self.cfg, f=os.path.join(self.log_dir, 'config.yaml'))
 
     def log(self, string):
         with open(self.log_file, 'a') as f:
@@ -58,7 +62,7 @@ class Logger(object):
             f.write(output_str)
 
     def image_color(self, string, image, step):
-        image = image.transpose(1, 0, 2)[::-1]
+        image = image.transpose(1, 0, 2)[:, ::-1]
         directory_path = os.path.join(self.images_dir, string)
         if not os.path.exists(directory_path):
             os.mkdir(directory_path)
@@ -68,7 +72,7 @@ class Logger(object):
 
     def image_grey(self, string, grey, step):
         grey_c = color_depthmap(grey)
-        grey_c = grey_c.transpose(1, 0, 2)[::-1]
+        grey_c = grey_c.transpose(1, 0, 2)[:, ::-1]
         directory_path = os.path.join(self.images_dir, string)
         if not os.path.exists(directory_path):
             os.mkdir(directory_path)

@@ -4,9 +4,9 @@ import torch.nn.functional as F
 
 import tinycudann as tcnn
 
-from renderer import NerfRenderer
+# from renderer import NerfRenderer
 
-from config import cfg
+# from config import cfg
 
 
 class NeRFNetwork(nn.Module):

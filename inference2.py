@@ -136,7 +136,7 @@ class Inferencer(object):
         points = torch.zeros((0, 3), device='cpu')
         colors = torch.zeros((0, 3), device='cpu')
         depth_variance = torch.zeros((0, 1), device='cpu')
-        x_hashtable = torch.zeros((0, 40), device='cpu')
+        # x_hashtable = torch.zeros((0, 40), device='cpu')
 
         for a in tqdm(range(0, len(n_f), self.n_rays)):
             b = min(len(n_f), a+self.n_rays)
@@ -155,7 +155,7 @@ class Inferencer(object):
             xyzs_fb = aux_outputs_fb['xyzs']
             rgbs_fb = aux_outputs_fb['rgbs']
             z_vals_fb = aux_outputs_fb['z_vals']
-            x_hashtable_fb = aux_outputs_fb['x_hashtable']
+            # x_hashtable_fb = aux_outputs_fb['x_hashtable']
 
             weights_thresh_start_fb = self.calculate_cumlative_weights_thresh(weights_fb, 0.2)
             weights_thresh_mid_fb = self.calculate_cumlative_weights_thresh(weights_fb, 0.5)
@@ -173,17 +173,17 @@ class Inferencer(object):
             points_b = xyzs_fb[mask.expand(*xyzs_fb.shape)].reshape(-1, 3)
             colors_b = rgbs_fb[mask.expand(*rgbs_fb.shape)].reshape(-1, 3)
             depth_variance_b = depth_variance_fb[mask].reshape(-1, 1)
-            x_hashtable_b = x_hashtable_fb[mask.expand(*x_hashtable_fb.shape)].reshape(-1, 40)
+            # x_hashtable_b = x_hashtable_fb[mask.expand(*x_hashtable_fb.shape)].reshape(-1, 40)
 
             points = torch.cat([points, points_b.cpu()], dim=0)
             colors = torch.cat([colors, colors_b.cpu()], dim=0)
             depth_variance = torch.cat([depth_variance, depth_variance_b.cpu()], dim=0)
-            x_hashtable = torch.cat([x_hashtable, x_hashtable_b.cpu()], dim=0)
+            # x_hashtable = torch.cat([x_hashtable, x_hashtable_b.cpu()], dim=0)
 
         pointcloud = {}
         pointcloud['points'] = points.numpy()
         pointcloud['colors'] = colors.numpy()
         pointcloud['depth_variance'] = depth_variance.numpy()
-        pointcloud['x_hashtable'] = x_hashtable.numpy()
+        # pointcloud['x_hashtable'] = x_hashtable.numpy()
 
         return pointcloud

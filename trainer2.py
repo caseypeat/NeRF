@@ -8,7 +8,7 @@ import helpers
 
 from tqdm import tqdm
 
-from config import cfg
+# from config import cfg
 
 
 class Trainer(object):
@@ -28,7 +28,10 @@ class Trainer(object):
         
         eval_image_freq,
         eval_pointcloud_freq,
-        save_weights_freq,):
+        save_weights_freq,
+        
+        dist_loss_lambda1,
+        dist_loss_lambda2,):
 
         self.model = model
         self.dataloader = dataloader
@@ -48,6 +51,9 @@ class Trainer(object):
         self.eval_image_freq = eval_image_freq if eval_image_freq != 'end' else num_epochs
         self.eval_pointcloud_freq = eval_pointcloud_freq if eval_pointcloud_freq != 'end' else num_epochs
         self.save_weights_freq =  save_weights_freq if save_weights_freq != 'end' else num_epochs
+
+        self.dist_loss_lambda1 = dist_loss_lambda1
+        self.dist_loss_lambda2 = dist_loss_lambda2
 
         self.iter = 0
 
@@ -120,13 +126,13 @@ class Trainer(object):
 
         # Calculate losses
         loss_rgb = helpers.criterion_rgb(rgb, rgb_gt)
-        if cfg.trainer.dist_loss_lambda1 == 0 or cfg.trainer.dist_loss_lambda2 == 0:
+        if self.dist_loss_lambda1 == 0 or self.dist_loss_lambda2 == 0:
             loss_dist = 0  # could still calculate loss_dist and multiply with a zero scalar, but has non-trivial computational cost
             dist_scalar = 0
             loss = loss_rgb
         else:
             loss_dist = helpers.criterion_dist(weights, z_vals_log_s)
-            dist_scalar = 10**(self.iter/self.num_iters * (m.log10(cfg.trainer.dist_loss_lambda2) - m.log10(cfg.trainer.dist_loss_lambda1)) + m.log10(cfg.trainer.dist_loss_lambda1))
+            dist_scalar = 10**(self.iter/self.num_iters * (m.log10(self.dist_loss_lambda2) - m.log10(self.dist_loss_lambda1)) + m.log10(self.dist_loss_lambda1))
             loss = loss_rgb + dist_scalar * loss_dist
 
         # Log scalars

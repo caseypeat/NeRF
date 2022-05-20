@@ -1,6 +1,10 @@
 import numpy as np
 import torch
 import matplotlib.pyplot as plt
+import sys
+import argparse
+
+from omegaconf import OmegaConf
 
 from loaders.camera_geometry_loader2 import CameraGeometryLoader
 
@@ -10,19 +14,46 @@ from trainer2 import Trainer
 from logger import Logger
 from inference2 import Inferencer
 
-from config import cfg
+
+def configurator(config_base=None):
+
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument('--configs', type=str, nargs='*')
+    parser.add_argument('--params', type=str, nargs='*')
+
+    args = parser.parse_args()
+
+    cfg = OmegaConf.create()
+    if args.configs is None and config_base is not None:
+        cfg_config = OmegaConf.load(config_base)
+        cfg = OmegaConf.merge(cfg, cfg_config)
+    else:
+        for config in args.configs:
+            cfg_config = OmegaConf.load(config)
+            cfg = OmegaConf.merge(cfg, cfg_config)
+
+    if args.params is not None:
+        cfg_params = OmegaConf.from_dotlist(args.params)
+        cfg = OmegaConf.merge(cfg, cfg_params)
+
+    return cfg
 
 
 if __name__ == '__main__':
 
+    cfg = configurator('./configs/config_base.yaml')
+
     logger = Logger(
         root_dir=cfg.log.root_dir,
+        cfg=cfg,
         )
 
     logger.log('Initiating Dataloader...')
     dataloader = CameraGeometryLoader(
         scene_paths=cfg.scene.scene_paths,
         frame_ranges=cfg.scene.frame_ranges,
+        transforms=cfg.scene.transforms,
         image_scale=cfg.scene.image_scale,
         )
 
@@ -95,6 +126,9 @@ if __name__ == '__main__':
         eval_image_freq=cfg.log.eval_image_freq,
         eval_pointcloud_freq=cfg.log.eval_pointcloud_freq,
         save_weights_freq=cfg.log.save_weights_freq,
+
+        dist_loss_lambda1=cfg.trainer.dist_loss_lambda1,
+        dist_loss_lambda2=cfg.trainer.dist_loss_lambda2,
         )
 
     logger.log('Beginning Training...\n')
