@@ -34,6 +34,9 @@ def configurator(config_base=None):
             cfg = OmegaConf.merge(cfg, cfg_config)
 
     if args.params is not None:
+        params = []
+        # for param in args.params:
+        #     # params.append(OmegaConf.decode)
         cfg_params = OmegaConf.from_dotlist(args.params)
         cfg = OmegaConf.merge(cfg, cfg_params)
 

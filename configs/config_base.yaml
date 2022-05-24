@@ -1,8 +1,9 @@
 
 scene:
   scene_paths:
-   - /home/casey/Documents/PhD/data/conan_scans/ROW_349_EAST_SLOW_0006/scene.json
+  #  - /home/casey/Documents/PhD/data/conan_scans/ROW_349_EAST_SLOW_0006/scene.json
   #  - /home/casey/Documents/PhD/data/conan_scans/ROW_349_WEST_SLOW_0007/scene.json
+   - /home/casey/Documents/PhD/data/conan_scans/ROW_349_WEST_LONG_0002/scene.json
   frame_ranges:
   #  - - 100
   #    - 120
@@ -14,13 +15,13 @@ scene:
   outer_bound: 2.5
 
 log:
-  root_dir: './logs/omegaconf_test'
+  root_dir: './logs/test'
   eval_image_freq: end
   eval_pointcloud_freq: end
   save_weights_freq: end
 
 trainer:
-  num_epochs: 60
+  num_epochs: 30
   iters_per_epoch: 100
   # n_rays: 2048
   # n_rays: 4096
