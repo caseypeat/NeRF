@@ -3,7 +3,8 @@ scene:
   scene_paths:
   #  - /home/casey/Documents/PhD/data/conan_scans/ROW_349_EAST_SLOW_0006/scene.json
   #  - /home/casey/Documents/PhD/data/conan_scans/ROW_349_WEST_SLOW_0007/scene.json
-   - /home/casey/Documents/PhD/data/conan_scans/ROW_349_WEST_LONG_0002/scene.json
+  #  - /home/casey/Documents/PhD/data/conan_scans/ROW_349_WEST_LONG_0002/scene.json
+   - /home/casey/Documents/PhD/data/my_renders/vine_C6_0/front_close/cameras.json
   frame_ranges:
   #  - - 100
   #    - 120
@@ -15,17 +16,18 @@ scene:
   outer_bound: 2.5
 
 log:
-  root_dir: './logs/test'
-  eval_image_freq: end
+  root_dir: './logs/pose_optimise3'
+  eval_image_freq: 20
   eval_pointcloud_freq: end
   save_weights_freq: end
 
 trainer:
-  num_epochs: 30
+  num_epochs: 100
   iters_per_epoch: 100
   # n_rays: 2048
   # n_rays: 4096
-  n_rays: 16384
+  n_rays: 8192
+  # n_rays: 16384
   dist_loss_lambda1: 1e-5
   dist_loss_lambda2: 1e-2
 
@@ -48,11 +50,16 @@ inference:
   image_num: 33
 
 renderer:
+  # steps:
+  #   - 256
+  #   - 128
+  #   - 64
+  #   - 32
   steps:
+    - 512
     - 256
     - 128
     - 64
-    - 32
   z_bounds:
     - 0.1
     - 1
@@ -60,7 +67,8 @@ renderer:
     - 100
     - 1000
 
-  importance_steps: 128
+  # importance_steps: 128
+  importance_steps: 256
   alpha: 0.2
 
 nets:
