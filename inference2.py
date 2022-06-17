@@ -124,7 +124,7 @@ class Inferencer(object):
         
 
     @torch.no_grad()
-    def extract_surface_geometry(self, n, h, w, K, E):
+    def extract_surface_geometry(self, n, h, w, K, E, max_variance):
 
         n_f = torch.reshape(n, (-1,))
         h_f = torch.reshape(h, (-1,))
@@ -141,12 +141,12 @@ class Inferencer(object):
         for a in tqdm(range(0, len(n_f), self.n_rays)):
             b = min(len(n_f), a+self.n_rays)
 
-            n_fb = n_f[a:b]
-            h_fb = h_f[a:b]
-            w_fb = w_f[a:b]
+            n_fb = n_f[a:b].to('cuda')
+            h_fb = h_f[a:b].to('cuda')
+            w_fb = w_f[a:b].to('cuda')
 
-            K_fb = K_f[a:b]
-            E_fb = E_f[a:b]
+            K_fb = K_f[a:b].to('cuda')
+            E_fb = E_f[a:b].to('cuda')
 
             color_bg = torch.ones(3, device='cuda') # [3], fixed white background
 
@@ -157,15 +157,15 @@ class Inferencer(object):
             z_vals_fb = aux_outputs_fb['z_vals']
             # x_hashtable_fb = aux_outputs_fb['x_hashtable']
 
-            weights_thresh_start_fb = self.calculate_cumlative_weights_thresh(weights_fb, 0.2)
+            weights_thresh_start_fb = self.calculate_cumlative_weights_thresh(weights_fb, 0.3)
             weights_thresh_mid_fb = self.calculate_cumlative_weights_thresh(weights_fb, 0.5)
-            weights_thresh_end_fb = self.calculate_cumlative_weights_thresh(weights_fb, 0.8)
+            weights_thresh_end_fb = self.calculate_cumlative_weights_thresh(weights_fb, 0.7)
 
             depth_start = torch.sum(weights_thresh_start_fb * z_vals_fb, dim=-1)
             depth_end = torch.sum(weights_thresh_end_fb * z_vals_fb, dim=-1)
             depth_variance_fb = torch.abs(depth_start - depth_end)[:, None, None].expand(-1, weights_fb.shape[1], 1)
             
-            impulse_mask = depth_variance_fb < 0.1
+            impulse_mask = depth_variance_fb < max_variance
             mid_transmittance_mask = weights_thresh_mid_fb.to(bool)[..., None]
             inside_inner_bound_mask = torch.linalg.norm(xyzs_fb, dim=-1, keepdim=True) < self.renderer.inner_bound
             mask = (impulse_mask & mid_transmittance_mask & inside_inner_bound_mask)

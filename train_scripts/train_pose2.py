@@ -77,9 +77,10 @@ def matrix2xyz_extrinsic(rotation_matrices: np.ndarray) -> np.ndarray:
     angles_radians[idx, 2] = np.arctan2(r21, r11)
 
     # convert to degrees
-    # euler_angles = np.rad2deg(angles_radians)
+    euler_angles = np.rad2deg(angles_radians)
 
     return angles_radians
+    # return euler_angles
 
 
 class Transform(nn.Module):
@@ -215,6 +216,7 @@ class ExtractDenseGeometry():
 class TrainerPose(object):
     def __init__(
         self,
+        translation_init,
         transform,
         model_a,
         model_b,
@@ -223,7 +225,9 @@ class TrainerPose(object):
         num_iters,
         n_rays):
 
-        self.num_iters = num_iters
+        self.num_iters = num_iters  
+
+        self.translation_init = translation_init
         
         self.transform = transform
         self.model_a = model_a
@@ -288,10 +292,10 @@ class TrainerPose(object):
                 else:
                     print(f'{(sum(self.losses[-100:]) / 100):.6f}')
 
-                print(np.linalg.norm((self.transform.init_transform[:3, 3] + self.transform.T).detach().cpu().numpy()))
+                print(np.linalg.norm((self.transform.init_transform[:3, 3] + self.transform.T).detach().cpu().numpy() - self.translation_init.detach().cpu().numpy()))
                 R_error = Exp(self.transform.R) @ self.transform.init_transform[:3, :3]
                 r_error = matrix2xyz_extrinsic(R_error.detach().cpu().numpy())
-                print(np.linalg.norm(r_error))
+                print(np.linalg.norm(r_error), np.rad2deg(np.linalg.norm(r_error)))
 
             loss.backward()
             self.optimizer.step()
@@ -302,8 +306,22 @@ class TrainerPose(object):
 
 if __name__ == '__main__':
 
-    cfg_a = OmegaConf.load('./logs/pose_optimise3/20220530_162359/config.yaml')
-    cfg_b = OmegaConf.load('./logs/pose_optimise3/20220530_170425/config.yaml')
+        # logdir_a = './logs/slow/20220612_173001'
+    # logdir_a = './logs/slow/20220612_180801'
+    # logdir_a = './logs/pose_optimise3/20220530_162359'
+    # logdir_a = './logs/dense/20220615_131636'
+    # logdir_a = './logs/zeronerf/20220616_151518'
+    # logdir_b = './logs/slow/20220613_095006'
+    # logdir_b = './logs/slow/20220613_090902'
+    # logdir_b = './logs/pose_optimise3/20220530_170425'
+    # logdir_b = './logs/dense/20220615_135611'
+    # logdir_b = './logs/zeronerf/20220616_152915'
+
+    logdir_a = './logs/zeronerf/vine_C6_0/20220616_151518'
+    logdir_b = './logs/zeronerf/vine_C6_0/20220616_152915'
+
+    cfg_a = OmegaConf.load(f'{logdir_a}/config.yaml')
+    cfg_b = OmegaConf.load(f'{logdir_b}/config.yaml')
 
     dataloader_a = CameraGeometryLoader(
         cfg_a.scene.scene_paths,
@@ -335,7 +353,7 @@ if __name__ == '__main__':
         color_hidden_dim=cfg_a.nets.color.hidden_dim,
         color_num_layers=cfg_a.nets.color.num_layers,
     ).to('cuda')
-    model_a.load_state_dict(torch.load('./logs/pose_optimise3/20220530_162359/model/10000.pth'))
+    model_a.load_state_dict(torch.load(f'{logdir_a}/model/3000.pth'))
 
     model_b = NeRFNetwork(
         N = len(dataloader_b.images),
@@ -353,7 +371,7 @@ if __name__ == '__main__':
         color_hidden_dim=cfg_b.nets.color.hidden_dim,
         color_num_layers=cfg_b.nets.color.num_layers,
     ).to('cuda')
-    model_b.load_state_dict(torch.load('./logs/pose_optimise3/20220530_162359/model/10000.pth'))
+    model_b.load_state_dict(torch.load(f'{logdir_b}/model/3000.pth'))
 
     n_rays = 4096
     num_iters = 2000
@@ -365,14 +383,19 @@ if __name__ == '__main__':
 
     # result_ransac, result_icp = allign_pointclouds(pcd_dense_a, pcd_dense_b, voxel_size=0.01)
 
-    # init_transform = np.load('./data/transforms/east_west.npy')
+    # init_transform = np.load('./data/transforms/east_west.npy')  
 
-    T_init = torch.Tensor(np.random.random(3) * 0.05)
-    R_init = torch.Tensor(np.random.random(3) * 0.05)
+    T_init = dataloader_a.translation_center - dataloader_b.translation_center
+
+    T_error = torch.Tensor(np.random.random(3))
+    T_error = T_error / torch.linalg.norm(T_error) * 0.05 + T_init
+
+    R_error = torch.Tensor(np.random.random(3))
+    R_error = R_error / torch.linalg.norm(R_error) * 0.01
 
     transform_init = torch.eye(4, dtype=torch.float32, device='cuda')
-    transform_init[:3, :3] = Exp(R_init)
-    transform_init[:3, 3] = T_init
+    transform_init[:3, :3] = Exp(R_error)
+    transform_init[:3, 3] = T_error
 
     # R_error = Exp(transform_init)
     # r_error = matrix2xyz_extrinsic(R_error.detach().cpu().numpy())
@@ -395,6 +418,7 @@ if __name__ == '__main__':
     )
 
     trainer = TrainerPose(
+        translation_init=T_init,
         transform=transform,
         model_a=model_a,
         model_b=model_b,
@@ -406,13 +430,13 @@ if __name__ == '__main__':
 
     trainer.train()
 
-    transform_r = torch.eye(4, dtype=torch.float32, device='cuda')
-    transform_r[:3, :3] = Exp(transform.R)
-    transform_r[:3, 3] = transform.T
-    transform_comb = np.array(transform_r.detach().cpu()) @ np.array(transform.transform_init.detach().cpu())
+    # transform_r = torch.eye(4, dtype=torch.float32, device='cuda')
+    # transform_r[:3, :3] = Exp(transform.R)
+    # transform_r[:3, 3] = transform.T
+    # transform_comb = np.array(transform_r.detach().cpu()) @ np.array(transform.transform_init.detach().cpu())
 
-    t = transform_comb[:3, 3]
-    print(t)
+    # t = transform_comb[:3, 3]
+    # print(t)
 
     # pcd_a.transform(np.array(transform.init_transform.detach().cpu()))
     # o3d.visualization.draw_geometries([pcd_a, pcd_b])

@@ -112,13 +112,13 @@ class CameraGeometryLoader(object):
         return self.get_custom_batch(n, h, w, background=(1, 1, 1))
 
 
-    def get_pointcloud_batch(self, device='cuda'):
+    def get_pointcloud_batch(self, cams, freq, device='cpu'):
 
         n = []
         for i in range(self.N):
             if (i > int(self.images.shape[0]*0.25) and i < int(self.images.shape[0]*0.75)):
-                if i % 6 == 2 or i % 6 == 3:
-                    if i//6 % 10 == 0:
+                if i % 6 in cams:
+                    if i//6 % freq == 0:
                         n.append(i)
                         
         n = torch.Tensor(np.array(n)).to(int)
@@ -126,7 +126,7 @@ class CameraGeometryLoader(object):
         w = torch.arange(0, self.W)
         n, h, w = torch.meshgrid(n, h, w, indexing='ij')
 
-        return self.get_custom_batch(n, h, w, background=(1, 1, 1))
+        return self.get_custom_batch(n, h, w, background=(1, 1, 1), device=device)
 
 
     def get_calibration(self, device='cuda'):
