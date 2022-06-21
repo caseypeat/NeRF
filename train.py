@@ -6,41 +6,15 @@ import argparse
 
 from omegaconf import OmegaConf
 
-from loaders.camera_geometry_loader2 import CameraGeometryLoader
+from loaders.camera_geometry_loader import CameraGeometryLoader
 
-from nets2 import NeRFNetwork
-from renderer2 import NerfRenderer
-from trainer2 import Trainer
+from nets import NeRFNetwork
+from renderer import NerfRenderer
+from trainer import Trainer
 from logger import Logger
-from inference2 import Inferencer
+from inference import Inferencer
 
-
-def configurator(config_base=None):
-
-    parser = argparse.ArgumentParser()
-
-    parser.add_argument('--configs', type=str, nargs='*')
-    parser.add_argument('--params', type=str, nargs='*')
-
-    args = parser.parse_args()
-
-    cfg = OmegaConf.create()
-    if args.configs is None and config_base is not None:
-        cfg_config = OmegaConf.load(config_base)
-        cfg = OmegaConf.merge(cfg, cfg_config)
-    else:
-        for config in args.configs:
-            cfg_config = OmegaConf.load(config)
-            cfg = OmegaConf.merge(cfg, cfg_config)
-
-    if args.params is not None:
-        params = []
-        # for param in args.params:
-        #     # params.append(OmegaConf.decode)
-        cfg_params = OmegaConf.from_dotlist(args.params)
-        cfg = OmegaConf.merge(cfg, cfg_params)
-
-    return cfg
+from misc import configurator
 
 
 if __name__ == '__main__':
@@ -93,7 +67,13 @@ if __name__ == '__main__':
     inferencer = Inferencer(
         renderer=renderer,
         n_rays=cfg.trainer.n_rays,
-        image_num=cfg.inference.image_num,
+        image_num=cfg.inference.image.image_num,
+        rotate=cfg.inference.image.rotate,
+        max_variance_npy=cfg.inference.pointcloud.max_variance_npy,
+        max_variance_pcd=cfg.inference.pointcloud.max_variance_pcd,
+        distribution_area=cfg.inference.pointcloud.distribution_area,
+        cams=cfg.inference.pointcloud.cams,
+        freq=cfg.inference.pointcloud.freq,
         )
 
     logger.log('Initiating Optimiser...')

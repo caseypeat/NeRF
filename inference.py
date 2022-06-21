@@ -11,18 +11,39 @@ from matplotlib import cm
 from tqdm import tqdm
 
 
+def rot90(image):
+    if len(image.shape) == 2:
+        return image.transpose(1, 0)[:, ::-1]
+    elif len(image.shape) == 3:
+        return image.transpose(1, 0, 2)[:, ::-1, :]
+
+
 class Inferencer(object):
     def __init__(
         self,
         renderer,
         n_rays,
         image_num,
+        rotate,
+        max_variance_npy,
+        max_variance_pcd,
+        distribution_area,
+        cams,
+        freq,
         ):
         
         self.renderer = renderer
         self.n_rays = n_rays
-        self.image_num = image_num
 
+        self.image_num = image_num
+        self.rotate = rotate
+
+        self.max_variance_npy = max_variance_npy
+        self.max_variance_pcd = max_variance_pcd
+        self.distribution_area = distribution_area
+
+        self.cams = cams
+        self.freq = freq
 
     @torch.no_grad()
     def render_image(self, n, h, w, K, E):
@@ -60,6 +81,10 @@ class Inferencer(object):
         image = torch.reshape(image_f, (*h.shape, 3)).numpy()
         invdepth = torch.reshape(invdepth_f, h.shape).numpy()
 
+        for i in range(self.rotate // 90):
+            image = rot90(image)
+            invdepth = rot90(invdepth)
+
         return image, invdepth
         
 
@@ -75,7 +100,7 @@ class Inferencer(object):
 
     
     @torch.no_grad()
-    def render_invdepth_thresh(self, n, h, w, K, E, thresh=0.05):
+    def render_invdepth_thresh(self, n, h, w, K, E):
 
         n_f = torch.reshape(n, (-1,))
         h_f = torch.reshape(h, (-1,))
@@ -102,15 +127,15 @@ class Inferencer(object):
 
             z_vals_fb = aux_outputs_fb['z_vals']
 
-            weights_thresh_start_fb = self.calculate_cumlative_weights_thresh(weights_fb, 0.2)
+            weights_thresh_start_fb = self.calculate_cumlative_weights_thresh(weights_fb, 0.5 - self.distribution_area / 2)
             weights_thresh_mid_fb = self.calculate_cumlative_weights_thresh(weights_fb, 0.5)
-            weights_thresh_end_fb = self.calculate_cumlative_weights_thresh(weights_fb, 0.8)
+            weights_thresh_end_fb = self.calculate_cumlative_weights_thresh(weights_fb, 0.5 + self.distribution_area / 2)
 
             depth_start = torch.sum(weights_thresh_start_fb * z_vals_fb, dim=-1)
             depth_mid = torch.sum(weights_thresh_mid_fb * z_vals_fb, dim=-1)
             depth_end = torch.sum(weights_thresh_end_fb * z_vals_fb, dim=-1)
 
-            impulse_mask = torch.abs(depth_start - depth_end) > thresh
+            impulse_mask = torch.abs(depth_start - depth_end) > self.max_variance_pcd
 
             invdepth_thresh_fb = 1 / depth_mid
             invdepth_thresh_fb[impulse_mask] = 0
@@ -120,11 +145,14 @@ class Inferencer(object):
 
         invdepth_thresh = torch.reshape(invdepth_thresh_f, h.shape).numpy()
 
+        for i in range(self.rotate // 90):
+            invdepth_thresh = rot90(invdepth_thresh)
+
         return invdepth_thresh
         
 
     @torch.no_grad()
-    def extract_surface_geometry(self, n, h, w, K, E, max_variance):
+    def extract_surface_geometry(self, n, h, w, K, E):
 
         n_f = torch.reshape(n, (-1,))
         h_f = torch.reshape(h, (-1,))
@@ -157,15 +185,15 @@ class Inferencer(object):
             z_vals_fb = aux_outputs_fb['z_vals']
             # x_hashtable_fb = aux_outputs_fb['x_hashtable']
 
-            weights_thresh_start_fb = self.calculate_cumlative_weights_thresh(weights_fb, 0.3)
+            weights_thresh_start_fb = self.calculate_cumlative_weights_thresh(weights_fb, 0.5 - self.distribution_area / 2)
             weights_thresh_mid_fb = self.calculate_cumlative_weights_thresh(weights_fb, 0.5)
-            weights_thresh_end_fb = self.calculate_cumlative_weights_thresh(weights_fb, 0.7)
+            weights_thresh_end_fb = self.calculate_cumlative_weights_thresh(weights_fb, 0.5 + self.distribution_area / 2)
 
             depth_start = torch.sum(weights_thresh_start_fb * z_vals_fb, dim=-1)
             depth_end = torch.sum(weights_thresh_end_fb * z_vals_fb, dim=-1)
             depth_variance_fb = torch.abs(depth_start - depth_end)[:, None, None].expand(-1, weights_fb.shape[1], 1)
             
-            impulse_mask = depth_variance_fb < max_variance
+            impulse_mask = depth_variance_fb < self.max_variance_npy
             mid_transmittance_mask = weights_thresh_mid_fb.to(bool)[..., None]
             inside_inner_bound_mask = torch.linalg.norm(xyzs_fb, dim=-1, keepdim=True) < self.renderer.inner_bound
             mask = (impulse_mask & mid_transmittance_mask & inside_inner_bound_mask)

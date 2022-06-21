@@ -9,9 +9,9 @@ from omegaconf import OmegaConf
 
 from tqdm import tqdm
 
-from loaders.camera_geometry_loader2 import CameraGeometryLoader
-from renderer2 import NerfRenderer
-from nets2 import NeRFNetwork
+from loaders.camera_geometry_loader import CameraGeometryLoader
+from renderer import NerfRenderer
+from nets import NeRFNetwork
 from utils.allign_pointclouds import allign_pointclouds
 
 # from config.overwriteable_config import OverwriteableConfig
@@ -41,46 +41,6 @@ def Exp(r):
     eye = torch.eye(3, dtype=torch.float32, device=r.device)
     R = eye + (torch.sin(norm_r) / norm_r) * skew_r + ((1 - torch.cos(norm_r)) / norm_r**2) * (skew_r @ skew_r)
     return R
-
-# https://github.com/alisterburt/eulerangles/blob/master/eulerangles/math/rotation_matrix_to_eulers.py
-def matrix2xyz_extrinsic(rotation_matrices: np.ndarray) -> np.ndarray:
-    """
-    Rz(k3) @ Ry(k2) @ Rx(k1) = [[c2c3, s1s2c3-c1s3, c1s2c3+s1s3],
-                                [c2s3, s1s2s3+c1c3, c1s2s3-s1c3],
-                                [-s2, s1c2, c1c2]]
-    """
-    rotation_matrices = rotation_matrices.reshape((-1, 3, 3))
-    angles_radians = np.zeros((rotation_matrices.shape[0], 3))
-
-    # Angle 2 can be taken directly from matrices
-    angles_radians[:, 1] = -np.arcsin(rotation_matrices[:, 2, 0])
-
-    # Gimbal lock case (c2 = 0)
-    tolerance = 1e-4
-
-    # Find indices where this is the case
-    gimbal_idx = np.abs(rotation_matrices[:, 0, 0]) < tolerance
-
-    # Calculate angle 1 and set angle 3 = 0 for those indices
-    r23 = rotation_matrices[gimbal_idx, 1, 2]
-    r22 = rotation_matrices[gimbal_idx, 1, 1]
-    angles_radians[gimbal_idx, 0] = np.arctan2(-r23, r22)
-    angles_radians[gimbal_idx, 2] = 0
-
-    # Normal case (s2 > 0)
-    idx = np.invert(gimbal_idx)
-    r32 = rotation_matrices[idx, 2, 1]
-    r33 = rotation_matrices[idx, 2, 2]
-    r21 = rotation_matrices[idx, 1, 0]
-    r11 = rotation_matrices[idx, 0, 0]
-    angles_radians[idx, 0] = np.arctan2(r32, r33)
-    angles_radians[idx, 2] = np.arctan2(r21, r11)
-
-    # convert to degrees
-    euler_angles = np.rad2deg(angles_radians)
-
-    return angles_radians
-    # return euler_angles
 
 
 class Transform(nn.Module):
@@ -216,7 +176,6 @@ class ExtractDenseGeometry():
 class TrainerPose(object):
     def __init__(
         self,
-        translation_init,
         transform,
         model_a,
         model_b,
@@ -225,9 +184,7 @@ class TrainerPose(object):
         num_iters,
         n_rays):
 
-        self.num_iters = num_iters  
-
-        self.translation_init = translation_init
+        self.num_iters = num_iters
         
         self.transform = transform
         self.model_a = model_a
@@ -286,59 +243,26 @@ class TrainerPose(object):
 
             # loss = F.mse_loss(weights_a, weights_ab)
 
-            if i % 100 == 0:
-                if i == 0:
-                    print(f'{loss.item():.6f}')
-                else:
-                    print(f'{(sum(self.losses[-100:]) / 100):.6f}')
-
-                print(np.linalg.norm((self.transform.init_transform[:3, 3] + self.transform.T).detach().cpu().numpy() - self.translation_init.detach().cpu().numpy()))
-                R_error = Exp(self.transform.R) @ self.transform.init_transform[:3, :3]
-                r_error = matrix2xyz_extrinsic(R_error.detach().cpu().numpy())
-                print(np.linalg.norm(r_error), np.rad2deg(np.linalg.norm(r_error)))
-
             loss.backward()
             self.optimizer.step()
             self.scheduler.step()
 
             self.losses.append(loss.item())
 
+            if i % 100 == 0:
+                if i == 0:
+                    print(f'{loss.item():.6f}')
+                else:
+                    print(f'{(sum(self.losses[-100:]) / 100):.6f}')
+
 
 if __name__ == '__main__':
 
-        # logdir_a = './logs/slow/20220612_173001'
-    # logdir_a = './logs/slow/20220612_180801'
-    # logdir_a = './logs/pose_optimise3/20220530_162359'
-    # logdir_a = './logs/dense/20220615_131636'
-    # logdir_a = './logs/zeronerf/20220616_151518'
-    # logdir_b = './logs/slow/20220613_095006'
-    # logdir_b = './logs/slow/20220613_090902'
-    # logdir_b = './logs/pose_optimise3/20220530_170425'
-    # logdir_b = './logs/dense/20220615_135611'
-    # logdir_b = './logs/zeronerf/20220616_152915'
-
-    logdir_a = './logs/zeronerf/vine_C6_0/20220616_151518'
-    logdir_b = './logs/zeronerf/vine_C6_0/20220616_152915'
-
-    cfg_a = OmegaConf.load(f'{logdir_a}/config.yaml')
-    cfg_b = OmegaConf.load(f'{logdir_b}/config.yaml')
-
-    dataloader_a = CameraGeometryLoader(
-        cfg_a.scene.scene_paths,
-        [None],
-        [None],
-        0.5,
-        )
-
-    dataloader_b = CameraGeometryLoader(
-        cfg_b.scene.scene_paths,
-        [None],
-        [None],
-        0.5,
-        )
+    cfg_a = OmegaConf.load('./logs/hashtable_outputs/20220506_162403/config.yaml')
+    cfg_b = OmegaConf.load('./logs/hashtable_outputs/20220506_143522/config.yaml')
 
     model_a = NeRFNetwork(
-        N = len(dataloader_a.images),
+        N = 1176,
         encoding_precision=cfg_a.nets.encoding.precision,
         encoding_n_levels=cfg_a.nets.encoding.n_levels,
         encoding_n_features_per_level=cfg_a.nets.encoding.n_features_per_level,
@@ -353,10 +277,10 @@ if __name__ == '__main__':
         color_hidden_dim=cfg_a.nets.color.hidden_dim,
         color_num_layers=cfg_a.nets.color.num_layers,
     ).to('cuda')
-    model_a.load_state_dict(torch.load(f'{logdir_a}/model/3000.pth'))
+    model_a.load_state_dict(torch.load('./logs/hashtable_outputs/20220506_162403/model/10000.pth'))
 
     model_b = NeRFNetwork(
-        N = len(dataloader_b.images),
+        N = 972,
         encoding_precision=cfg_b.nets.encoding.precision,
         encoding_n_levels=cfg_b.nets.encoding.n_levels,
         encoding_n_features_per_level=cfg_b.nets.encoding.n_features_per_level,
@@ -371,41 +295,47 @@ if __name__ == '__main__':
         color_hidden_dim=cfg_b.nets.color.hidden_dim,
         color_num_layers=cfg_b.nets.color.num_layers,
     ).to('cuda')
-    model_b.load_state_dict(torch.load(f'{logdir_b}/model/3000.pth'))
+    model_b.load_state_dict(torch.load('./logs/hashtable_outputs/20220506_143522/model/10000.pth'))
 
-    n_rays = 4096
+    dataloader_a = CameraGeometryLoader(
+        ['/home/casey/Documents/PhD/data/conan_scans/ROW_349_EAST_SLOW_0006/scene.json'],
+        [None],
+        [None],
+        0.5,
+        )
+
+    dataloader_b = CameraGeometryLoader(
+        ['/home/casey/Documents/PhD/data/conan_scans/ROW_349_WEST_SLOW_0007/scene.json'],
+        [None],
+        [None],
+        0.5,
+        )
+
+    pcd_a = o3d.io.read_point_cloud('./logs/hashtable_outputs/20220506_162403/pointclouds/pcd/10000.pcd')
+    pcd_b = o3d.io.read_point_cloud('./logs/hashtable_outputs/20220506_143522/pointclouds/pcd/10000.pcd')
+
+    n_rays = 8192
     num_iters = 2000
 
-    # dense_inference_a = ExtractDenseGeometry(model_a, dataloader_a, 128, 512, cfg_a.renderer.importance_steps*n_rays, 100, cfg_a.scene.outer_bound)
-    # pcd_dense_a = dense_inference_a.generate_dense_pointcloud()
-    # dense_inference_b = ExtractDenseGeometry(model_b, dataloader_b, 128, 512, cfg_b.renderer.importance_steps*n_rays, 100, cfg_b.scene.outer_bound)
-    # pcd_dense_b = dense_inference_b.generate_dense_pointcloud()
+    dense_inference_a = ExtractDenseGeometry(model_a, dataloader_a, 128, 512, cfg_a.renderer.importance_steps*n_rays, 100, cfg_a.scene.outer_bound)
+    pcd_dense_a = dense_inference_a.generate_dense_pointcloud()
+    dense_inference_b = ExtractDenseGeometry(model_b, dataloader_b, 128, 512, cfg_b.renderer.importance_steps*n_rays, 100, cfg_b.scene.outer_bound)
+    pcd_dense_b = dense_inference_b.generate_dense_pointcloud()
 
-    # result_ransac, result_icp = allign_pointclouds(pcd_dense_a, pcd_dense_b, voxel_size=0.01)
+    result_ransac, result_icp = allign_pointclouds(pcd_dense_a, pcd_dense_b, voxel_size=0.01)
 
-    # init_transform = np.load('./data/transforms/east_west.npy')  
+    # init_transform = np.load('./data/transforms/east_west.npy')
 
-    T_init = dataloader_a.translation_center - dataloader_b.translation_center
+    init_transform = np.array(result_ransac.transformation)
 
-    T_error = torch.Tensor(np.random.random(3))
-    T_error = T_error / torch.linalg.norm(T_error) * 0.05 + T_init
+    pcd_a.transform(init_transform)
+    o3d.visualization.draw_geometries([pcd_a, pcd_b])
 
-    R_error = torch.Tensor(np.random.random(3))
-    R_error = R_error / torch.linalg.norm(R_error) * 0.01
+    np.save('./data/both_sides_demo4/transform_init.npy', init_transform)
 
-    transform_init = torch.eye(4, dtype=torch.float32, device='cuda')
-    transform_init[:3, :3] = Exp(R_error)
-    transform_init[:3, 3] = T_error
+    exit()
 
-    # R_error = Exp(transform_init)
-    # r_error = matrix2xyz_extrinsic(R_error.detach().cpu().numpy())
-    # print(np.linalg.norm(r_error))
-
-    # np.save('./data/both_sides_demo4/transform_init.npy', init_transform)
-
-    # exit()
-
-    transform = Transform(transform_init).cuda()
+    transform = Transform(torch.Tensor(init_transform)).cuda()
 
     renderer = NerfRenderer(
         model=model_a,
@@ -418,7 +348,6 @@ if __name__ == '__main__':
     )
 
     trainer = TrainerPose(
-        translation_init=T_init,
         transform=transform,
         model_a=model_a,
         model_b=model_b,
@@ -430,28 +359,25 @@ if __name__ == '__main__':
 
     trainer.train()
 
-    # transform_r = torch.eye(4, dtype=torch.float32, device='cuda')
-    # transform_r[:3, :3] = Exp(transform.R)
-    # transform_r[:3, 3] = transform.T
-    # transform_comb = np.array(transform_r.detach().cpu()) @ np.array(transform.transform_init.detach().cpu())
+    transform_r = torch.eye(4, dtype=torch.float32, device='cuda')
+    transform_r[:3, :3] = Exp(transform.R)
+    transform_r[:3, 3] = transform.T
+    transform_comb = np.array(transform_r.detach().cpu()) @ np.array(transform.init_transform.detach().cpu())
 
-    # t = transform_comb[:3, 3]
-    # print(t)
+    pcd_a.transform(np.array(transform.init_transform.detach().cpu()))
+    o3d.visualization.draw_geometries([pcd_a, pcd_b])
 
-    # pcd_a.transform(np.array(transform.init_transform.detach().cpu()))
-    # o3d.visualization.draw_geometries([pcd_a, pcd_b])
+    pcd_both = o3d.geometry.PointCloud()
+    pcd_both += pcd_a
+    pcd_both += pcd_b
+    o3d.io.write_point_cloud('./data/both_sides_demo/ransac_allign.pcd', pcd_both)
 
-    # pcd_both = o3d.geometry.PointCloud()
-    # pcd_both += pcd_a
-    # pcd_both += pcd_b
-    # o3d.io.write_point_cloud('./data/both_sides_demo/ransac_allign.pcd', pcd_both)
+    pcd_a.transform(np.array(transform_r.detach().cpu()))
+    o3d.visualization.draw_geometries([pcd_a, pcd_b])
 
-    # pcd_a.transform(np.array(transform_r.detach().cpu()))
-    # o3d.visualization.draw_geometries([pcd_a, pcd_b])
+    pcd_both = o3d.geometry.PointCloud()
+    pcd_both += pcd_a
+    pcd_both += pcd_b
+    o3d.io.write_point_cloud('./data/both_sides_demo/nerf_allign.pcd', pcd_both)
 
-    # pcd_both = o3d.geometry.PointCloud()
-    # pcd_both += pcd_a
-    # pcd_both += pcd_b
-    # o3d.io.write_point_cloud('./data/both_sides_demo/nerf_allign.pcd', pcd_both)
-
-    # np.save('./data/both_sides_demo/transform_refine.npy', transform_comb)
+    np.save('./data/both_sides_demo/transform_refine.npy', transform_comb)

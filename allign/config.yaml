@@ -1,0 +1,22 @@
+input_paths:
+  logdir_a: ./logs/allign/20220622_001001
+  model_a: ./logs/allign/20220622_001001/model/3000.pth
+  pointcloud_a: ./logs/allign/20220622_001001/pointclouds/pcd/3000.pcd
+
+  logdir_b: ./logs/allign/20220622_002528
+  model_b: ./logs/allign/20220622_002528/model/3000.pth
+  pointcloud_b: ./logs/allign/20220622_002528/pointclouds/pcd/3000.pcd
+
+output_dir: './allign/logs/test'
+
+n_rays: 4096
+num_iters: 2000
+
+renderer:
+  z_bounds: [0.1, 1]
+  steps_firstpass: [512]
+
+extract_geometry_values:
+  mask_res: 128
+  voxel_res: 512
+  sigma_thresh: 100

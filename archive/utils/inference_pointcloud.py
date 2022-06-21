@@ -8,13 +8,13 @@ import open3d as o3d
 
 from omegaconf import OmegaConf
 
-from loaders.camera_geometry_loader2 import CameraGeometryLoader
+from loaders.camera_geometry_loader import CameraGeometryLoader
 
-from nets2 import NeRFNetwork
-from renderer2 import NerfRenderer
-from trainer2 import Trainer
+from nets import NeRFNetwork
+from renderer import NerfRenderer
+from trainer import Trainer
 from logger import Logger
-from inference2 import Inferencer
+from inference import Inferencer
 
 
 if __name__ == '__main__':

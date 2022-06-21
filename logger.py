@@ -12,8 +12,6 @@ from torch.utils.tensorboard import SummaryWriter
 
 from misc import color_depthmap
 
-# from config import cfg
-
 
 def tensorboard_test(root_dir):
 
@@ -62,27 +60,25 @@ class Logger(object):
             f.write(output_str)
 
     def image_color(self, string, image, step):
-        image = image.transpose(1, 0, 2)[:, ::-1]
-        # image = image.transpose(1, 0, 2)[::-1]
         directory_path = os.path.join(self.images_dir, string)
         if not os.path.exists(directory_path):
             os.mkdir(directory_path)
         file_path = os.path.join(directory_path, f'{step}.jpg')
+
         self.writer.add_image(string, image[..., np.array([2, 1, 0], dtype=int)], step, dataformats='HWC')
         cv2.imwrite(file_path, np.uint8(image*255))
 
     def image_grey(self, string, grey, step):
         grey_c = color_depthmap(grey)
-        grey_c = grey_c.transpose(1, 0, 2)[:, ::-1]
-        # grey_c = grey_c.transpose(1, 0, 2)[::-1]
         directory_path = os.path.join(self.images_dir, string)
         if not os.path.exists(directory_path):
             os.mkdir(directory_path)
         file_path = os.path.join(directory_path, f'{step}.jpg')
+
         self.writer.add_image(string, grey_c, step, dataformats='HWC')
         cv2.imwrite(file_path, np.uint8(grey_c[..., np.array([2, 1, 0], dtype=int)]*255))
 
-    def pointcloud(self, pointcloud, step, translation, max_variance):
+    def pointcloud(self, pointcloud, step, max_variance):
         directory_path_np = os.path.join(self.pointcloud_dir, 'numpy')
         if not os.path.exists(directory_path_np):
             os.mkdir(directory_path_np)
@@ -97,10 +93,6 @@ class Logger(object):
         pcd = o3d.geometry.PointCloud()
         pcd.points = o3d.utility.Vector3dVector(pointcloud['points'][np.broadcast_to(pointcloud['depth_variance'], pointcloud['points'].shape) < max_variance].reshape(-1, 3))
         pcd.colors = o3d.utility.Vector3dVector(pointcloud['colors'][np.broadcast_to(pointcloud['depth_variance'], pointcloud['colors'].shape) < max_variance].reshape(-1, 3))
-        
-        transform = np.eye(4)
-        transform[:3, 3] = translation
-        pcd = pcd.transform(transform)
 
         o3d.io.write_point_cloud(file_path_pcd, pcd)
 

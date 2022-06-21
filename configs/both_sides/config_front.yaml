@@ -1,8 +1,0 @@
-scene:
-  scene_paths:
-   - /home/casey/Documents/PhD/data/synthetic_tree_assets/trees3/renders_old/vine_A1_0/front/cameras.json
-  frame_ranges:
-   - null
-
-log:
-  root_dir: './logs/both_sides/front'

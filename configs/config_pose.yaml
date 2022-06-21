@@ -1,6 +1,0 @@
-
-cfg_path_a: './logs/hashtable_outputs/20220506_162403/config.yaml'
-model_path_a: ''
-
-cfg_path_b: './logs/hashtable_outputs/20220506_162403/config.yaml'
-model_path_b: ''

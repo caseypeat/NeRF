@@ -1,78 +1,38 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import argparse
 
+from omegaconf import OmegaConf
 from matplotlib import cm
-
 from tqdm import tqdm
 
-def remove_background(images_i, depths_i, ids_i, threshold):
-    images = np.copy(images_i)
-    depths = np.copy(depths_i)
-    ids = np.copy(ids_i)
 
-    mask = np.zeros((*depths_i.shape,), dtype=bool)
-    mask[depths_i > threshold] = True
+def configurator(config_base=None):
 
-    mask_ids = np.zeros((*ids.shape,), dtype=bool)
-    mask_ids[ids < 128] = True
+    parser = argparse.ArgumentParser()
 
-    mask = np.logical_or(mask, mask_ids)
+    parser.add_argument('--configs', type=str, nargs='*')
+    parser.add_argument('--params', type=str, nargs='*')
 
-    images[np.broadcast_to(mask[..., None], (*images.shape,))] = 0
-    images = np.concatenate((images, 1 - np.float32(mask[..., None])), axis=-1)
-    depths[mask] = np.inf
-    ids[mask] = np.inf
+    args = parser.parse_args()
 
-    return images, depths, ids
+    cfg = OmegaConf.create()
+    if args.configs is None and config_base is not None:
+        cfg_config = OmegaConf.load(config_base)
+        cfg = OmegaConf.merge(cfg, cfg_config)
+    else:
+        for config in args.configs:
+            cfg_config = OmegaConf.load(config)
+            cfg = OmegaConf.merge(cfg, cfg_config)
 
+    if args.params is not None:
+        params = []
+        # for param in args.params:
+        #     # params.append(OmegaConf.decode)
+        cfg_params = OmegaConf.from_dotlist(args.params)
+        cfg = OmegaConf.merge(cfg, cfg_params)
 
-def remove_background2(images_i, depths_i, ids_i, threshold):
-    images = np.copy(images_i)
-    depths = np.copy(depths_i)
-    ids = np.copy(ids_i)
-
-    mask = np.zeros((*depths_i.shape,), dtype=bool)
-    mask[depths_i > threshold] = True
-
-    images[np.broadcast_to(mask[..., None], (*images.shape,))] = 0
-    images = np.concatenate((images, 1 - np.float32(mask[..., None])), axis=-1)
-    depths[mask] = np.inf
-    ids[mask] = np.inf
-
-    return images, depths, ids
-
-
-def extract_foreground(images_i, depths_i, ids, scene_ids):
-    images = np.copy(images_i)
-    depths = np.copy(depths_i)
-
-    # ids_foreground = []
-    ids_thresh = -1
-    for id in scene_ids['ids']:
-        for label in scene_ids['ids'][id]:
-            if 'vine' in label:
-                ids_thresh = int(id)
-                
-            if ids_thresh != -1:
-                break
-        if ids_thresh != -1:
-            break
-
-
-    mask = np.zeros(ids.shape, dtype=bool)
-    mask[ids > ids_thresh] = True
-    # a = ids[..., None].astype(int)
-    # b = np.array(ids_foreground)[None, None, None, :]
-    # c = np.any(a == b, axis=-1)
-    # print(c.shape, c)
-    # mask[c] = True
-    # for id in tqdm(ids_foreground):
-    #     mask[ids == id] = True
-    
-    images[~mask] = 0
-    depths[~mask] = 0
-        
-    return images, depths
+    return cfg
 
 
 def color_depthmap(grey, maxval=None, minval=None):

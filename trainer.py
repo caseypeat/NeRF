@@ -85,15 +85,15 @@ class Trainer(object):
                 if (epoch+1) % self.eval_image_freq == 0:
                     self.logger.log('Rending Invdepth Thresh...')
                     n, h, w, K, E, _, _ = self.dataloader.get_image_batch(self.inferencer.image_num)
-                    invdepth_thresh = self.inferencer.render_invdepth_thresh(n, h, w, K, E, thresh=0.05)
+                    invdepth_thresh = self.inferencer.render_invdepth_thresh(n, h, w, K, E)
                     self.logger.image_grey('invdepth_thresh', invdepth_thresh, self.iter)
 
             if self.eval_pointcloud_freq is not None:
                 if (epoch+1) % self.eval_pointcloud_freq == 0:
                     self.logger.log('Generating Pointcloud...')
-                    n, h, w, K, E, _, _ = self.dataloader.get_pointcloud_batch(cams=[2, 3, 4], freq=3)
-                    pointcloud = self.inferencer.extract_surface_geometry(n, h, w, K, E, 0.1)
-                    self.logger.pointcloud(pointcloud, self.iter, self.dataloader.translation_center, 0.05)
+                    n, h, w, K, E, _, _ = self.dataloader.get_pointcloud_batch(cams=self.inferencer.cams, freq=self.inferencer.freq)
+                    pointcloud = self.inferencer.extract_surface_geometry(n, h, w, K, E)
+                    self.logger.pointcloud(pointcloud, self.iter, self.inferencer.max_variance_pcd)
 
             if self.save_weights_freq is not None:
                 if (epoch+1) % self.save_weights_freq == 0:
