@@ -42,7 +42,6 @@ def Exp(r):
     return R
 
 
-
 if __name__ == '__main__':
 
     thresh = 100
