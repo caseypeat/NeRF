@@ -1,16 +1,18 @@
+
 input_paths:
-  logdir_a: ./logs/allign/20220622_001001
-  model_a: ./logs/allign/20220622_001001/model/3000.pth
-  pointcloud_a: ./logs/allign/20220622_001001/pointclouds/pcd/3000.pcd
+  logdir_a: ./logs/full_allign/20220629_055751
+  model_a: "./logs/full_allign/20220629_055751/model/3000.pth"
+  pointcloud_a: "./logs/full_allign/20220629_055751/pointclouds/pcd/3000.pcd"
 
-  logdir_b: ./logs/allign/20220622_002528
-  model_b: ./logs/allign/20220622_002528/model/3000.pth
-  pointcloud_b: ./logs/allign/20220622_002528/pointclouds/pcd/3000.pcd
+  logdir_b: ./logs/full_allign/20220629_061257
+  model_b: "./logs/full_allign/20220629_061257/model/3000.pth"
+  pointcloud_b: "./logs/full_allign/20220629_061257/pointclouds/pcd/3000.pcd"
 
-output_dir: './allign/logs/test'
+log_dir: './allign/logs/tests/full_allign'
 
 n_rays: 4096
-num_iters: 2000
+iters_per_epoch: 100
+num_epochs: 20
 
 renderer:
   z_bounds: [0.1, 1]

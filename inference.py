@@ -12,10 +12,16 @@ from tqdm import tqdm
 
 
 def rot90(image):
-    if len(image.shape) == 2:
-        return image.transpose(1, 0)[:, ::-1]
-    elif len(image.shape) == 3:
-        return image.transpose(1, 0, 2)[:, ::-1, :]
+    if isinstance(image, torch.Tensor):
+        if len(image.shape) == 2:
+            return image.permute(1, 0)[:, ::-1]
+        elif len(image.shape) == 3:
+            return image.permute(1, 0, 2)[:, ::-1, :]
+    if isinstance(image, np.ndarray):
+        if len(image.shape) == 2:
+            return image.transpose(1, 0)[:, ::-1]
+        elif len(image.shape) == 3:
+            return image.transpose(1, 0, 2)[:, ::-1, :]
 
 
 class Inferencer(object):
@@ -81,9 +87,9 @@ class Inferencer(object):
         image = torch.reshape(image_f, (*h.shape, 3)).numpy()
         invdepth = torch.reshape(invdepth_f, h.shape).numpy()
 
-        for i in range(self.rotate // 90):
-            image = rot90(image)
-            invdepth = rot90(invdepth)
+        # for i in range(self.rotate // 90):
+        #     image = rot90(image)
+        #     invdepth = rot90(invdepth)
 
         return image, invdepth
         
@@ -145,8 +151,8 @@ class Inferencer(object):
 
         invdepth_thresh = torch.reshape(invdepth_thresh_f, h.shape).numpy()
 
-        for i in range(self.rotate // 90):
-            invdepth_thresh = rot90(invdepth_thresh)
+        # for i in range(self.rotate // 90):
+        #     invdepth_thresh = rot90(invdepth_thresh)
 
         return invdepth_thresh
         

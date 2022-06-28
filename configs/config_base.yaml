@@ -2,9 +2,9 @@
 scene:
   scene_paths:
   #  - /home/casey/Documents/PhD/data/conan_scans/ROW_349_EAST_SLOW_0006/scene.json
-   - /home/casey/Documents/PhD/data/conan_scans/ROW_349_WEST_SLOW_0007/scene.json
+  #  - /home/casey/Documents/PhD/data/conan_scans/ROW_349_WEST_SLOW_0007/scene.json
   #  - /home/casey/Documents/PhD/data/conan_scans/ROW_349_WEST_LONG_0002/scene.json
-  #  - /home/casey/Documents/PhD/data/my_renders/vine_C8_6/back_close/cameras.json
+   - /home/casey/Documents/PhD/data/my_renders/vine_C8_6/back_close/cameras.json
   frame_ranges:
    - null
   transforms:
@@ -14,7 +14,7 @@ scene:
   outer_bound: 2.5
 
 log:
-  root_dir: './logs/allign'
+  root_dir: './logs/full_allign'
   eval_image_freq: end
   eval_pointcloud_freq: end
   save_weights_freq: end
@@ -43,7 +43,7 @@ scheduler: step
 
 inference:
   image:
-    image_num: 303
+    image_num: 33
     rotate: 270  # clockwise
 
   pointcloud:
@@ -52,7 +52,7 @@ inference:
     distribution_area: 0.4
 
     cams: [2, 3, 4]
-    freq: 20
+    freq: 1
 
 renderer:
   steps:

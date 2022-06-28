@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+import torchmetrics
 import time
 import math as m
 import matplotlib.pyplot as plt
@@ -57,6 +58,8 @@ class Trainer(object):
 
         self.iter = 0
 
+        self.lpips = torchmetrics.image.lpip.LearnedPerceptualImagePatchSimilarity(net_type='vgg').to('cuda')
+        self.ssim = torchmetrics.StructuralSimilarityIndexMeasure()
 
     def train(self):
 
@@ -76,10 +79,23 @@ class Trainer(object):
             if self.eval_image_freq is not None:
                 if (epoch+1) % self.eval_image_freq == 0:
                     self.logger.log('Rending Image...')
-                    n, h, w, K, E, _, _ = self.dataloader.get_image_batch(self.inferencer.image_num)
+                    n, h, w, K, E, rgb_gt, _ = self.dataloader.get_image_batch(self.inferencer.image_num)
                     image, invdepth = self.inferencer.render_image(n, h, w, K, E)
                     self.logger.image_color('image', image, self.iter)
                     self.logger.image_grey('invdepth', invdepth, self.iter)
+
+                    # Calculate image metrics
+                    pred_bchw = torch.Tensor(image.copy()).permute(2, 0, 1)[None, ...].to('cuda')
+                    pred_lpips = pred_bchw * 2 - 1
+                    target_bchw = rgb_gt.permute(2, 0, 1)[None, ...].to('cuda')
+                    target_lpips = target_bchw * 2 - 1
+                    self.logger.eval_scalar('eval_lpips', self.lpips(pred_lpips, target_lpips), self.iter)
+                    self.logger.eval_scalar('eval_ssim', self.ssim(pred_bchw, target_bchw), self.iter)
+                    self.logger.eval_scalar('eval_psnr', helpers.psnr(pred_bchw, target_bchw), self.iter)
+
+                    for key, val in self.logger.eval_scalars.items():
+                        self.logger.log(f'Eval Scalar: {key} - Value: {val[-1]:.6f}')
+                    self.logger.log('')
 
             if self.eval_image_freq is not None:
                 if (epoch+1) % self.eval_image_freq == 0:

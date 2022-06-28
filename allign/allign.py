@@ -20,6 +20,15 @@ from allign.ransac import global_allign
 from allign.rotation import vec2skew, Exp, matrix2xyz_extrinsic
 from allign.trainer import TrainerPose
 from allign.extract_dense_geometry import ExtractDenseGeometry
+from allign.logger import AllignLogger
+
+
+def calculate_euler_angle_from_rotation_matrix(R):
+    theta = np.arctan2(R[2, 1], R[2, 2])
+    phi = np.arctan2(-R[2, 0], np.sqrt(R[2, 1] ** 2 + R[2, 2] ** 2))
+    psi = np.arctan2(R[1, 0], R[0, 0])
+    return np.array([theta, phi, psi])
+    
 
 
 class Transform(nn.Module):
@@ -50,8 +59,10 @@ if __name__ == '__main__':
 
     cfg = configurator('./allign/config.yaml')
 
-    if not os.path.exists(cfg.output_dir):
-        os.mkdir(cfg.output_dir)
+    logger = AllignLogger(cfg.log_dir, cfg)
+
+    # if not os.path.exists(cfg.output_dir):
+    #     os.mkdir(cfg.output_dir)
 
     cfg_a = OmegaConf.load(f'{cfg.input_paths.logdir_a}/config.yaml')
     cfg_b = OmegaConf.load(f'{cfg.input_paths.logdir_b}/config.yaml')
@@ -133,8 +144,6 @@ if __name__ == '__main__':
 
     init_transform = torch.Tensor(np.array(result_ransac.transformation))
 
-    np.save(f'{cfg.output_dir}/transform_ransac.npy', init_transform)
-
     transform = Transform(init_transform).cuda()
 
     renderer = NerfRenderer(
@@ -148,40 +157,45 @@ if __name__ == '__main__':
     )
 
     trainer = TrainerPose(
-        # translation_init=init_transform,
+        logger=logger,
         transform=transform,
         model_a=model_a,
         model_b=model_b,
+        pointcloud_a=pcd_a,
+        pointcloud_b=pcd_b,
         dataloader_a=dataloader_a,
+        dataloader_b=dataloader_b,
         renderer=renderer,
-        num_iters=cfg.num_iters,
+        iters_per_epoch=cfg.iters_per_epoch,
+        num_epochs=cfg.num_epochs,
         n_rays=cfg.n_rays
         )
 
     trainer.train()
 
-    transform_r = torch.eye(4, dtype=torch.float32, device='cuda')
-    transform_r[:3, :3] = Exp(transform.R)
-    transform_r[:3, 3] = transform.T
-    transform_comb = np.array(transform_r.detach().cpu()) @ np.array(transform.init_transform.detach().cpu())
+    # transform_r = torch.eye(4, dtype=torch.float32, device='cuda')
+    # transform_r[:3, :3] = Exp(transform.R)
+    # transform_r[:3, 3] = transform.T
+    # transform_comb = np.array(transform_r.detach().cpu()) @ np.array(transform.init_transform.detach().cpu())
 
-    pcd_a.transform(np.array(transform.init_transform.detach().cpu()))
-    # o3d.visualization.draw_geometries([pcd_a, pcd_b])
+    # np.save(f'{cfg.output_dir}/transform_ransac.npy', init_transform)
+    # np.save(f'{cfg.output_dir}/transform_zeronerf.npy', transform_comb)
+    
+    # pcd_a.transform(np.array(transform.init_transform.detach().cpu()))
+    # # o3d.visualization.draw_geometries([pcd_a, pcd_b])
 
-    pcd_both = o3d.geometry.PointCloud()
-    pcd_both += pcd_a
-    pcd_both += pcd_b
-    o3d.io.write_point_cloud(f'{cfg.output_dir}/ransac_allign.pcd', pcd_both)
+    # pcd_both = o3d.geometry.PointCloud()
+    # pcd_both += pcd_a
+    # pcd_both += pcd_b
+    # o3d.io.write_point_cloud(f'{cfg.output_dir}/ransac_allign.pcd', pcd_both)
 
-    pcd_a.transform(np.array(transform_r.detach().cpu()))
-    # o3d.visualization.draw_geometries([pcd_a, pcd_b])
+    # pcd_a.transform(np.array(transform_r.detach().cpu()))
+    # # o3d.visualization.draw_geometries([pcd_a, pcd_b])
 
-    pcd_both = o3d.geometry.PointCloud()
-    pcd_both += pcd_a
-    pcd_both += pcd_b
-    o3d.io.write_point_cloud(f'{cfg.output_dir}/zeronerf_allign.pcd', pcd_both)
+    # pcd_both = o3d.geometry.PointCloud()
+    # pcd_both += pcd_a
+    # pcd_both += pcd_b
+    # o3d.io.write_point_cloud(f'{cfg.output_dir}/zeronerf_allign.pcd', pcd_both)
 
-    o3d.io.write_point_cloud(f'{cfg.output_dir}/pointcloud_a.pcd', pcd_a)
-    o3d.io.write_point_cloud(f'{cfg.output_dir}/pointcloud_b.pcd', pcd_b)
-
-    np.save(f'{cfg.output_dir}/transform_zeronerf.npy', transform_comb)
+    # o3d.io.write_point_cloud(f'{cfg.output_dir}/pointcloud_a.pcd', pcd_a)
+    # o3d.io.write_point_cloud(f'{cfg.output_dir}/pointcloud_b.pcd', pcd_b)
