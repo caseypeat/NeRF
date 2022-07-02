@@ -1,0 +1,24 @@
+
+input_paths:
+  logdir_a: ./logs/full_allign_C6_0_2/20220630_191550
+  model_a: "./logs/full_allign_C6_0_2/20220630_191550/model/10000.pth"
+  pointcloud_a: "./logs/full_allign_C6_0_2/20220630_191550/pointclouds/pcd/10000.pcd"
+
+  logdir_b: ./logs/full_allign_C6_0_2/20220630_195555
+  model_b: "./logs/full_allign_C6_0_2/20220630_195555/model/10000.pth"
+  pointcloud_b: "./logs/full_allign_C6_0_2/20220630_195555/pointclouds/pcd/10000.pcd"
+
+log_dir: './allign/logs/full_allign/C6_0'
+
+n_rays: 4096
+iters_per_epoch: 100
+num_epochs: 20
+
+renderer:
+  z_bounds: [0.1, 1]
+  steps_firstpass: [512]
+
+extract_geometry_values:
+  mask_res: 128
+  voxel_res: 512
+  sigma_thresh: 100

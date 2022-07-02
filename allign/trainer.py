@@ -20,6 +20,7 @@ class TrainerPose(object):
         dataloader_a,
         dataloader_b,
         renderer,
+        measure,
         iters_per_epoch,
         num_epochs,
         n_rays):
@@ -41,11 +42,18 @@ class TrainerPose(object):
         self.dataloader_b = dataloader_b
 
         self.renderer = renderer
+        self.measure = measure
 
         self.n_rays = n_rays
 
-        self.optimizer = torch.optim.Adam([{'params': [self.transform.R, self.transform.T]}], lr=1e-3)
+        self.optimizer = torch.optim.Adam([
+            {'name': 'translation', 'params': [self.transform.T], 'lr': 1e-3},
+            {'name': 'rotation', 'params': [self.transform.R], 'lr': 1e-3},
+            ], lr=1e-3, betas=(0.9, 0.99), eps=1e-15)
+        # self.optimizer = torch.optim.SGD([{'params': [self.transform.R, self.transform.T]}], lr=1e-3)
+        # self.optimizer = torch.optim.Rprop([{'params': [self.transform.R, self.transform.T]}], lr=1e-3)
         lmbda = lambda x: 0.01**(x/(self.num_iters))
+        # lmbda = lambda x: 1
         self.scheduler = torch.optim.lr_scheduler.LambdaLR(self.optimizer, lr_lambda=lmbda, last_epoch=-1, verbose=False)
         # self.scaler = torch.cuda.amp.GradScaler()
 
@@ -55,6 +63,24 @@ class TrainerPose(object):
 
 
     def train(self):
+        xyz_error = self.calculate_xyz_error()
+        self.logger.log(f'init xyz_error: {np.linalg.norm(xyz_error):.6f}')
+        self.logger.log(f'init rot_error: {self.calculate_rot_error():.6f}')
+        self.logger.log('')
+        # self.logger.log('Prerun')
+        # with torch.no_grad():
+        #     self.train_step()
+        # self.logger.log('')
+        
+        for i in range(10):
+            with torch.no_grad():
+                self.dry_run(100)
+            # Output recorded scalars
+            self.logger.log(f'Dry Iteration: {self.iter}')
+            for key, val in self.logger.scalars.items():
+                self.logger.log(f'Scalar: {key} - Value: {np.mean(np.array(val[-self.iters_per_epoch:])).item():.6f}')
+            self.logger.log('')
+
         for epoch in range(self.num_epochs):
             self.train_epoch(self.iters_per_epoch)
 
@@ -82,6 +108,11 @@ class TrainerPose(object):
         self.logger.save_pointclouds_comb(self.pointcloud_a, self.pointcloud_b, init_transform, 'init_allign')
         self.logger.save_pointclouds_comb(self.pointcloud_a, self.pointcloud_b, final_transform, 'final_allign')
         
+    def dry_run(self, iters_per_epoch):
+        for i in tqdm(range(iters_per_epoch)):
+            loss = self.train_step()
+            self.iter += 1
+    
     def train_epoch(self, iters_per_epoch):
         for i in tqdm(range(iters_per_epoch)):
             self.optimizer.zero_grad()
@@ -95,90 +126,32 @@ class TrainerPose(object):
 
             self.iter += 1
 
-    # def train_old(self):
-    #     for i in tqdm(range(self.num_iters)):
-    #         self.optimizer.zero_grad()
-
-    #         _, h, w, K, E, _, _ = self.dataloader_a.get_random_batch(self.n_rays)
-
-    #         rays_o, rays_d = self.renderer.get_rays(h, w, K, E)
-    #         z_vals_log, z_vals = self.renderer.efficient_sampling(rays_o, rays_d, self.renderer.steps_importance, self.renderer.alpha_importance)
-    #         xyzs_a, _ = self.renderer.get_sample_points(rays_o, rays_d, z_vals)
-    #         s_xyzs_a = self.renderer.mipnerf360_scale(xyzs_a, self.renderer.inner_bound, self.renderer.outer_bound)
-
-    #         sigmas_a, _ = self.model_a.density(s_xyzs_a, self.renderer.outer_bound)
-
-    #         delta = z_vals_log.new_zeros(z_vals_log.shape)  # [N_rays, N_samples]
-    #         delta[:, :-1] = (z_vals_log[:, 1:] - z_vals_log[:, :-1])
-
-    #         alpha_a = 1 - torch.exp(-sigmas_a * delta)  # [N_rays, N_samples]
-    #         alpha_a_shift = torch.cat([alpha_a.new_zeros((alpha_a.shape[0], 1)), alpha_a], dim=-1)[:, :-1]  # [N_rays, N_samples]
-    #         weights_a = alpha_a * torch.cumprod(1 - alpha_a_shift, dim=-1)  # [N_rays, N_samples]
-
-
-    #         xyzs_b = self.transform(xyzs_a)
-    #         s_xyzs_b = self.renderer.mipnerf360_scale(xyzs_b, self.renderer.inner_bound, self.renderer.outer_bound)
-    #         sigmas_b, _ = self.model_b.density(s_xyzs_b, self.renderer.outer_bound)
-    #         sigmas_ab = sigmas_a + sigmas_b
-
-    #         alpha_ab = 1 - torch.exp(-sigmas_ab * delta)  # [N_rays, N_samples]
-    #         alpha_ab_shift = torch.cat([alpha_ab.new_zeros((alpha_ab.shape[0], 1)), alpha_ab], dim=-1)[:, :-1]  # [N_rays, N_samples]
-    #         weights_ab = alpha_ab * torch.cumprod(1 - alpha_ab_shift, dim=-1)  # [N_rays, N_samples]
-
-    #         weights_a[:, -1] = 1 - torch.sum(weights_a[:, :-1], dim=-1)
-    #         weights_ab[:, -1] = 1 - torch.sum(weights_ab[:, :-1], dim=-1)
-
-    #         w = torch.bmm(weights_a[:, :, None], weights_ab[:, None, :])
-    #         s = torch.abs(z_vals_log[:, :, None] - z_vals_log[:, None, :])
-    #         loss = w * s
-    #         loss = torch.mean(torch.sum(loss, dim=[1, 2]))
-
-    #         # loss = F.mse_loss(weights_a, weights_ab)
-
-    #         # if i % 100 == 0:
-    #         #     if i == 0:
-    #         #         print(f'{loss.item():.6f}')
-    #         #     else:
-    #         #         print(f'{(sum(self.losses[-100:]) / 100):.6f}')
-
-    #             # print(np.linalg.norm((self.transform.init_transform[:3, 3] + self.transform.T).detach().cpu().numpy() - self.translation_init.detach().cpu().numpy()))
-    #             # R_error = Exp(self.transform.R) @ self.transform.init_transform[:3, :3]
-    #             # r_error = matrix2xyz_extrinsic(R_error.detach().cpu().numpy())
-    #             # print(np.linalg.norm(r_error), np.rad2deg(np.linalg.norm(r_error)))
-
-    #         loss.backward()
-    #         self.optimizer.step()
-    #         self.scheduler.step()
-
-    #         self.losses.append(loss.item())
-
-
     def train_step(self):
         self.optimizer.zero_grad()
 
-        _, h, w, K, E, _, _ = self.dataloader_a.get_random_batch(self.n_rays)
+        _, h, w, K, E, _, _, depth = self.dataloader_a.get_random_batch(self.n_rays)
 
         loss = self.calculate_scene_consistency(h, w, K, E)
 
         self.logger.scalar('loss', loss, self.iter)
-        self.logger.scalar('xyz_error', self.calculate_xyz_error(), self.iter)
+        
+        xyz_error = self.calculate_xyz_error()
+        self.logger.scalar('xyz_error', np.linalg.norm(xyz_error), self.iter)
+        self.logger.scalar('x_error', xyz_error[0], self.iter)
+        self.logger.scalar('y_error', xyz_error[1], self.iter)
+        self.logger.scalar('z_error', xyz_error[2], self.iter)
         self.logger.scalar('rot_error', self.calculate_rot_error(), self.iter)
 
+        point_error = self.measure.calculate_point_error(h, w, K, E, depth)
+        self.logger.scalar('point_error', point_error, self.iter)
+
         return loss
-
-        # self.scaler.scale(loss).backward()
-        # self.scaler.step(self.optimizer)
-        # self.scaler.update()
-
-        # self.scheduler.step()
-
-        # self.iter += 1
 
     def calculate_xyz_error(self):
         xyz_init = self.transform.init_transform[:3, 3].detach().cpu().numpy()
         xyz_pred = self.transform.T.detach().cpu().numpy() + xyz_init
         xyz_true = (self.dataloader_a.translation_center - self.dataloader_b.translation_center).detach().cpu().numpy()
-        xyz_error = np.linalg.norm(xyz_pred - xyz_true)
+        xyz_error = (xyz_pred - xyz_true)[0]
         return xyz_error
 
     def calculate_rot_error(self):

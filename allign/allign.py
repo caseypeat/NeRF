@@ -21,6 +21,7 @@ from allign.rotation import vec2skew, Exp, matrix2xyz_extrinsic
 from allign.trainer import TrainerPose
 from allign.extract_dense_geometry import ExtractDenseGeometry
 from allign.logger import AllignLogger
+from allign.metrics import Measure
 
 
 def calculate_euler_angle_from_rotation_matrix(R):
@@ -120,29 +121,69 @@ if __name__ == '__main__':
     ).to('cuda')
     model_b.load_state_dict(torch.load(f'{cfg.input_paths.model_b}'))
 
-    dense_inference_a = ExtractDenseGeometry(
-        model_a, 
-        dataloader_a, 
-        cfg.extract_geometry_values.mask_res, 
-        cfg.extract_geometry_values.voxel_res, 
-        cfg_a.renderer.importance_steps*cfg.n_rays, 
-        cfg.extract_geometry_values.sigma_thresh, 
-        cfg_a.scene.outer_bound)
-    pcd_dense_a = dense_inference_a.generate_dense_pointcloud()
+    # dense_inference_a = ExtractDenseGeometry(
+    #     model_a, 
+    #     dataloader_a, 
+    #     cfg.extract_geometry_values.mask_res, 
+    #     cfg.extract_geometry_values.voxel_res, 
+    #     cfg_a.renderer.importance_steps*cfg.n_rays, 
+    #     cfg.extract_geometry_values.sigma_thresh, 
+    #     cfg_a.scene.outer_bound)
+    # pcd_dense_a = dense_inference_a.generate_dense_pointcloud()
 
-    dense_inference_b = ExtractDenseGeometry(
-        model_b, 
-        dataloader_b, 
-        cfg.extract_geometry_values.mask_res, 
-        cfg.extract_geometry_values.voxel_res, 
-        cfg_b.renderer.importance_steps*cfg.n_rays, 
-        cfg.extract_geometry_values.sigma_thresh, 
-        cfg_b.scene.outer_bound)
-    pcd_dense_b = dense_inference_b.generate_dense_pointcloud()
+    # dense_inference_b = ExtractDenseGeometry(
+    #     model_b, 
+    #     dataloader_b, 
+    #     cfg.extract_geometry_values.mask_res, 
+    #     cfg.extract_geometry_values.voxel_res, 
+    #     cfg_b.renderer.importance_steps*cfg.n_rays, 
+    #     cfg.extract_geometry_values.sigma_thresh, 
+    #     cfg_b.scene.outer_bound)
+    # pcd_dense_b = dense_inference_b.generate_dense_pointcloud()
 
-    result_ransac, result_icp = global_allign(pcd_dense_a, pcd_dense_b, voxel_size=0.01)
+    pcd_a_rs = pcd_a.uniform_down_sample(100)
+    pcd_b_rs = pcd_b.uniform_down_sample(100)
 
-    init_transform = torch.Tensor(np.array(result_ransac.transformation))
+    a = np.array(pcd_a_rs.points)
+    thresh = (np.amax(a[:, 2]) - np.amin(a[:, 2])) * 0.25 + np.amin(a[:, 2])
+    a = a[np.broadcast_to(a[:, 2, None], (a.shape[0], 3)) > thresh].reshape(-1, 3)
+    thresh = (np.amax(a[:, 2]) - np.amin(a[:, 2])) * 0.75 + np.amin(a[:, 2])
+    a = a[np.broadcast_to(a[:, 2, None], (a.shape[0], 3)) < thresh].reshape(-1, 3)
+
+
+    pcd_a_rs = o3d.geometry.PointCloud()
+    pcd_a_rs.points = o3d.utility.Vector3dVector(a)
+
+    # 0 - x: front to back
+    # 1 - y: left to right
+    # 2 - z: up to down
+    b = np.array(pcd_b_rs.points)
+    thresh = (np.amax(b[:, 2]) - np.amin(b[:, 2])) * 0.25 + np.amin(b[:, 2])
+    b = b[np.broadcast_to(b[:, 2, None], (b.shape[0], 3)) > thresh].reshape(-1, 3)
+    thresh = (np.amax(b[:, 2]) - np.amin(b[:, 2])) * 0.75 + np.amin(b[:, 2])
+    b = b[np.broadcast_to(b[:, 2, None], (b.shape[0], 3)) < thresh].reshape(-1, 3)
+
+    # thresh = (np.amax(b[:, 1]) - np.amin(b[:, 1])) * 0.5 + np.amin(b[:, 1])
+    # b = b[np.broadcast_to(b[:, 1, None], (b.shape[0], 3)) < thresh].reshape(-1, 3)
+
+
+    pcd_b_rs = o3d.geometry.PointCloud()
+    pcd_b_rs.points = o3d.utility.Vector3dVector(b)
+
+    logger.save_pointcloud(pcd_a_rs, 'pcd_ransac_a')
+    logger.save_pointcloud(pcd_b_rs, 'pcd_ransac_b')
+
+    # result_ransac, result_icp = global_allign(pcd_dense_a, pcd_dense_b, voxel_size=0.01)
+    result_ransac, result_icp = global_allign(pcd_a_rs, pcd_b_rs, voxel_size=0.01)
+
+    init_transform = np.eye(4)
+    # init_transform[:3, 3] = dataloader_a.translation_center - dataloader_b.translation_center
+    init_transform[:3, 3] = result_ransac.transformation[:3, 3]
+    init_transform[:3, :3] = result_ransac.transformation[:3, :3]
+    # init_transform = np.array(result_ransac.transformation)
+    init_transform = torch.Tensor(init_transform)
+
+    # init_transform = torch.Tensor(np.array(result_ransac.transformation))
 
     transform = Transform(init_transform).cuda()
 
@@ -156,6 +197,13 @@ if __name__ == '__main__':
         alpha_importance=cfg_a.renderer.alpha,
     )
 
+    measure = Measure(
+        transform=transform,
+        renderer=renderer,
+        depth_thresh=0.7,
+        translation_center_a=dataloader_a.translation_center,
+        translation_center_b=dataloader_b.translation_center,)
+
     trainer = TrainerPose(
         logger=logger,
         transform=transform,
@@ -166,6 +214,7 @@ if __name__ == '__main__':
         dataloader_a=dataloader_a,
         dataloader_b=dataloader_b,
         renderer=renderer,
+        measure=measure,
         iters_per_epoch=cfg.iters_per_epoch,
         num_epochs=cfg.num_epochs,
         n_rays=cfg.n_rays

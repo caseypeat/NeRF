@@ -34,6 +34,8 @@ class CameraGeometryLoader(object):
 
         # if self.load_images:
         self.images = torch.full([self.N, self.H, self.W, 4], fill_value=255, dtype=torch.uint8)
+        self.depths = torch.full([self.N, self.H, self.W], fill_value=1, dtype=torch.float32)
+        # self.ids = torch.full([self.N, self.H, self.W], fill_value=0, dtype=torch.int16)
         self.intrinsics = torch.zeros([self.N, 3, 3], dtype=torch.float32)
         self.extrinsics = torch.zeros([self.N, 4, 4], dtype=torch.float32)
 
@@ -43,6 +45,10 @@ class CameraGeometryLoader(object):
                 for frame in rig:
                     # if self.load_images:
                     self.images[i, :, :, :3] = torch.ByteTensor(frame.rgb)
+                    if 'depth' in frame.keys():
+                        self.depths[i, :, :] = torch.Tensor(frame.depth)
+                    # if 'id' in frame.keys():
+                    #     self.ids[i, :, :] = torch.ShortTensor(frame.ids)
                     self.intrinsics[i] = torch.Tensor(frame.camera.intrinsic)
                     self.extrinsics[i] =  torch.Tensor(transform) @ torch.Tensor(frame.camera.extrinsic)
                     i += 1
@@ -83,12 +89,15 @@ class CameraGeometryLoader(object):
         E[..., :3, 3] = E[..., :3, 3] - self.translation_center.to(device)
 
         rgb_gt, color_bg = self.format_groundtruth(self.images[n, h, w, :].to(device), background)
+        depth = self.depths[n, h, w].to(device)
+        # ids = self.ids[n, h, w].to(torch.float32).to(device)
 
         n = n.to(device)
         h = h.to(device)
         w = w.to(device)
 
-        return n, h, w, K, E, rgb_gt, color_bg
+        return n, h, w, K, E, rgb_gt, color_bg, depth
+        # return n, h, w, K, E, rgb_gt, color_bg
 
 
     def get_random_batch(self, batch_size, device='cuda'):
@@ -105,7 +114,7 @@ class CameraGeometryLoader(object):
         h, w = torch.meshgrid(h, w, indexing='ij')
         n = torch.full(h.shape, fill_value=image_num)
 
-        return self.get_custom_batch(n, h, w, background=(1, 1, 1))
+        return self.get_custom_batch(n, h, w, background=(1, 1, 1), device=device)
 
 
     def get_pointcloud_batch(self, cams, freq, device='cpu'):

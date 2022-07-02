@@ -1,14 +1,14 @@
 
 input_paths:
-  logdir_a: ./logs/full_allign/20220629_055751
-  model_a: "./logs/full_allign/20220629_055751/model/3000.pth"
-  pointcloud_a: "./logs/full_allign/20220629_055751/pointclouds/pcd/3000.pcd"
+  logdir_a: ./logs/full_allign_C6_0_2/20220701_185009
+  model_a: "./logs/full_allign_C6_0_2/20220701_185009/model/10000.pth"
+  pointcloud_a: "./logs/full_allign_C6_0_2/20220701_185009/pointclouds/pcd/10000.pcd"
 
-  logdir_b: ./logs/full_allign/20220629_061257
-  model_b: "./logs/full_allign/20220629_061257/model/3000.pth"
-  pointcloud_b: "./logs/full_allign/20220629_061257/pointclouds/pcd/3000.pcd"
+  logdir_b: ./logs/full_allign_C6_0_2/20220701_193049
+  model_b: "./logs/full_allign_C6_0_2/20220701_193049/model/10000.pth"
+  pointcloud_b: "./logs/full_allign_C6_0_2/20220701_193049/pointclouds/pcd/10000.pcd"
 
-log_dir: './allign/logs/tests/full_allign'
+log_dir: './allign/logs/full_allign/C6_0'
 
 n_rays: 4096
 iters_per_epoch: 100

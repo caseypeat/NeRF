@@ -79,7 +79,7 @@ class Trainer(object):
             if self.eval_image_freq is not None:
                 if (epoch+1) % self.eval_image_freq == 0:
                     self.logger.log('Rending Image...')
-                    n, h, w, K, E, rgb_gt, _ = self.dataloader.get_image_batch(self.inferencer.image_num)
+                    n, h, w, K, E, rgb_gt, _ = self.dataloader.get_image_batch(self.inferencer.image_num, device='cuda')
                     image, invdepth = self.inferencer.render_image(n, h, w, K, E)
                     self.logger.image_color('image', image, self.iter)
                     self.logger.image_grey('invdepth', invdepth, self.iter)
@@ -100,7 +100,7 @@ class Trainer(object):
             if self.eval_image_freq is not None:
                 if (epoch+1) % self.eval_image_freq == 0:
                     self.logger.log('Rending Invdepth Thresh...')
-                    n, h, w, K, E, _, _ = self.dataloader.get_image_batch(self.inferencer.image_num)
+                    n, h, w, K, E, _, _ = self.dataloader.get_image_batch(self.inferencer.image_num, device='cuda')
                     invdepth_thresh = self.inferencer.render_invdepth_thresh(n, h, w, K, E)
                     self.logger.image_grey('invdepth_thresh', invdepth_thresh, self.iter)
 
