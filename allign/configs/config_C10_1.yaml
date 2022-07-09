@@ -12,7 +12,7 @@ log_dir: './allign/logs/full_allign/C10_1'
 
 n_rays: 4096
 iters_per_epoch: 100
-num_epochs: 10
+num_epochs: 20
 
 renderer:
   z_bounds: [0.1, 1]

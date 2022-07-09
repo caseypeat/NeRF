@@ -8,7 +8,7 @@ input_paths:
   model_b: "./logs/full_allign_C9_7_2/20220701_193049/model/10000.pth"
   pointcloud_b: "./logs/full_allign_C9_7_2/20220701_193049/pointclouds/pcd/10000.pcd"
 
-log_dir: './allign/logs/full_allign/C9_7'
+log_dir: './allign/logs/random_error/C9_7_005'
 
 n_rays: 4096
 iters_per_epoch: 100
@@ -22,3 +22,7 @@ extract_geometry_values:
   mask_res: 128
   voxel_res: 512
   sigma_thresh: 100
+
+random:
+  translation_error: 0.05
+  rotation_error: 0.05
