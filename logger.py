@@ -35,7 +35,7 @@ class Logger(object):
         self.cfg = cfg
 
         if not os.path.exists(root_dir):
-            os.mkdir(root_dir)
+            os.makedirs(root_dir)
 
         os.mkdir(self.log_dir)
         os.mkdir(self.images_dir)

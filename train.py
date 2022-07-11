@@ -64,10 +64,14 @@ if __name__ == '__main__':
     )
 
     logger.log('Initiating Inference...')
+    if cfg.inference.image.image_num == 'middle':
+        inference_image_num = int(dataloader.images.shape[0]/2) + 3
+    else:
+        inference_image_num = cfg.inference.image.image_num
     inferencer = Inferencer(
         renderer=renderer,
         n_rays=cfg.trainer.n_rays,
-        image_num=cfg.inference.image.image_num,
+        image_num=inference_image_num,
         rotate=cfg.inference.image.rotate,
         max_variance_npy=cfg.inference.pointcloud.max_variance_npy,
         max_variance_pcd=cfg.inference.pointcloud.max_variance_pcd,

@@ -14,13 +14,13 @@ scene:
   outer_bound: 2.5
 
 log:
-  root_dir: './logs/allign'
+  root_dir: './logs/synthetic_allign'
   eval_image_freq: end
   eval_pointcloud_freq: end
   save_weights_freq: end
 
 trainer:
-  num_epochs: 30
+  num_epochs: 100
   iters_per_epoch: 100
   n_rays: 16384
   dist_loss_lambda1: 1e-5
@@ -43,7 +43,7 @@ scheduler: step
 
 inference:
   image:
-    image_num: 303
+    image_num: 'middle'
     rotate: 270  # clockwise
 
   pointcloud:
@@ -52,7 +52,7 @@ inference:
     distribution_area: 0.4
 
     cams: [2, 3, 4]
-    freq: 20
+    freq: 1
 
 renderer:
   steps:
