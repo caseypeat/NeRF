@@ -2,9 +2,10 @@
 scene:
   scene_paths:
   #  - /home/casey/Documents/PhD/data/conan_scans/ROW_349_EAST_SLOW_0006/scene.json
-   - /home/casey/Documents/PhD/data/conan_scans/ROW_349_WEST_SLOW_0007/scene.json
+  #  - /home/casey/Documents/PhD/data/conan_scans/ROW_349_WEST_SLOW_0007/scene.json
   #  - /home/casey/Documents/PhD/data/conan_scans/ROW_349_WEST_LONG_0002/scene.json
-  #  - /home/casey/Documents/PhD/data/my_renders/vine_C8_6/back_close/cameras.json
+  #  - /home/casey/Documents/PhD/data/my_renders_dense/vine_C6_7/back/cameras.json
+   - /home/casey/Documents/PhD/data/my_renders/vine_C10_1/back_close/cameras.json
   frame_ranges:
    - null
   transforms:

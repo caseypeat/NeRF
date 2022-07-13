@@ -49,6 +49,7 @@ class Logger(object):
         self.t0 = time.time()
 
         self.scalars = {}
+        self.eval_scalars = {}
 
         OmegaConf.save(config=self.cfg, f=os.path.join(self.log_dir, 'config.yaml'))
 
@@ -56,7 +57,8 @@ class Logger(object):
         with open(self.log_file, 'a') as f:
             dt = datetime.today().strftime("%Y-%m-%d %H:%M:%S")
             output_str = f'[{dt}] [{time.time()-self.t0:.2f}s] {string}\n'
-            print(output_str, end='')
+            output_str_ndt = f'[{time.time()-self.t0:.2f}s] {string}\n'
+            print(output_str_ndt, end='')
             f.write(output_str)
 
     def image_color(self, string, image, step):
@@ -107,6 +109,14 @@ class Logger(object):
         if name not in self.scalars.keys():
             self.scalars[name] = []
         self.scalars[name].append(value)
+
+    def eval_scalar(self, name, value, step):
+        if isinstance(value, torch.Tensor) or isinstance(value, np.ndarray):
+            value = value.item()
+        self.writer.add_scalar(name, value, step)
+        if name not in self.eval_scalars.keys():
+            self.eval_scalars[name] = []
+        self.eval_scalars[name].append(value)
 
 
 if __name__ == '__main__':

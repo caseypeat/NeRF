@@ -1,0 +1,11 @@
+
+input_paths:
+  logdir_a: ./logs/synthetic_allign/vine_C2_7/front/20220711_122057
+  model_a: "./logs/synthetic_allign/vine_C2_7/front/20220711_122057/model/10000.pth"
+  pointcloud_a: "./logs/synthetic_allign/vine_C2_7/front/20220711_122057/pointclouds/pcd/10000.pcd"
+
+  logdir_b: ./logs/synthetic_allign/vine_C2_7/back/20220711_125740
+  model_b: "./logs/synthetic_allign/vine_C2_7/back/20220711_125740/model/10000.pth"
+  pointcloud_b: "./logs/synthetic_allign/vine_C2_7/back/20220711_125740/pointclouds/pcd/10000.pcd"
+
+log_dir: './allign/logs/full_pipeline/vine_C2_7'

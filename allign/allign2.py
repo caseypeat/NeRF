@@ -121,25 +121,6 @@ if __name__ == '__main__':
     ).to('cuda')
     model_b.load_state_dict(torch.load(f'{cfg.input_paths.model_b}'))
 
-    # dense_inference_a = ExtractDenseGeometry(
-    #     model_a, 
-    #     dataloader_a, 
-    #     cfg.extract_geometry_values.mask_res, 
-    #     cfg.extract_geometry_values.voxel_res, 
-    #     cfg_a.renderer.importance_steps*cfg.n_rays, 
-    #     cfg.extract_geometry_values.sigma_thresh, 
-    #     cfg_a.scene.outer_bound)
-    # pcd_dense_a = dense_inference_a.generate_dense_pointcloud()
-
-    # dense_inference_b = ExtractDenseGeometry(
-    #     model_b, 
-    #     dataloader_b, 
-    #     cfg.extract_geometry_values.mask_res, 
-    #     cfg.extract_geometry_values.voxel_res, 
-    #     cfg_b.renderer.importance_steps*cfg.n_rays, 
-    #     cfg.extract_geometry_values.sigma_thresh, 
-    #     cfg_b.scene.outer_bound)
-    # pcd_dense_b = dense_inference_b.generate_dense_pointcloud()
 
     pcd_a_rs = pcd_a.uniform_down_sample(100)
     pcd_b_rs = pcd_b.uniform_down_sample(100)
@@ -176,16 +157,19 @@ if __name__ == '__main__':
     # result_ransac, result_icp = global_allign(pcd_dense_a, pcd_dense_b, voxel_size=0.01)
     result_ransac, result_icp = global_allign(pcd_a_rs, pcd_b_rs, voxel_size=0.01)
 
-    init_transform = np.eye(4)
-    # init_transform[:3, 3] = dataloader_a.translation_center - dataloader_b.translation_center
-    init_transform[:3, 3] = result_ransac.transformation[:3, 3]
-    init_transform[:3, :3] = result_ransac.transformation[:3, :3]
-    # init_transform = np.array(result_ransac.transformation)
-    init_transform = torch.Tensor(init_transform)
+    # init_transform = np.eye(4)
+    # init_transform[:3, 3] = result_ransac.transformation[:3, 3]
+    # init_transform[:3, :3] = result_ransac.transformation[:3, :3]
+    # init_transform = torch.Tensor(init_transform)
 
-    # init_transform = torch.Tensor(np.array(result_ransac.transformation))
-
+    init_transform = torch.Tensor(np.array(result_ransac.transformation))
     transform = Transform(init_transform).cuda()
+
+    ransac_transform = torch.Tensor(np.array(result_ransac.transformation))
+    transform_ransac = Transform(ransac_transform).cuda()
+
+    icp_transform = torch.Tensor(np.array(result_icp.transformation))
+    transform_icp = Transform(icp_transform).cuda()
 
     renderer = NerfRenderer(
         model=model_a,
@@ -198,7 +182,7 @@ if __name__ == '__main__':
     )
 
     measure = Measure(
-        transform=transform,
+        # transform=transform,
         renderer=renderer,
         depth_thresh=0.7,
         translation_center_a=dataloader_a.translation_center,
@@ -207,6 +191,8 @@ if __name__ == '__main__':
     trainer = TrainerPose(
         logger=logger,
         transform=transform,
+        transform_ransac=transform_ransac,
+        transform_icp=transform_icp,
         model_a=model_a,
         model_b=model_b,
         pointcloud_a=pcd_a,
@@ -221,30 +207,3 @@ if __name__ == '__main__':
         )
 
     trainer.train()
-
-    # transform_r = torch.eye(4, dtype=torch.float32, device='cuda')
-    # transform_r[:3, :3] = Exp(transform.R)
-    # transform_r[:3, 3] = transform.T
-    # transform_comb = np.array(transform_r.detach().cpu()) @ np.array(transform.init_transform.detach().cpu())
-
-    # np.save(f'{cfg.output_dir}/transform_ransac.npy', init_transform)
-    # np.save(f'{cfg.output_dir}/transform_zeronerf.npy', transform_comb)
-    
-    # pcd_a.transform(np.array(transform.init_transform.detach().cpu()))
-    # # o3d.visualization.draw_geometries([pcd_a, pcd_b])
-
-    # pcd_both = o3d.geometry.PointCloud()
-    # pcd_both += pcd_a
-    # pcd_both += pcd_b
-    # o3d.io.write_point_cloud(f'{cfg.output_dir}/ransac_allign.pcd', pcd_both)
-
-    # pcd_a.transform(np.array(transform_r.detach().cpu()))
-    # # o3d.visualization.draw_geometries([pcd_a, pcd_b])
-
-    # pcd_both = o3d.geometry.PointCloud()
-    # pcd_both += pcd_a
-    # pcd_both += pcd_b
-    # o3d.io.write_point_cloud(f'{cfg.output_dir}/zeronerf_allign.pcd', pcd_both)
-
-    # o3d.io.write_point_cloud(f'{cfg.output_dir}/pointcloud_a.pcd', pcd_a)
-    # o3d.io.write_point_cloud(f'{cfg.output_dir}/pointcloud_b.pcd', pcd_b)

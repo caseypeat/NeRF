@@ -174,13 +174,15 @@ if __name__ == '__main__':
     logger.save_pointcloud(pcd_b_rs, 'pcd_ransac_b')
 
     # result_ransac, result_icp = global_allign(pcd_dense_a, pcd_dense_b, voxel_size=0.01)
-    result_ransac, result_icp = global_allign(pcd_a_rs, pcd_b_rs, voxel_size=0.01)
+    # result_ransac, result_icp = global_allign(pcd_a_rs, pcd_b_rs, voxel_size=0.01)
+
+    translation_error = np.random.random(3) * cfg.random.translation_error
+    rotation_error = np.random.random(3) * cfg.random.rotation_error
 
     init_transform = np.eye(4)
-    # init_transform[:3, 3] = dataloader_a.translation_center - dataloader_b.translation_center
-    init_transform[:3, 3] = result_ransac.transformation[:3, 3]
-    init_transform[:3, :3] = result_ransac.transformation[:3, :3]
-    # init_transform = np.array(result_ransac.transformation)
+    init_transform[:3, 3] = dataloader_a.translation_center - dataloader_b.translation_center
+    init_transform[:3, 3] += translation_error
+    init_transform[:3, :3] = Exp(torch.Tensor(rotation_error)).numpy()
     init_transform = torch.Tensor(init_transform)
 
     # init_transform = torch.Tensor(np.array(result_ransac.transformation))

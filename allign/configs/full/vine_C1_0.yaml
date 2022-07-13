@@ -8,17 +8,4 @@ input_paths:
   model_b: "./logs/synthetic_allign/vine_C1_0/back/20220710_161406/model/10000.pth"
   pointcloud_b: "./logs/synthetic_allign/vine_C1_0/back/20220710_161406/pointclouds/pcd/10000.pcd"
 
-log_dir: './allign/logs/tests/1'
-
-n_rays: 4096
-iters_per_epoch: 100
-num_epochs: 20
-
-renderer:
-  z_bounds: [0.1, 1]
-  steps_firstpass: [512]
-
-extract_geometry_values:
-  mask_res: 128
-  voxel_res: 512
-  sigma_thresh: 100
+log_dir: './allign/logs/full_pipeline/vine_C1_0'
