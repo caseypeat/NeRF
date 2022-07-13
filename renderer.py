@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import torch.jit as jit
 import math as m
 
 import helpers
@@ -33,6 +34,7 @@ class NerfRenderer(nn.Module):
 
         
     ## Rendering Pipeline
+    
     def get_rays(self, h, w, K, E):
         """ Ray generation for Oliver's calibration format """
         dirs = torch.stack([w+0.5, h+0.5, torch.ones_like(w)], -1)  # [N_rays, 3]
@@ -45,7 +47,7 @@ class NerfRenderer(nn.Module):
 
         return rays_o, rays_d
 
-
+    
     def get_sample_points(self, rays_o, rays_d, z_vals):
         N_rays, N_samples = z_vals.shape
 
@@ -65,7 +67,7 @@ class NerfRenderer(nn.Module):
         s_xyzs[d > bound_inner] = s_xyzs[d > bound_inner] * ((bound_outer - (bound_outer - bound_inner) / d[d > bound_inner]) / d[d > bound_inner])
         return s_xyzs
 
-
+    
     def render_rays_log(self, sigmas, rgbs, z_vals, z_vals_log):
         N_rays, N_samples = z_vals.shape[:2]
 
@@ -163,7 +165,6 @@ class NerfRenderer(nn.Module):
         z_vals_fine = torch.pow(10, z_vals_log_fine)
 
         return z_vals_log_fine, z_vals_fine
-
 
 
     def render(self, n, h, w, K, E, bg_color):
