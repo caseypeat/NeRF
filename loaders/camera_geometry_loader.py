@@ -45,7 +45,7 @@ class CameraGeometryLoader(object):
                 for frame in rig:
                     # if self.load_images:
                     self.images[i, :, :, :3] = torch.ByteTensor(frame.rgb)
-                    if 'depth' in frame.keys():
+                    if frame.depth is not None:
                         self.depths[i, :, :] = torch.Tensor(frame.depth)
                     # if 'id' in frame.keys():
                     #     self.ids[i, :, :] = torch.ShortTensor(frame.ids)
@@ -121,10 +121,10 @@ class CameraGeometryLoader(object):
 
         n = []
         for i in range(self.N):
-            if (i > int(self.images.shape[0]*0.25) and i < int(self.images.shape[0]*0.75)):
-                if i % 6 in cams:
-                    if i//6 % freq == 0:
-                        n.append(i)
+            # if (i > int(self.images.shape[0]*0.25) and i < int(self.images.shape[0]*0.75)):
+            if i % 6 in cams:
+                if i//6 % freq == 0:
+                    n.append(i)
                         
         n = torch.Tensor(np.array(n)).to(int)
         h = torch.arange(0, self.H)
