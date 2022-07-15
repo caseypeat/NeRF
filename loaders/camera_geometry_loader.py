@@ -24,6 +24,11 @@ class CameraGeometryLoader(object):
             else:
                 transform = np.eye(4)
 
+            if frames[0][0].depth is None:
+                self.depths_bool = False
+            else:
+                self.depths_bool = True
+
 
             scene_list.append(scene)
             frames_list.append(frames)
@@ -34,7 +39,8 @@ class CameraGeometryLoader(object):
 
         # if self.load_images:
         self.images = torch.full([self.N, self.H, self.W, 4], fill_value=255, dtype=torch.uint8)
-        self.depths = torch.full([self.N, self.H, self.W], fill_value=1, dtype=torch.float32)
+        if self.depths_bool:
+            self.depths = torch.full([self.N, self.H, self.W], fill_value=1, dtype=torch.float32)
         # self.ids = torch.full([self.N, self.H, self.W], fill_value=0, dtype=torch.int16)
         self.intrinsics = torch.zeros([self.N, 3, 3], dtype=torch.float32)
         self.extrinsics = torch.zeros([self.N, 4, 4], dtype=torch.float32)
@@ -45,7 +51,7 @@ class CameraGeometryLoader(object):
                 for frame in rig:
                     # if self.load_images:
                     self.images[i, :, :, :3] = torch.ByteTensor(frame.rgb)
-                    if frame.depth is not None:
+                    if self.depths_bool:
                         self.depths[i, :, :] = torch.Tensor(frame.depth)
                     # if 'id' in frame.keys():
                     #     self.ids[i, :, :] = torch.ShortTensor(frame.ids)
@@ -89,7 +95,10 @@ class CameraGeometryLoader(object):
         E[..., :3, 3] = E[..., :3, 3] - self.translation_center.to(device)
 
         rgb_gt, color_bg = self.format_groundtruth(self.images[n, h, w, :].to(device), background)
-        depth = self.depths[n, h, w].to(device)
+        if self.depths_bool:
+            depth = self.depths[n, h, w].to(device)
+        else:
+            depth = None
         # ids = self.ids[n, h, w].to(torch.float32).to(device)
 
         n = n.to(device)

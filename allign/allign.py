@@ -144,11 +144,11 @@ if __name__ == '__main__':
     pcd_a_rs = pcd_a.uniform_down_sample(100)
     pcd_b_rs = pcd_b.uniform_down_sample(100)
 
-    a = np.array(pcd_a_rs.points)
-    thresh = (np.amax(a[:, 2]) - np.amin(a[:, 2])) * 0.25 + np.amin(a[:, 2])
-    a = a[np.broadcast_to(a[:, 2, None], (a.shape[0], 3)) > thresh].reshape(-1, 3)
-    thresh = (np.amax(a[:, 2]) - np.amin(a[:, 2])) * 0.75 + np.amin(a[:, 2])
-    a = a[np.broadcast_to(a[:, 2, None], (a.shape[0], 3)) < thresh].reshape(-1, 3)
+    # a = np.array(pcd_a_rs.points)
+    # thresh = (np.amax(a[:, 2]) - np.amin(a[:, 2])) * 0.25 + np.amin(a[:, 2])
+    # a = a[np.broadcast_to(a[:, 2, None], (a.shape[0], 3)) > thresh].reshape(-1, 3)
+    # thresh = (np.amax(a[:, 2]) - np.amin(a[:, 2])) * 0.75 + np.amin(a[:, 2])
+    # a = a[np.broadcast_to(a[:, 2, None], (a.shape[0], 3)) < thresh].reshape(-1, 3)
 
 
     pcd_a_rs = o3d.geometry.PointCloud()
@@ -157,11 +157,11 @@ if __name__ == '__main__':
     # 0 - x: front to back
     # 1 - y: left to right
     # 2 - z: up to down
-    b = np.array(pcd_b_rs.points)
-    thresh = (np.amax(b[:, 2]) - np.amin(b[:, 2])) * 0.25 + np.amin(b[:, 2])
-    b = b[np.broadcast_to(b[:, 2, None], (b.shape[0], 3)) > thresh].reshape(-1, 3)
-    thresh = (np.amax(b[:, 2]) - np.amin(b[:, 2])) * 0.75 + np.amin(b[:, 2])
-    b = b[np.broadcast_to(b[:, 2, None], (b.shape[0], 3)) < thresh].reshape(-1, 3)
+    # b = np.array(pcd_b_rs.points)
+    # thresh = (np.amax(b[:, 2]) - np.amin(b[:, 2])) * 0.25 + np.amin(b[:, 2])
+    # b = b[np.broadcast_to(b[:, 2, None], (b.shape[0], 3)) > thresh].reshape(-1, 3)
+    # thresh = (np.amax(b[:, 2]) - np.amin(b[:, 2])) * 0.75 + np.amin(b[:, 2])
+    # b = b[np.broadcast_to(b[:, 2, None], (b.shape[0], 3)) < thresh].reshape(-1, 3)
 
     # thresh = (np.amax(b[:, 1]) - np.amin(b[:, 1])) * 0.5 + np.amin(b[:, 1])
     # b = b[np.broadcast_to(b[:, 1, None], (b.shape[0], 3)) < thresh].reshape(-1, 3)

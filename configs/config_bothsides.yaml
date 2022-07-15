@@ -1,0 +1,17 @@
+scene:
+  scene_paths:
+    - /home/casey/PhD/data/conan_scans/ROW_349_EAST_SLOW_0004/scene.json
+    - /home/casey/PhD/data/conan_scans/ROW_349_WEST_SLOW_0009/scene.json
+  frame_ranges:
+    - null
+    - null
+  transforms:
+    - null
+    - /home/casey/PhD/data/slows/transforms/0009_0004.npy
+    # - null
+  
+  image_scale: 0.25
+
+  log:
+    root_dir: './logs/real_data_bothsides'
+  

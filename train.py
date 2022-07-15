@@ -116,6 +116,9 @@ if __name__ == '__main__':
 
         dist_loss_lambda1=cfg.trainer.dist_loss_lambda1,
         dist_loss_lambda2=cfg.trainer.dist_loss_lambda2,
+
+        depth_loss_lambda1=cfg.trainer.depth_loss_lambda1,
+        depth_loss_lambda2=cfg.trainer.depth_loss_lambda2,
         )
 
     logger.log('Beginning Training...\n')

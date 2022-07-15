@@ -1,12 +1,12 @@
 
 scene:
   scene_paths:
-  #  - /home/casey/PhD/data/conan_scans/ROW_349_EAST_SLOW_0006/scene.json
+   - /home/casey/PhD/data/conan_scans/ROW_349_EAST_SLOW_0006/scene.json
   #  - /home/casey/PhD/data/conan_scans/ROW_349_WEST_SLOW_0007/scene.json
   #  - /home/casey/PhD/data/conan_scans/ROW_349_WEST_LONG_0002/scene.json
   #  - /home/casey/PhD/data/my_renders_dense/vine_C6_7/back/cameras.json
   #  - /home/casey/PhD/data/my_renders/vine_C10_1/back_close/cameras.json
-   - /home/casey/PhD/data/renders_close/vine_C1_0/front/cameras.json
+  #  - /home/casey/PhD/data/renders_close/vine_C1_0/front/cameras.json
   frame_ranges:
    - null
   transforms:
@@ -16,7 +16,7 @@ scene:
   outer_bound: 2.5
 
 log:
-  root_dir: './logs/synthetic_allign_depth'
+  root_dir: './logs/real/0006'
   eval_image_freq: end
   eval_pointcloud_freq: end
   save_weights_freq: end
@@ -27,6 +27,8 @@ trainer:
   n_rays: 16384
   dist_loss_lambda1: 1e-5
   dist_loss_lambda2: 1e-2
+  depth_loss_lambda1: 1e-1
+  depth_loss_lambda2: 1e-1
 
 optimizer:
   encoding:
@@ -53,8 +55,8 @@ inference:
     max_variance_pcd: 0.05
     distribution_area: 0.4
 
-    cams: [0, 1, 2, 3, 4, 5]
-    freq: 3
+    cams: [1, 2, 3, 4]
+    freq: 20
 
 renderer:
   steps:

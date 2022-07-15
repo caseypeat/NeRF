@@ -1,14 +1,14 @@
 
 input_paths:
-  logdir_a: ./logs/synthetic_allign/vine_C1_0/front/20220710_153801
-  model_a: "./logs/synthetic_allign/vine_C1_0/front/20220710_153801/model/10000.pth"
-  pointcloud_a: "./logs/synthetic_allign/vine_C1_0/front/20220710_153801/pointclouds/pcd/10000.pcd"
+  logdir_a: ./logs/hashtable_outputs/vine_C1_0/front/20220710_153801
+  model_a: "./logs/hashtable_outputs/vine_C1_0/front/20220710_153801/model/10000.pth"
+  pointcloud_a: "./logs/hashtable_outputs/vine_C1_0/front/20220710_153801/pointclouds/pcd/10000.pcd"
 
-  logdir_b: ./logs/synthetic_allign/vine_C1_0/back/20220710_161406
-  model_b: "./logs/synthetic_allign/vine_C1_0/back/20220710_161406/model/10000.pth"
-  pointcloud_b: "./logs/synthetic_allign/vine_C1_0/back/20220710_161406/pointclouds/pcd/10000.pcd"
+  logdir_b: ./logs/hashtable_outputs/vine_C1_0/back/20220710_161406
+  model_b: "./logs/hashtable_outputs/vine_C1_0/back/20220710_161406/model/10000.pth"
+  pointcloud_b: "./logs/hashtable_outputs/vine_C1_0/back/20220710_161406/pointclouds/pcd/10000.pcd"
 
-log_dir: './allign/logs/tests/1'
+log_dir: './allign/real/0004_0009'
 
 n_rays: 4096
 iters_per_epoch: 100

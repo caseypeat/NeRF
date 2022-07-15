@@ -32,7 +32,11 @@ class Trainer(object):
         save_weights_freq,
         
         dist_loss_lambda1,
-        dist_loss_lambda2,):
+        dist_loss_lambda2,
+
+        depth_loss_lambda1,
+        depth_loss_lambda2,
+        ):
 
         self.model = model
         self.dataloader = dataloader
@@ -55,6 +59,9 @@ class Trainer(object):
 
         self.dist_loss_lambda1 = dist_loss_lambda1
         self.dist_loss_lambda2 = dist_loss_lambda2
+
+        self.depth_loss_lambda1 = depth_loss_lambda1
+        self.depth_loss_lambda2 = depth_loss_lambda2
 
         self.iter = 0
 
@@ -140,11 +147,7 @@ class Trainer(object):
 
         rgb, weights, z_vals_log_s, aux_outputs = self.renderer.render(n, h, w, K, E, color_bg)
 
-        # depth_scalar = 0.01
-        depth_loss1 = 1e-1
-        depth_loss2 = 1e-1
-        depth_scalar = 10**(self.iter/self.num_iters * (m.log10(depth_loss2) - m.log10(depth_loss1)) + m.log10(depth_loss1))
-        loss_depth = torch.mean(weights * (1 - z_vals_log_s))
+        # depth_scalar = 0.0
 
         # Calculate losses
         loss_rgb = helpers.criterion_rgb(rgb, rgb_gt)
@@ -157,16 +160,22 @@ class Trainer(object):
             dist_scalar = 10**(self.iter/self.num_iters * (m.log10(self.dist_loss_lambda2) - m.log10(self.dist_loss_lambda1)) + m.log10(self.dist_loss_lambda1))
             loss = loss_rgb + dist_scalar * loss_dist
 
-        loss = loss + depth_scalar * loss_depth
+        if self.depth_loss_lambda1 == 0 or self.depth_loss_lambda2 == 0:
+            depth_scalar = 0
+            loss_depth = 0
+        else:
+            depth_scalar = 10**(self.iter/self.num_iters * (m.log10(self.depth_loss_lambda2) - m.log10(self.depth_loss_lambda2)) + m.log10(self.depth_loss_lambda2))
+            loss_depth = torch.mean(weights * (1 - z_vals_log_s))
+            loss = loss + depth_scalar * loss_depth
 
         # Log scalars
         self.logger.scalar('loss', loss, self.iter)
         self.logger.scalar('loss_rgb', loss_rgb, self.iter)
-        self.logger.scalar('loss_dist', loss_dist, self.iter)
-        self.logger.scalar('loss_depth', loss_depth, self.iter)
-        self.logger.scalar('dist_scalar', dist_scalar, self.iter)
-        self.logger.scalar('depth_scalar', depth_scalar, self.iter)
         self.logger.scalar('psnr_rgb', helpers.psnr(rgb, rgb_gt), self.iter)
+        self.logger.scalar('dist_scalar', dist_scalar, self.iter)
+        self.logger.scalar('loss_dist', loss_dist, self.iter)
+        self.logger.scalar('depth_scalar', depth_scalar, self.iter)
+        self.logger.scalar('loss_depth', loss_depth, self.iter)
 
         self.logger.scalar('loss (seconds)', loss, int(time.time() - self.t0_train))
         self.logger.scalar('loss_rgb (seconds)', loss_rgb, int(time.time() - self.t0_train))
