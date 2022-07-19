@@ -140,19 +140,20 @@ class TrainerPose(object):
 
         self.logger.scalar('loss', loss, self.iter)
         
-        xyz_error = self.calculate_xyz_error()
-        self.logger.scalar('xyz_error', np.linalg.norm(xyz_error), self.iter)
-        self.logger.scalar('x_error', xyz_error[0], self.iter)
-        self.logger.scalar('y_error', xyz_error[1], self.iter)
-        self.logger.scalar('z_error', xyz_error[2], self.iter)
-        self.logger.scalar('rot_error', self.calculate_rot_error(), self.iter)
+        if self.dataloader_a.depths_bool and self.dataloader_b.depths_bool:
+            xyz_error = self.calculate_xyz_error()
+            self.logger.scalar('xyz_error', np.linalg.norm(xyz_error), self.iter)
+            self.logger.scalar('x_error', xyz_error[0], self.iter)
+            self.logger.scalar('y_error', xyz_error[1], self.iter)
+            self.logger.scalar('z_error', xyz_error[2], self.iter)
+            self.logger.scalar('rot_error', self.calculate_rot_error(), self.iter)
 
-        point_error_znerf = self.measure.calculate_point_error(h, w, K, E, depth, self.transform)
-        point_error_ransac = self.measure.calculate_point_error(h, w, K, E, depth, self.transform_ransac)
-        point_error_icp = self.measure.calculate_point_error(h, w, K, E, depth, self.transform_icp)
-        self.logger.scalar('point_error_znerf', point_error_znerf, self.iter)
-        self.logger.scalar('point_error_ransac', point_error_ransac, self.iter)
-        self.logger.scalar('point_error_icp', point_error_icp, self.iter)
+            point_error_znerf = self.measure.calculate_point_error(h, w, K, E, depth, self.transform)
+            point_error_ransac = self.measure.calculate_point_error(h, w, K, E, depth, self.transform_ransac)
+            point_error_icp = self.measure.calculate_point_error(h, w, K, E, depth, self.transform_icp)
+            self.logger.scalar('point_error_znerf', point_error_znerf, self.iter)
+            self.logger.scalar('point_error_ransac', point_error_ransac, self.iter)
+            self.logger.scalar('point_error_icp', point_error_icp, self.iter)
 
         return loss
 
