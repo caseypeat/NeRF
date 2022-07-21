@@ -1,8 +1,8 @@
 
 scene:
   scene_paths:
-   - /mnt/maara/conan_scans/blenheim-21-6-28/30-06_13-05/ROW_349_EAST_SLOW_0006/scene.json
-  #  - /home/casey/PhD/data/conan_scans/ROW_349_EAST_SLOW_0006/scene.json
+  #  - /mnt/maara/conan_scans/blenheim-21-6-28/30-06_13-05/ROW_349_EAST_SLOW_0006/scene.json
+   - /home/casey/PhD/data/conan_scans/ROW_349_EAST_SLOW_0006/scene.json
   #  - /home/casey/PhD/data/conan_scans/ROW_349_WEST_SLOW_0007/scene.json
   #  - /home/casey/PhD/data/conan_scans/ROW_349_WEST_LONG_0002/scene.json
   #  - /home/casey/PhD/data/my_renders_dense/vine_C6_7/back/cameras.json
@@ -17,19 +17,19 @@ scene:
   outer_bound: 2.5
 
 log:
-  root_dir: './logs/real/0006'
+  root_dir: './logs/translation_center_test'
   eval_image_freq: end
   eval_pointcloud_freq: end
   save_weights_freq: end
 
 trainer:
-  num_epochs: 100
+  num_epochs: 30
   iters_per_epoch: 100
   n_rays: 16384
   dist_loss_lambda1: 1e-5
   dist_loss_lambda2: 1e-2
-  depth_loss_lambda1: 1e-1
-  depth_loss_lambda2: 1e-1
+  depth_loss_lambda1: 0
+  depth_loss_lambda2: 0
 
 optimizer:
   encoding:

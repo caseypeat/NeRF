@@ -97,7 +97,8 @@ class TrainerPose(object):
 
         # Output transforms
         init_transform = self.transform.init_transform.detach().cpu().numpy()
-        # init_transform[:3, 3] = init_transform[:3, 3] + (self.dataloader_a.translation_center - self.dataloader_b.translation_center).detach().cpu().numpy()
+        # init_transform[:3, 3] = init_transform[:3, 3] + (self.dataloader_b.translation_center - self.dataloader_a.translation_center).detach().cpu().numpy()
+        init_transform[:3, 3] = init_transform[:3, 3] + self.dataloader_a.translation_center.detach().cpu().numpy()
         self.logger.save_transform(init_transform, 'init_transform')
 
         final_transform = np.eye(4)
@@ -105,6 +106,7 @@ class TrainerPose(object):
         # final_transform[:3, 3] = self.transform.T.detach().cpu().numpy() + (self.dataloader_a.translation_center - self.dataloader_b.translation_center).detach().cpu().numpy()
         final_transform[:3, 3] = self.transform.T.detach().cpu().numpy()
         final_transform = final_transform @ init_transform
+        final_transform[:3, 3] = final_transform[:3, 3] - self.dataloader_b.translation_center.detach().cpu().numpy()
         self.logger.save_transform(final_transform, 'final_transform')
 
         # Output pointclouds

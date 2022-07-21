@@ -37,11 +37,9 @@ class CameraGeometryLoader(object):
             self.N += len(frames) * len(frames[0])
             self.H, self.W = frames[0][0].rgb.shape[:2]
 
-        # if self.load_images:
         self.images = torch.full([self.N, self.H, self.W, 4], fill_value=255, dtype=torch.uint8)
         if self.depths_bool:
             self.depths = torch.full([self.N, self.H, self.W], fill_value=1, dtype=torch.float32)
-        # self.ids = torch.full([self.N, self.H, self.W], fill_value=0, dtype=torch.int16)
         self.intrinsics = torch.zeros([self.N, 3, 3], dtype=torch.float32)
         self.extrinsics = torch.zeros([self.N, 4, 4], dtype=torch.float32)
 
@@ -49,12 +47,9 @@ class CameraGeometryLoader(object):
         for scene, frames, transform in zip(scene_list, frames_list, transform_list):
             for rig in tqdm(frames):
                 for frame in rig:
-                    # if self.load_images:
                     self.images[i, :, :, :3] = torch.ByteTensor(frame.rgb)
                     if self.depths_bool:
                         self.depths[i, :, :] = torch.Tensor(frame.depth)
-                    # if 'id' in frame.keys():
-                    #     self.ids[i, :, :] = torch.ShortTensor(frame.ids)
                     self.intrinsics[i] = torch.Tensor(frame.camera.intrinsic)
                     self.extrinsics[i] =  torch.Tensor(transform) @ torch.Tensor(frame.camera.extrinsic)
                     i += 1
@@ -92,21 +87,17 @@ class CameraGeometryLoader(object):
         K = self.intrinsics[n].to(device)
         E = self.extrinsics[n].to(device)
 
-        E[..., :3, 3] = E[..., :3, 3] - self.translation_center.to(device)
-
         rgb_gt, color_bg = self.format_groundtruth(self.images[n, h, w, :].to(device), background)
         if self.depths_bool:
             depth = self.depths[n, h, w].to(device)
         else:
             depth = None
-        # ids = self.ids[n, h, w].to(torch.float32).to(device)
 
         n = n.to(device)
         h = h.to(device)
         w = w.to(device)
 
         return n, h, w, K, E, rgb_gt, color_bg, depth
-        # return n, h, w, K, E, rgb_gt, color_bg
 
 
     def get_random_batch(self, batch_size, device='cuda'):
@@ -146,8 +137,6 @@ class CameraGeometryLoader(object):
     def get_calibration(self, device='cuda'):
         K = self.intrinsics.to(device)
         E = self.extrinsics.to(device)
-
-        E[..., :3, 3] = E[..., :3, 3] - self.translation_center.to(device)
 
         return self.N, self.H, self.W, K, E
 

@@ -61,6 +61,7 @@ if __name__ == '__main__':
         steps_firstpass=cfg.renderer.steps,
         steps_importance=cfg.renderer.importance_steps,
         alpha_importance=cfg.renderer.alpha,
+        translation_center=dataloader.translation_center,
     )
 
     logger.log('Initiating Inference...')

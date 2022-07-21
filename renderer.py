@@ -18,7 +18,9 @@ class NerfRenderer(nn.Module):
         z_bounds,
         steps_firstpass,
         steps_importance,
-        alpha_importance):
+        alpha_importance,
+        
+        translation_center):
         
         super().__init__()
 
@@ -31,6 +33,8 @@ class NerfRenderer(nn.Module):
         self.steps_firstpass = steps_firstpass
         self.steps_importance = steps_importance
         self.alpha_importance = alpha_importance
+
+        self.translation_center = translation_center
 
         
     ## Rendering Pipeline
@@ -147,7 +151,8 @@ class NerfRenderer(nn.Module):
         z_vals_log, z_vals = self.get_uniform_z_vals(rays_o, rays_d, self.steps_firstpass)
 
         xyzs, dirs = self.get_sample_points(rays_o, rays_d, z_vals)
-        s_xyzs = self.mipnerf360_scale(xyzs, self.inner_bound, self.outer_bound)
+        xyzs_centered = xyzs - self.translation_center.to(xyzs.device)
+        s_xyzs = self.mipnerf360_scale(xyzs_centered, self.inner_bound, self.outer_bound)
 
         sigmas, _ = self.model.density(s_xyzs, self.outer_bound)
 
@@ -172,7 +177,8 @@ class NerfRenderer(nn.Module):
         rays_o, rays_d = self.get_rays(h, w, K, E)
         z_vals_log, z_vals = self.efficient_sampling(rays_o, rays_d, self.steps_importance, self.alpha_importance)
         xyzs, dirs = self.get_sample_points(rays_o, rays_d, z_vals)
-        s_xyzs = self.mipnerf360_scale(xyzs, self.inner_bound, self.outer_bound)
+        xyzs_centered = xyzs - self.translation_center.to(xyzs.device)
+        s_xyzs = self.mipnerf360_scale(xyzs_centered, self.inner_bound, self.outer_bound)
         n_expand = n[:, None].expand(-1, z_vals.shape[-1])
 
         sigmas, rgbs, aux_outputs_net = self.model(s_xyzs, dirs, n_expand, self.outer_bound)

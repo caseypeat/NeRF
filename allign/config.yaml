@@ -1,14 +1,14 @@
 
 input_paths:
-  logdir_a: ./logs/real/0004/20220715_162724
-  model_a: "./logs/real/0004/20220715_162724/model/10000.pth"
-  pointcloud_a: "./logs/real/0004/20220715_162724/pointclouds/pcd/10000.pcd"
+  logdir_a: ./logs/real/0005/20220715_170851
+  model_a: "./logs/real/0005/20220715_170851/model/10000.pth"
+  pointcloud_a: "./logs/real/0005/20220715_170851/pointclouds/pcd/10000.pcd"
 
-  logdir_b: ./logs/real/0009/20220715_154649
-  model_b: "./logs/real/0009/20220715_154649/model/10000.pth"
-  pointcloud_b: "./logs/real/0009/20220715_154649/pointclouds/pcd/10000.pcd"
+  logdir_b: ./logs/real/0008/20220715_150703
+  model_b: "./logs/real/0008/20220715_150703/model/10000.pth"
+  pointcloud_b: "./logs/real/0008/20220715_150703/pointclouds/pcd/10000.pcd"
 
-log_dir: './allign/logs/real/0004_0009'
+log_dir: './allign/logs/real/0005_0008'
 
 n_rays: 4096
 iters_per_epoch: 100
