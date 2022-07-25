@@ -25,7 +25,9 @@ class TrainerPose(object):
         measure,
         iters_per_epoch,
         num_epochs,
-        n_rays):
+        n_rays,
+        translation_center_a,
+        translation_center_b,):
 
         self.iters_per_epoch = iters_per_epoch
         self.num_epochs = num_epochs
@@ -50,6 +52,9 @@ class TrainerPose(object):
         self.measure = measure
 
         self.n_rays = n_rays
+
+        self.translation_center_a = translation_center_a
+        self.translation_center_b = translation_center_b
 
         self.optimizer = torch.optim.Adam([
             {'name': 'translation', 'params': [self.transform.T], 'lr': 1e-3},
@@ -86,6 +91,17 @@ class TrainerPose(object):
         #         self.logger.log(f'Scalar: {key} - Value: {np.mean(np.array(val[-self.iters_per_epoch:])).item():.6f}')
         #     self.logger.log('')
 
+        # Output transforms
+        init_transform = self.transform.init_transform.detach().cpu().numpy()
+        # init_transform[:3, 3] = init_transform[:3, 3] + (self.dataloader_b.translation_center - self.dataloader_a.translation_center).detach().cpu().numpy()
+        # init_transform[:3, 3] = init_transform[:3, 3] + self.dataloader_a.translation_center.detach().cpu().numpy()
+        self.logger.save_transform(init_transform, 'init_transform')
+
+        # Output pointclouds
+        self.logger.save_pointcloud(self.pointcloud_a, 'pointcloud_a')
+        self.logger.save_pointcloud(self.pointcloud_b, 'pointcloud_b')
+        self.logger.save_pointclouds_comb(self.pointcloud_a, self.pointcloud_b, init_transform, 'init_allign')
+
         for epoch in range(self.num_epochs):
             self.train_epoch(self.iters_per_epoch)
 
@@ -95,24 +111,15 @@ class TrainerPose(object):
                 self.logger.log(f'Scalar: {key} - Value: {np.mean(np.array(val[-self.iters_per_epoch:])).item():.6f}')
             self.logger.log('')
 
-        # Output transforms
-        init_transform = self.transform.init_transform.detach().cpu().numpy()
-        # init_transform[:3, 3] = init_transform[:3, 3] + (self.dataloader_b.translation_center - self.dataloader_a.translation_center).detach().cpu().numpy()
-        init_transform[:3, 3] = init_transform[:3, 3] + self.dataloader_a.translation_center.detach().cpu().numpy()
-        self.logger.save_transform(init_transform, 'init_transform')
-
         final_transform = np.eye(4)
         final_transform[:3, :3] = Exp(self.transform.R).detach().cpu().numpy()
         # final_transform[:3, 3] = self.transform.T.detach().cpu().numpy() + (self.dataloader_a.translation_center - self.dataloader_b.translation_center).detach().cpu().numpy()
         final_transform[:3, 3] = self.transform.T.detach().cpu().numpy()
         final_transform = final_transform @ init_transform
-        final_transform[:3, 3] = final_transform[:3, 3] - self.dataloader_b.translation_center.detach().cpu().numpy()
+        # final_transform[:3, 3] = final_transform[:3, 3] - self.dataloader_b.translation_center.detach().cpu().numpy()
         self.logger.save_transform(final_transform, 'final_transform')
 
         # Output pointclouds
-        self.logger.save_pointcloud(self.pointcloud_a, 'pointcloud_a')
-        self.logger.save_pointcloud(self.pointcloud_b, 'pointcloud_b')
-        self.logger.save_pointclouds_comb(self.pointcloud_a, self.pointcloud_b, init_transform, 'init_allign')
         self.logger.save_pointclouds_comb(self.pointcloud_a, self.pointcloud_b, final_transform, 'final_allign')
         
     def dry_run(self, iters_per_epoch):
@@ -178,7 +185,8 @@ class TrainerPose(object):
         rays_o, rays_d = self.renderer.get_rays(h, w, K, E)
         z_vals_log, z_vals = self.renderer.efficient_sampling(rays_o, rays_d, self.renderer.steps_importance, self.renderer.alpha_importance)
         xyzs_a, _ = self.renderer.get_sample_points(rays_o, rays_d, z_vals)
-        s_xyzs_a = self.renderer.mipnerf360_scale(xyzs_a, self.renderer.inner_bound, self.renderer.outer_bound)
+        xyzs_centered_a = xyzs_a - self.translation_center_a.to(xyzs_a.device)
+        s_xyzs_a = self.renderer.mipnerf360_scale(xyzs_centered_a, self.renderer.inner_bound, self.renderer.outer_bound)
 
         sigmas_a, _ = self.model_a.density(s_xyzs_a, self.renderer.outer_bound)
 
@@ -191,7 +199,8 @@ class TrainerPose(object):
 
 
         xyzs_b = self.transform(xyzs_a)
-        s_xyzs_b = self.renderer.mipnerf360_scale(xyzs_b, self.renderer.inner_bound, self.renderer.outer_bound)
+        xyzs_centered_b = xyzs_b - self.translation_center_b.to(xyzs_b.device)
+        s_xyzs_b = self.renderer.mipnerf360_scale(xyzs_centered_b, self.renderer.inner_bound, self.renderer.outer_bound)
         sigmas_b, _ = self.model_b.density(s_xyzs_b, self.renderer.outer_bound)
         sigmas_ab = sigmas_a + sigmas_b
 
