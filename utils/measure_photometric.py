@@ -23,22 +23,13 @@ from inference import Inferencer
 
 if __name__ == '__main__':
 
-<<<<<<< HEAD
     run = '20220726_151145'
     pair = '0004_0009'
-=======
-    run = '20220723_190910'
-    pair = '0006_0007'
->>>>>>> 3c80a3686c55ba066ccc8b51764503cab6b52295
 
     cfg = OmegaConf.load(f'./logs/bothsides/{pair}/{run}/config.yaml')
 
     logger = Logger(
-<<<<<<< HEAD
         root_dir=f'./logs/measure/{pair}/icp',
-=======
-        root_dir=f'./logs/measure/{pair}/final',
->>>>>>> 3c80a3686c55ba066ccc8b51764503cab6b52295
         cfg=cfg,
         )
 

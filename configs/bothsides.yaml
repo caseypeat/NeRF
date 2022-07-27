@@ -11,23 +11,14 @@ hydra:
 
 scene:
   scene_paths:
-<<<<<<< HEAD
     - /home/casey/PhD/data/conan_scans/ROW_349_EAST_SLOW_0004/scene.json
     - /home/casey/PhD/data/conan_scans/ROW_349_WEST_SLOW_0009/scene.json
-=======
-    - /home/casey/PhD/data/conan_scans/ROW_349_EAST_SLOW_0006/scene.json
-    - /home/casey/PhD/data/conan_scans/ROW_349_WEST_SLOW_0007/scene.json
->>>>>>> 3c80a3686c55ba066ccc8b51764503cab6b52295
   frame_ranges:
     - null
     - null
   transforms:
     # - null
-<<<<<<< HEAD
     - /home/casey/PhD/NeRF/allign/logs/allign/0004_0009/20220723_180133/icp_transform.npy
-=======
-    - /home/casey/PhD/NeRF/allign/logs/allign/0006_0007/20220723_180558/final_transform.npy
->>>>>>> 3c80a3686c55ba066ccc8b51764503cab6b52295
     - null
   
   image_scale: 0.25
@@ -36,11 +27,7 @@ scene:
   outer_bound: 2.5
 
 log:
-<<<<<<< HEAD
   root_dir: './logs/bothsides/0004_0009'
-=======
-  root_dir: './logs/bothsides/0006_0007'
->>>>>>> 3c80a3686c55ba066ccc8b51764503cab6b52295
   eval_image_freq: end
   eval_pointcloud_freq: end
   save_weights_freq: end
