@@ -1,11 +1,16 @@
+
 import hydra
 import numpy as np
 import torch
 import matplotlib.pyplot as plt
 import sys
+import os
 import argparse
+import torchmetrics
 
 from omegaconf import DictConfig, OmegaConf
+
+import helpers
 
 from loaders.camera_geometry_loader import CameraGeometryLoader
 
@@ -16,12 +21,15 @@ from logger import Logger
 from inference import Inferencer
 
 
-@hydra.main(version_base=None, config_path="./configs", config_name="config")
-def train(cfg : DictConfig) -> None:
-    print(OmegaConf.to_yaml(cfg))
+if __name__ == '__main__':
+
+    run = '20220723_190910'
+    pair = '0006_0007'
+
+    cfg = OmegaConf.load(f'./logs/bothsides/{pair}/{run}/config.yaml')
 
     logger = Logger(
-        root_dir=cfg.log.root_dir,
+        root_dir=f'./logs/measure/{pair}/final',
         cfg=cfg,
         )
 
@@ -50,6 +58,7 @@ def train(cfg : DictConfig) -> None:
         color_hidden_dim=cfg.nets.color.hidden_dim,
         color_num_layers=cfg.nets.color.num_layers,
     ).to('cuda')
+    model.load_state_dict(torch.load(os.path.join(f'{cfg.log.root_dir}', run, 'model', '3000.pth')))
 
     logger.log('Initilising Renderer...')
     renderer = NerfRenderer(
@@ -64,14 +73,10 @@ def train(cfg : DictConfig) -> None:
     )
 
     logger.log('Initiating Inference...')
-    if cfg.inference.image.image_num == 'middle':
-        inference_image_num = int(dataloader.images.shape[0]/2) + 3
-    else:
-        inference_image_num = cfg.inference.image.image_num
     inferencer = Inferencer(
         renderer=renderer,
         n_rays=cfg.trainer.n_rays,
-        image_num=inference_image_num,
+        image_num=0,
         rotate=cfg.inference.image.rotate,
         max_variance_npy=cfg.inference.pointcloud.max_variance_npy,
         max_variance_pcd=cfg.inference.pointcloud.max_variance_pcd,
@@ -80,51 +85,35 @@ def train(cfg : DictConfig) -> None:
         freq=cfg.inference.pointcloud.freq,
         )
 
-    logger.log('Initiating Optimiser...')
-    optimizer = torch.optim.Adam([
-            {'name': 'encoding', 'params': list(model.encoder.parameters()), 'lr': cfg.optimizer.encoding.lr},
-            {'name': 'latent_emb', 'params': [model.latent_emb], 'lr': cfg.optimizer.latent_emb.lr},
-            {'name': 'net', 'params': list(model.sigma_net.parameters()) + list(model.color_net.parameters()), 'weight_decay': cfg.optimizer.net.weight_decay, 'lr': cfg.optimizer.net.lr},
-        ], betas=cfg.optimizer.betas, eps=cfg.optimizer.eps)
+    n_indexs = []
+    for i in range(dataloader.images.shape[0]):
+        if i % 6 in [1, 2, 3, 4]:
+            if i//6 % 20 == 0:
+                n_indexs.append(i)
 
-    if cfg.scheduler == 'step':
-        lmbda = lambda x: 1
-    elif cfg.scheduler == 'exp_decay':
-        lmbda = lambda x: 0.1**(x/(cfg.trainer.num_epochs*cfg.trainer.iters_per_epoch))
-    else:
-        raise ValueError
-    scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lmbda, last_epoch=-1, verbose=False)
+    lpips = torchmetrics.image.lpip.LearnedPerceptualImagePatchSimilarity(net_type='vgg').to('cuda')
+    ssim = torchmetrics.StructuralSimilarityIndexMeasure()
 
-    logger.log('Initiating Trainer...')
-    trainer = Trainer(
-        model=model,
-        dataloader=dataloader,
-        logger=logger,
-        inferencer=inferencer,
-        renderer=renderer,
+    for i in n_indexs:
+        n, h, w, K, E, rgb_gt, _, _ = dataloader.get_image_batch(i, device='cuda')
+        image, invdepth = inferencer.render_image(n, h, w, K, E)
 
-        optimizer=optimizer,
-        scheduler=scheduler, 
-        
-        n_rays=cfg.trainer.n_rays,
-        num_epochs=cfg.trainer.num_epochs,
-        iters_per_epoch=cfg.trainer.iters_per_epoch,
+        pred_bchw = torch.clamp(torch.Tensor(image.copy()).permute(2, 0, 1)[None, ...].to('cuda'), min=0, max=1)
+        pred_lpips = torch.clamp(pred_bchw * 2 - 1, min=-1, max=1)
+        target_bchw = torch.clamp(rgb_gt.permute(2, 0, 1)[None, ...].to('cuda'), min=0, max=1)
+        target_lpips = torch.clamp(target_bchw * 2 - 1, min=-1, max=1)
 
-        eval_image_freq=cfg.log.eval_image_freq,
-        eval_pointcloud_freq=cfg.log.eval_pointcloud_freq,
-        save_weights_freq=cfg.log.save_weights_freq,
+        lpips_result = lpips(pred_lpips, target_lpips)
+        ssim_result = ssim(pred_bchw, target_bchw)
+        psnr_result = helpers.psnr(pred_bchw, target_bchw)
 
-        dist_loss_lambda1=cfg.trainer.dist_loss_lambda1,
-        dist_loss_lambda2=cfg.trainer.dist_loss_lambda2,
+        logger.eval_scalar('eval_lpips', lpips_result, 0)
+        logger.eval_scalar('eval_ssim', ssim_result, 0)
+        logger.eval_scalar('eval_psnr', psnr_result, 0)
 
-        depth_loss_lambda1=cfg.trainer.depth_loss_lambda1,
-        depth_loss_lambda2=cfg.trainer.depth_loss_lambda2,
-        )
+    for key, val in logger.eval_scalars.items():
+        logger.log(f'Eval Scalar: {key} - Value: {np.mean(np.array(val))}')
+        logger.log('')
 
-    logger.log('Beginning Training...\n')
-    trainer.train()
+    
 
-
-if __name__ == '__main__':
-
-    train()

@@ -1,3 +1,4 @@
+import hydra
 import numpy as np
 import torch
 import torch.nn as nn
@@ -6,7 +7,7 @@ import matplotlib.pyplot as plt
 import open3d as o3d
 import os
 
-from omegaconf import OmegaConf
+from omegaconf import OmegaConf, DictConfig
 
 from tqdm import tqdm
 
@@ -56,71 +57,27 @@ class Transform(nn.Module):
         return xyzs_b
 
 
-if __name__ == '__main__':
+@hydra.main(version_base=None, config_path="./configs", config_name="config")
+def train(cfg : DictConfig) -> None:
+    print(OmegaConf.to_yaml(cfg))
 
-    cfg = configurator('./allign/config.yaml')
+    log_dir_a = os.path.join(cfg.input_paths.root_dir, cfg.input_paths.name_a, cfg.input_paths.run_dir_a)
+    model_path_a = os.path.join(log_dir_a, cfg.input_paths.model_a)
+    pointcloud_path_a = os.path.join(log_dir_a, cfg.input_paths.pointcloud_a)
 
-    logger = AllignLogger(cfg.log_dir, cfg)
+    log_dir_b = os.path.join(cfg.input_paths.root_dir, cfg.input_paths.name_b, cfg.input_paths.run_dir_b)
+    model_path_b = os.path.join(log_dir_b, cfg.input_paths.model_b)
+    pointcloud_path_b = os.path.join(log_dir_b, cfg.input_paths.pointcloud_b)
 
-    # if not os.path.exists(cfg.output_dir):
-    #     os.mkdir(cfg.output_dir)
+    log_dir = os.path.join('./allign', cfg.input_paths.root_dir, f'{cfg.input_paths.name_a}_{cfg.input_paths.name_b}')
 
-    cfg_a = OmegaConf.load(f'{cfg.input_paths.logdir_a}/config.yaml')
-    cfg_b = OmegaConf.load(f'{cfg.input_paths.logdir_b}/config.yaml')
+    logger = AllignLogger(log_dir, cfg)
 
-    dataloader_a = CameraGeometryLoader(
-        cfg_a.scene.scene_paths,
-        cfg_a.scene.frame_ranges,
-        cfg_a.scene.transforms,
-        cfg_a.scene.image_scale,
-        )
+    cfg_a = OmegaConf.load(f'{log_dir_a}/config.yaml')
+    cfg_b = OmegaConf.load(f'{log_dir_b}/config.yaml')
 
-    dataloader_b = CameraGeometryLoader(
-        cfg_b.scene.scene_paths,
-        cfg_b.scene.frame_ranges,
-        cfg_b.scene.transforms,
-        cfg_b.scene.image_scale,
-        )
-
-    pcd_a = o3d.io.read_point_cloud(cfg.input_paths.pointcloud_a)
-    pcd_b = o3d.io.read_point_cloud(cfg.input_paths.pointcloud_b)
-
-    model_a = NeRFNetwork(
-        N = len(dataloader_a.images),
-        encoding_precision=cfg_a.nets.encoding.precision,
-        encoding_n_levels=cfg_a.nets.encoding.n_levels,
-        encoding_n_features_per_level=cfg_a.nets.encoding.n_features_per_level,
-        encoding_log2_hashmap_size=cfg_a.nets.encoding.log2_hashmap_size,
-        geo_feat_dim=cfg_a.nets.sigma.geo_feat_dim,
-        sigma_hidden_dim=cfg_a.nets.sigma.hidden_dim,
-        sigma_num_layers=cfg_a.nets.sigma.num_layers,
-        encoding_dir_precision=cfg_a.nets.encoding_dir.precision,
-        encoding_dir_encoding=cfg_a.nets.encoding_dir.encoding,
-        encoding_dir_degree=cfg_a.nets.encoding_dir.degree,
-        latent_embedding_dim=cfg_a.nets.latent_embedding.features,
-        color_hidden_dim=cfg_a.nets.color.hidden_dim,
-        color_num_layers=cfg_a.nets.color.num_layers,
-    ).to('cuda')
-    model_a.load_state_dict(torch.load(f'{cfg.input_paths.model_a}'))
-
-    model_b = NeRFNetwork(
-        N = len(dataloader_b.images),
-        encoding_precision=cfg_b.nets.encoding.precision,
-        encoding_n_levels=cfg_b.nets.encoding.n_levels,
-        encoding_n_features_per_level=cfg_b.nets.encoding.n_features_per_level,
-        encoding_log2_hashmap_size=cfg_b.nets.encoding.log2_hashmap_size,
-        geo_feat_dim=cfg_b.nets.sigma.geo_feat_dim,
-        sigma_hidden_dim=cfg_b.nets.sigma.hidden_dim,
-        sigma_num_layers=cfg_b.nets.sigma.num_layers,
-        encoding_dir_precision=cfg_b.nets.encoding_dir.precision,
-        encoding_dir_encoding=cfg_b.nets.encoding_dir.encoding,
-        encoding_dir_degree=cfg_b.nets.encoding_dir.degree,
-        latent_embedding_dim=cfg_b.nets.latent_embedding.features,
-        color_hidden_dim=cfg_b.nets.color.hidden_dim,
-        color_num_layers=cfg_b.nets.color.num_layers,
-    ).to('cuda')
-    model_b.load_state_dict(torch.load(f'{cfg.input_paths.model_b}'))
-
+    pcd_a = o3d.io.read_point_cloud(pointcloud_path_a)
+    pcd_b = o3d.io.read_point_cloud(pointcloud_path_b)
 
     pcd_a_rs = pcd_a.uniform_down_sample(100)
     pcd_b_rs = pcd_b.uniform_down_sample(100)
@@ -143,7 +100,6 @@ if __name__ == '__main__':
 
     # thresh = (np.amax(a[:, 1]) - np.amin(a[:, 1])) * 0.5 + np.amin(a[:, 1])
     # a = a[np.broadcast_to(a[:, 1, None], (a.shape[0], 3)) < thresh].reshape(-1, 3)
-
 
     pcd_a_rs = o3d.geometry.PointCloud()
     pcd_a_rs.points = o3d.utility.Vector3dVector(a)
@@ -170,16 +126,64 @@ if __name__ == '__main__':
     # thresh = (np.amax(b[:, 1]) - np.amin(b[:, 1])) * 0.5 + np.amin(b[:, 1])
     # b = b[np.broadcast_to(b[:, 1, None], (b.shape[0], 3)) < thresh].reshape(-1, 3)
 
-
     pcd_b_rs = o3d.geometry.PointCloud()
     pcd_b_rs.points = o3d.utility.Vector3dVector(b)
 
     logger.save_pointcloud(pcd_a_rs, 'pcd_ransac_a')
     logger.save_pointcloud(pcd_b_rs, 'pcd_ransac_b')
 
-
     # result_ransac, result_icp = global_allign(pcd_dense_a, pcd_dense_b, voxel_size=0.01)
     result_ransac, result_icp = global_allign(pcd_a_rs, pcd_b_rs, voxel_size=0.01)
+
+    dataloader_a = CameraGeometryLoader(
+        cfg_a.scene.scene_paths,
+        cfg_a.scene.frame_ranges,
+        cfg_a.scene.transforms,
+        cfg_a.scene.image_scale,
+        )
+
+    dataloader_b = CameraGeometryLoader(
+        cfg_b.scene.scene_paths,
+        cfg_b.scene.frame_ranges,
+        cfg_b.scene.transforms,
+        cfg_b.scene.image_scale,
+        )
+
+    model_a = NeRFNetwork(
+        N = len(dataloader_a.images),
+        encoding_precision=cfg_a.nets.encoding.precision,
+        encoding_n_levels=cfg_a.nets.encoding.n_levels,
+        encoding_n_features_per_level=cfg_a.nets.encoding.n_features_per_level,
+        encoding_log2_hashmap_size=cfg_a.nets.encoding.log2_hashmap_size,
+        geo_feat_dim=cfg_a.nets.sigma.geo_feat_dim,
+        sigma_hidden_dim=cfg_a.nets.sigma.hidden_dim,
+        sigma_num_layers=cfg_a.nets.sigma.num_layers,
+        encoding_dir_precision=cfg_a.nets.encoding_dir.precision,
+        encoding_dir_encoding=cfg_a.nets.encoding_dir.encoding,
+        encoding_dir_degree=cfg_a.nets.encoding_dir.degree,
+        latent_embedding_dim=cfg_a.nets.latent_embedding.features,
+        color_hidden_dim=cfg_a.nets.color.hidden_dim,
+        color_num_layers=cfg_a.nets.color.num_layers,
+    ).to('cuda')
+    model_a.load_state_dict(torch.load(f'{model_path_a}'))
+
+    model_b = NeRFNetwork(
+        N = len(dataloader_b.images),
+        encoding_precision=cfg_b.nets.encoding.precision,
+        encoding_n_levels=cfg_b.nets.encoding.n_levels,
+        encoding_n_features_per_level=cfg_b.nets.encoding.n_features_per_level,
+        encoding_log2_hashmap_size=cfg_b.nets.encoding.log2_hashmap_size,
+        geo_feat_dim=cfg_b.nets.sigma.geo_feat_dim,
+        sigma_hidden_dim=cfg_b.nets.sigma.hidden_dim,
+        sigma_num_layers=cfg_b.nets.sigma.num_layers,
+        encoding_dir_precision=cfg_b.nets.encoding_dir.precision,
+        encoding_dir_encoding=cfg_b.nets.encoding_dir.encoding,
+        encoding_dir_degree=cfg_b.nets.encoding_dir.degree,
+        latent_embedding_dim=cfg_b.nets.latent_embedding.features,
+        color_hidden_dim=cfg_b.nets.color.hidden_dim,
+        color_num_layers=cfg_b.nets.color.num_layers,
+    ).to('cuda')
+    model_b.load_state_dict(torch.load(f'{model_path_b}'))
 
     # init_transform = np.eye(4)
     # init_transform[:3, 3] = result_ransac.transformation[:3, 3]
@@ -203,6 +207,7 @@ if __name__ == '__main__':
         steps_firstpass=cfg.renderer.steps_firstpass,
         steps_importance=cfg_a.renderer.importance_steps,
         alpha_importance=cfg_a.renderer.alpha,
+        translation_center=dataloader_a.translation_center,
     )
 
     measure = Measure(
@@ -227,7 +232,13 @@ if __name__ == '__main__':
         measure=measure,
         iters_per_epoch=cfg.iters_per_epoch,
         num_epochs=cfg.num_epochs,
-        n_rays=cfg.n_rays
+        n_rays=cfg.n_rays,
+        translation_center_a=dataloader_a.translation_center,
+        translation_center_b=dataloader_b.translation_center,
         )
 
     trainer.train()
+
+
+if __name__ == '__main__':
+    train()

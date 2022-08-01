@@ -1,36 +1,33 @@
+
 defaults:  
   - _self_  
   - override hydra/hydra_logging: disabled  
   - override hydra/job_logging: disabled  
 
-  # - override scene: bothsides
-  
 hydra:  
   output_subdir: null  
   run:  
     dir: .
 
-
 scene:
   scene_paths:
-   - /home/casey/PhD/data/conan_scans/ROW_349_EAST_SLOW_0004/scene.json
-  #  - /home/casey/PhD/data/conan_scans/ROW_349_EAST_SLOW_0005/scene.json
-  #  - /home/casey/PhD/data/conan_scans/ROW_349_EAST_SLOW_0006/scene.json
-
-  #  - /home/casey/PhD/data/conan_scans/ROW_349_WEST_SLOW_0007/scene.json
-  #  - /home/casey/PhD/data/conan_scans/ROW_349_WEST_SLOW_0008/scene.json
-  #  - /home/casey/PhD/data/conan_scans/ROW_349_WEST_SLOW_0009/scene.json
-
+    - /home/casey/PhD/data/conan_scans/ROW_349_EAST_SLOW_0006/scene.json
+    - /home/casey/PhD/data/conan_scans/ROW_349_WEST_SLOW_0007/scene.json
   frame_ranges:
-   - null
+    - null
+    - null
   transforms:
-   - null
-  image_scale: 0.5
+    # - null
+    - /home/casey/PhD/NeRF/allign/logs/allign/0006_0007/20220723_180558/final_transform.npy
+    - null
+  
+  image_scale: 0.25
+
   inner_bound: 2
   outer_bound: 2.5
 
 log:
-  root_dir: './logs/allign/0004'
+  root_dir: './logs/bothsides/0006_0007'
   eval_image_freq: end
   eval_pointcloud_freq: end
   save_weights_freq: end
@@ -70,7 +67,6 @@ inference:
     max_variance_pcd: 0.05
     distribution_area: 0.4
 
-    sides_buffer: 3
     cams: [1, 2, 3, 4]
     freq: 20
 
