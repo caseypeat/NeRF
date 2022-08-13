@@ -186,9 +186,9 @@ class TrainerPose(object):
         z_vals_log, z_vals = self.renderer.efficient_sampling(rays_o, rays_d, self.renderer.steps_importance, self.renderer.alpha_importance)
         xyzs_a, _ = self.renderer.get_sample_points(rays_o, rays_d, z_vals)
         xyzs_centered_a = xyzs_a - self.translation_center_a.to(xyzs_a.device)
-        s_xyzs_a = self.renderer.mipnerf360_scale(xyzs_centered_a, self.renderer.inner_bound, self.renderer.outer_bound)
+        xyzs_warped_a = self.renderer.mipnerf360_scale(xyzs_centered_a, self.renderer.inner_bound, self.renderer.outer_bound)
 
-        sigmas_a, _ = self.model_a.density(s_xyzs_a, self.renderer.outer_bound)
+        sigmas_a, _ = self.model_a.density(xyzs_warped_a, self.renderer.outer_bound)
 
         delta = z_vals_log.new_zeros(z_vals_log.shape)  # [N_rays, N_samples]
         delta[:, :-1] = (z_vals_log[:, 1:] - z_vals_log[:, :-1])
@@ -200,8 +200,8 @@ class TrainerPose(object):
 
         xyzs_b = self.transform(xyzs_a)
         xyzs_centered_b = xyzs_b - self.translation_center_b.to(xyzs_b.device)
-        s_xyzs_b = self.renderer.mipnerf360_scale(xyzs_centered_b, self.renderer.inner_bound, self.renderer.outer_bound)
-        sigmas_b, _ = self.model_b.density(s_xyzs_b, self.renderer.outer_bound)
+        xyzs_warped_b = self.renderer.mipnerf360_scale(xyzs_centered_b, self.renderer.inner_bound, self.renderer.outer_bound)
+        sigmas_b, _ = self.model_b.density(xyzs_warped_b, self.renderer.outer_bound)
         sigmas_ab = sigmas_a + sigmas_b
 
         alpha_ab = 1 - torch.exp(-sigmas_ab * delta)  # [N_rays, N_samples]

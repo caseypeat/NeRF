@@ -140,11 +140,11 @@ if __name__ == '__main__':
         rays_o, rays_d = helpers.get_rays(h, w, K, E)
         z_vals_log, z_vals = model_a.efficient_sampling(rays_o, rays_d, cfg.renderer.importance_steps)
         xyzs_a, _ = helpers.get_sample_points(rays_o, rays_d, z_vals)
-        s_xyzs_a = helpers.mipnerf360_scale(xyzs_a, model_a.inner_bound, model_a.outer_bound)
+        xyzs_warped_a = helpers.mipnerf360_scale(xyzs_a, model_a.inner_bound, model_a.outer_bound)
 
         N_rays, N_samples = z_vals.shape[:2]
 
-        sigmas_a = model_a.density(s_xyzs_a)
+        sigmas_a = model_a.density(xyzs_warped_a)
 
         delta = z_vals_log.new_zeros([N_rays, N_samples])  # [N_rays, N_samples]
         delta[:, :-1] = (z_vals_log[:, 1:] - z_vals_log[:, :-1])
@@ -165,9 +165,9 @@ if __name__ == '__main__':
         xyzs_b = b3[:, :3].reshape(*xyzs_a.shape)
 
         # xyzs_a = transform @ torch.cat([xyzs_b.view(-1, 3), xyzs_b.new_zeros()
-        s_xyzs_b = helpers.mipnerf360_scale(xyzs_b, model_b.inner_bound, model_b.outer_bound)
+        xyzs_warped_b = helpers.mipnerf360_scale(xyzs_b, model_b.inner_bound, model_b.outer_bound)
 
-        sigmas_b = model_b.density(s_xyzs_b)
+        sigmas_b = model_b.density(xyzs_warped_b)
 
         sigmas_ab = sigmas_a + sigmas_b
 

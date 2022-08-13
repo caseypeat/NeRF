@@ -6,11 +6,39 @@ import math as m
 
 import helpers
 
+from rotation import Exp_vector
+
+
+class PoseOptimise(nn.Module):
+    def __init__(self, index_mapping):
+        super().__init__()
+
+        self.index_mapping = index_mapping
+
+        self.N_rigs = self.index_mapping.get_num_rigs(0)  # assuming only 1 rig for now
+
+        self.R = torch.nn.Parameter(torch.zeros((self.N_rigs, 3)), requires_grad=True)
+        self.T = torch.nn.Parameter(torch.zeros((self.N_rigs, 3)), requires_grad=True)
+
+    def forward(self, n, E):
+
+        _, rig, _ = self.index_mapping.index_to_src(n)
+
+        transform = torch.zeros((n.shape[0], 4, 4), dtype=torch.float32, device=E.device)
+        transform[:, ...] = torch.eye(4, dtype=torch.float32)
+        transform[:, :3, :3] = Exp_vector(self.R[rig])
+        transform[:, :3, 3] = self.T[rig]
+
+        return torch.bmm(E, transform)
+
+
+
 
 class NerfRenderer(nn.Module):
     def __init__(
         self,
         model,
+        pose_optimise:PoseOptimise,
         
         inner_bound,
         outer_bound,
@@ -25,6 +53,7 @@ class NerfRenderer(nn.Module):
         super().__init__()
 
         self.model = model
+        self.pose_optimise = pose_optimise
 
         self.inner_bound = inner_bound
         self.outer_bound = outer_bound
@@ -153,8 +182,9 @@ class NerfRenderer(nn.Module):
         xyzs, dirs = self.get_sample_points(rays_o, rays_d, z_vals)
         xyzs_centered = xyzs - self.translation_center.to(xyzs.device)
         xyzs_warped = self.mipnerf360_scale(xyzs_centered, self.inner_bound, self.outer_bound)
+        xyzs_norm = (xyzs_warped + self.outer_bound) / (2 * self.outer_bound) # to [0, 1]
 
-        sigmas, _ = self.model.density(xyzs_warped, self.outer_bound)
+        sigmas, _ = self.model.density(xyzs_norm)
 
         delta = z_vals_log.new_zeros(sigmas.shape)  # [N_rays, N_samples]
         delta[:, :-1] = (z_vals_log[:, 1:] - z_vals_log[:, :-1])
@@ -174,14 +204,20 @@ class NerfRenderer(nn.Module):
 
     def render(self, n, h, w, K, E, bg_color):
 
-        rays_o, rays_d = self.get_rays(h, w, K, E)
+        if self.pose_optimise is not None:
+            E_ = self.pose_optimise(n, E)
+        else:
+            E_ = E
+
+        rays_o, rays_d = self.get_rays(h, w, K, E_)
         z_vals_log, z_vals = self.efficient_sampling(rays_o, rays_d, self.steps_importance, self.alpha_importance)
         xyzs, dirs = self.get_sample_points(rays_o, rays_d, z_vals)
         xyzs_centered = xyzs - self.translation_center.to(xyzs.device)
         xyzs_warped = self.mipnerf360_scale(xyzs_centered, self.inner_bound, self.outer_bound)
+        xyzs_norm = (xyzs_warped + self.outer_bound) / (2 * self.outer_bound) # to [0, 1]
         n_expand = n[:, None].expand(-1, z_vals.shape[-1])
 
-        sigmas, rgbs, aux_outputs_net = self.model(xyzs_warped, dirs, n_expand, self.outer_bound)
+        sigmas, rgbs, aux_outputs_net = self.model(xyzs_norm, dirs, n_expand)
 
         image, invdepth, weights = self.render_rays_log(sigmas, rgbs, z_vals, z_vals_log)
         image = image + (1 - torch.sum(weights, dim=-1)[..., None]) * bg_color
@@ -195,6 +231,7 @@ class NerfRenderer(nn.Module):
         aux_outputs['sigmas'] = sigmas.detach()
         aux_outputs['rgbs'] = rgbs.detach()
         aux_outputs['xyzs'] = xyzs.detach()
+        aux_outputs['xyzs_centered'] = xyzs_centered.detach()
         aux_outputs['x_hashtable'] = aux_outputs_net['x_hashtable']
 
         return image, weights, z_vals_log_s, aux_outputs

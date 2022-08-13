@@ -11,6 +11,73 @@ from camera_geometry.scan import load_scan
 from camera_geometry.scan.views import load_frames
 
 
+class IndexMapping(object):
+    def __init__(self, index2src_mapping, src2index_mapping):
+        self.index2src_mapping = index2src_mapping
+        self.src2index_mapping = src2index_mapping
+
+        scan_max = 0
+        rig_max = 0
+        cam_max = 0
+
+        for i in range(len(index2src_mapping)):
+            s, r, c, = index2src_mapping[i]
+            scan_max = scan_max if scan_max > s else s
+            rig_max = rig_max if rig_max > r else r
+            cam_max = cam_max if cam_max > c else c
+
+        self.index2src_mapping_t = torch.zeros((len(index2src_mapping), 3), dtype=torch.long)
+        for i in range(len(index2src_mapping)):
+            s, r, c, = index2src_mapping[i]
+            self.index2src_mapping_t[i, 0] = s
+            self.index2src_mapping_t[i, 1] = r
+            self.index2src_mapping_t[i, 2] = c
+
+
+    def src_to_index(self, scan, rig, camera):
+        if (scan, rig, camera) in self.src2index_mapping.keys():
+            return self.src2index_mapping[(scan, rig, camera)]
+        else:
+            return None
+
+    def index_to_src(self, index):
+        src = self.index2src_mapping_t[index]
+        return src[:, 0], src[:, 1], src[:, 2]
+
+    # def index_to_src(self, index):
+    #     scans = torch.zeros(index.shape, dtype=torch.long, device=index.device)
+    #     rigs = torch.zeros(index.shape, dtype=torch.long, device=index.device)
+    #     cams = torch.zeros(index.shape, dtype=torch.long, device=index.device)
+
+    #     for i, ind in enumerate(index):
+    #         scans[i], rigs[i], cams[i] = self.index2src_mapping[ind.item()]
+    #         # rigs[i] = self.index2src_mapping[ind]
+    #         # cams[i] = self.index2src_mapping[ind]
+
+    #     return scans, rigs, cams
+
+    def get_num_scans(self):
+        s = 0
+        while self.src_to_index(s, 0, 0) is not None:
+            s += 1
+        return s
+
+    def get_num_rigs(self, scan):
+        s = scan
+        r = 0
+        while self.src_to_index(s, r, 0) is not None:
+            r += 1
+        return r
+
+    def get_num_cams(self, scan, rig):
+        s = scan
+        r = rig
+        c = 0
+        while self.src_to_index(s, r, c) is not None:
+            c += 1
+        return c
+
+
 class CameraGeometryLoader(object):
 
     def __init__(self, scan_paths, frame_ranges, frame_strides, transforms, image_scale):
@@ -46,7 +113,8 @@ class CameraGeometryLoader(object):
         self.intrinsics = torch.zeros([self.N, 3, 3], dtype=torch.float32)
         self.extrinsics = torch.zeros([self.N, 4, 4], dtype=torch.float32)
 
-        self.index_mapping = []
+        self.index2src_mapping = {}
+        self.src2index_mapping = {}
         i = 0
         s = 0
         for scan, frames, transform in zip(scan_list, frames_list, transform_list):
@@ -60,7 +128,8 @@ class CameraGeometryLoader(object):
                     self.intrinsics[i] = torch.Tensor(frame.camera.intrinsic)
                     self.extrinsics[i] =  torch.Tensor(transform) @ torch.Tensor(frame.camera.extrinsic)
 
-                    self.mapping_index.append({'scan': s, 'rig': r, 'camera': c})
+                    self.index2src_mapping[i] = (s, r, c)
+                    self.src2index_mapping[(s, r, c)] = i
 
                     i += 1
                     c += 1
@@ -134,9 +203,10 @@ class CameraGeometryLoader(object):
 
         n = []
         for i in range(self.N):
-            if self.get_rig(i) > side_buffer and self.get_rig(i) < self.get_num_rigs(self.get_scan(i)) - side_buffer:
-                if self.get_camera(i) in cams:
-                    if self.get_rig(i) % freq == 0:
+            s, r, c = self.index_to_src(i)
+            if r > side_buffer and r < self.get_num_rigs(s) - side_buffer:
+                if c in cams:
+                    if r % freq == 0:
                         n.append(i)
                         
         n = torch.Tensor(np.array(n)).to(int)
@@ -157,25 +227,79 @@ class CameraGeometryLoader(object):
     def translation_center(self):
         return torch.mean(self.extrinsics[..., :3, 3], dim=0, keepdims=True)
 
-    def get_scan(self, index):
-        return self.index_mapping[index]['scan']
+    def src_to_index(self, scan, rig, camera):
+        if (scan, rig, camera) in self.src2index_mapping.keys():
+            return self.src2index_mapping[(scan, rig, camera)]
+        else:
+            return None
+
+    def index_to_src(self, index):
+        return self.index2src_mapping[index]
+
 
     def get_num_scans(self):
-        return
-
-    def get_rig(self, index):
-        return self.index_mapping[index]['rig']
+        s = 0
+        while self.src_to_index(s, 0, 0) is not None:
+            s += 1
+        return s
 
     def get_num_rigs(self, scan):
-        max_rig = 0
-        for i in range(self.N):
-            if self.get_scan(i) == scan:
-                if self.get_rig(i) > max_rig:
-                    max_rig = self.get_rig(i)
-        return max_rig
+        s = scan
+        r = 0
+        while self.src_to_index(s, r, 0) is not None:
+            r += 1
+        return r
 
-    def get_camera(self, index):
-        return self.index_mapping[index]['camera']
+    def get_num_cams(self, scan, rig):
+        s = scan
+        r = rig
+        c = 0
+        while self.src_to_index(s, r, c) is not None:
+            c += 1
+        return c
+
+    # def get_num_scans(self):
+    #     scans_unique = 0
+    #     for i in range(self.N):
+    #         s, r, c = self.index_to_src(i)
+    #         if s not in scans_unique:
+    #             scans_unique += 1
+    #     return scans_unique
+
+    # def get_num_rigs(self, scan=None):
+    #     rigs_unique = 0
+    #     for i in range(self.N):
+    #         s, r, c = self.index_to_src(i)
+    #         if scan == None or scan == s:
+    #             if r not in rigs_unique:
+    #                 rigs_unique += 1
+    #     return rigs_unique
+
+    # def get_num_cam(self, scan=None, rig=None):
+    #     cam_unique = 0
+    #     for i in range(self.N):
+    #         s, r, c = self.index_to_src(i)
+    #         if (scan == None or scan == s) and (rig == None or rig == r):
+    #             if c not in cam_unique:
+    #                 cam_unique += 1
+    #     return cam_unique
+
+    # def get_rig(self, index):
+    #     return self.index_mapping[index]['rig']
+
+    # def get_num_rigs(self, scan):
+    #     max_rig = 0
+    #     for i in range(self.N):
+    #         if self.get_scan(i) == scan:
+    #             if self.get_rig(i) > max_rig:
+    #                 max_rig = self.get_rig(i)
+    #     return max_rig
+
+    # def get_camera(self, index):
+    #     return self.index_mapping[index]['camera']
+
+    # def get_num_cameras(self, scan, rig):
+    #     pass
 
     # def get_num_cameras(self, scan, rig):
     #     count = 0

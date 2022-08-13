@@ -94,9 +94,9 @@ class NerfRenderer(nn.Module):
         # z_vals = torch.cat([torch.logspace(-1.2, 0, 256, device=rays_o.device), torch.logspace(0, 2, 128, device=rays_o.device)], dim=-1)[None, :].expand(rays_o[0].shape[0], -1)
         z_vals = torch.cat([torch.logspace(-1.2, 0, 384, device=rays_o.device), torch.logspace(0, 2, 192, device=rays_o.device)], dim=-1)[None, :].expand(rays_o[0].shape[0], -1)
         xyzs, dirs = helpers.get_sample_points(rays_o[0], rays_d[0], z_vals)
-        s_xyzs = helpers.mipnerf360_scale(xyzs, bound)
+        xyzs_warped = helpers.mipnerf360_scale(xyzs, bound)
         # with torch.cuda.amp.autocast():
-        sigmas, rgbs = self(s_xyzs, dirs, bound)
+        sigmas, rgbs = self(xyzs_warped, dirs, bound)
         sigmas, rgbs = sigmas.to(torch.float32), rgbs.to(torch.float32)
         image, invdepth, weights = helpers.render_rays_log_new(sigmas, rgbs, z_vals)
 

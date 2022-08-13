@@ -95,9 +95,9 @@ def mipnerf360_consolidating_weights(W):
 def mipnerf360_scale(xyzs, bound):
     d = torch.linalg.norm(xyzs, dim=-1)[..., None].expand(-1, -1, 3)
     # print(d.shape)
-    s_xyzs = torch.clone(xyzs)
-    s_xyzs[d > 1] = s_xyzs[d > 1] * ((bound - (bound - 1) / d[d > 1]) / d[d > 1])
-    return s_xyzs
+    xyzs_warped = torch.clone(xyzs)
+    xyzs_warped[d > 1] = xyzs_warped[d > 1] * ((bound - (bound - 1) / d[d > 1]) / d[d > 1])
+    return xyzs_warped
 
 
 

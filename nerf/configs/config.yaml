@@ -1,0 +1,127 @@
+defaults:  
+  - _self_  
+  - override hydra/hydra_logging: disabled  
+  - override hydra/job_logging: disabled  
+  
+hydra:  
+  output_subdir: null  
+  run:  
+    dir: .
+
+
+scene:
+  scan_paths:
+    # - /home/casey/PhD/data/conan_scans/blenheim-22-7/twin_scans/a/20_2022-06-30-12-10-16/scene.json
+
+    # - /home/casey/PhD/data/genie_scans/blenheim_07_22/manual/05-07-22_10-17/368_east/scene.json
+    - /home/casey/PhD/data/genie_scans/blenheim_07_22/manual/05-07-22_10-17/368_west/scene.json
+
+  #  - /home/casey/PhD/data/conan_scans/bleheim-21-6-28/ROW_349_EAST_SLOW_0006/scene.json
+  #  - /home/casey/PhD/data/conan_scans/ROW_349_EAST_SLOW_0005/scene.json
+  #  - /home/casey/PhD/data/conan_scans/ROW_349_EAST_SLOW_0006/scene.json
+
+  #  - /home/casey/PhD/data/conan_scans/ROW_349_WEST_SLOW_0007/scene.json
+  #  - /home/casey/PhD/data/conan_scans/ROW_349_WEST_SLOW_0008/scene.json
+  #  - /home/casey/PhD/data/conan_scans/ROW_349_WEST_SLOW_0009/scene.json
+
+  frame_ranges:
+    -
+      - 300
+      - 350
+  frame_strides:
+    - null
+  transforms:
+    - null
+  image_scale: 0.5
+  inner_bound: 2
+  outer_bound: 2.5
+
+log:
+  root_dir: './nerf/logs/test/pose_optimise'
+  eval_image_freq: end
+  eval_pointcloud_freq: end
+  save_weights_freq: end
+
+trainer:
+  num_epochs: 50
+  iters_per_epoch: 100
+  n_rays: 16384
+  loss_dist_lambda:
+    - 1e-5
+    - 1e-2
+  loss_depth_lambda:
+    - 0
+    - 0
+
+optimizer:
+  encoding:
+    lr: 2e-2
+  latent_emb:
+    lr: 2e-2
+  net:
+    weight_decay: 1e-6
+    lr: 1e-3
+  betas:
+    - 0.9
+    - 0.99
+  eps: 1e-15
+
+scheduler: step
+
+inference:
+  image:
+    # image_num: 'middle'
+    scan: 'middle'
+    rig: 'middle'
+    cam: 'middle'
+    # rotate: 270  # clockwise
+
+  pointcloud:
+    max_variance_npy: 0.1
+    max_variance_pcd: 0.05
+    distribution_area: 0.4
+
+    side_buffer: 3
+    cams: [1, 2, 3, 4]
+    # cams: [2, 3]
+    freq: 4
+
+renderer:
+  steps:
+    - 256
+    - 128
+    - 64
+    - 32
+  z_bounds:
+    - 0.1
+    - 1
+    - 10
+    - 100
+    - 1000
+
+  importance_steps: 128
+  alpha: 0.2
+
+nets:
+  encoding:
+    n_levels: 20
+    n_features_per_level: 2
+    log2_hashmap_size: 24
+    precision: float32
+  
+  encoding_dir:
+    encoding: SphericalHarmonics
+    degree: 4
+    precision: float32
+
+  latent_embedding:
+    features: 48
+
+  sigma:
+    num_layers: 2
+    hidden_dim: 64
+    geo_feat_dim: 15
+
+  color:
+    num_layers: 3
+    hidden_dim: 64
