@@ -1,5 +1,7 @@
+
 import numpy as np
 import torch
+# from typing import List, Tuple
 
 from tqdm import tqdm
 from pathlib import Path
@@ -7,139 +9,238 @@ from functools import cached_property
 
 from camera_geometry.scan.scan import Scan
 from camera_geometry.json import load_json
-from camera_geometry.scan import load_scan
+# from camera_geometry.scan import load_scan
 from camera_geometry.scan.views import load_frames
+from camera_geometry.concurrent import expand, map_lists
+
+
+# class IndexMapping(object):
+#     def __init__(self, index2src_mapping, src2index_mapping):
+#         self.index2src_mapping = index2src_mapping
+#         self.src2index_mapping = src2index_mapping
+
+#         scan_max = 0
+#         rig_max = 0
+#         cam_max = 0
+
+#         for i in range(len(index2src_mapping)):
+#             s, r, c, = index2src_mapping[i]
+#             scan_max = scan_max if scan_max > s else s
+#             rig_max = rig_max if rig_max > r else r
+#             cam_max = cam_max if cam_max > c else c
+
+#         self.index2src_mapping_t = torch.zeros((len(index2src_mapping), 3), dtype=torch.long)
+#         for i in range(len(index2src_mapping)):
+#             s, r, c, = index2src_mapping[i]
+#             self.index2src_mapping_t[i, 0] = s
+#             self.index2src_mapping_t[i, 1] = r
+#             self.index2src_mapping_t[i, 2] = c
+
+
+#     def src_to_index(self, scan, rig, camera):
+#         if (scan, rig, camera) in self.src2index_mapping.keys():
+#             return self.src2index_mapping[(scan, rig, camera)]
+#         else:
+#             return None
+
+#     def index_to_src(self, index):
+#         src = self.index2src_mapping_t[index]
+#         return src[:, 0], src[:, 1], src[:, 2]
+
+#     # def index_to_src(self, index):
+#     #     scans = torch.zeros(index.shape, dtype=torch.long, device=index.device)
+#     #     rigs = torch.zeros(index.shape, dtype=torch.long, device=index.device)
+#     #     cams = torch.zeros(index.shape, dtype=torch.long, device=index.device)
+
+#     #     for i, ind in enumerate(index):
+#     #         scans[i], rigs[i], cams[i] = self.index2src_mapping[ind.item()]
+#     #         # rigs[i] = self.index2src_mapping[ind]
+#     #         # cams[i] = self.index2src_mapping[ind]
+
+#     #     return scans, rigs, cams
+
+#     def get_num_scans(self):
+#         s = 0
+#         while self.src_to_index(s, 0, 0) is not None:
+#             s += 1
+#         return s
+
+#     def get_num_rigs(self, scan):
+#         s = scan
+#         r = 0
+#         while self.src_to_index(s, r, 0) is not None:
+#             r += 1
+#         return r
+
+#     def get_num_cams(self, scan, rig):
+#         s = scan
+#         r = rig
+#         c = 0
+#         while self.src_to_index(s, r, c) is not None:
+#             c += 1
+#         return c
+
+
+def load_calibrations(scan_list, scan_pose_list):
+    intrinsics = []
+    extrinsics = []
+    for scan, scan_pose in zip(scan_list, scan_pose_list):
+        for rig_pose in scan.rig_poses:
+            for key, camera in scan.cameras.items():
+                camera_undistored = camera.optimal_undistorted().undistorted
+                intrinsics.append(camera_undistored.intrinsic)
+                extrinsics.append(scan_pose @ rig_pose @ camera_undistored.parent_to_camera)
+    intrinsics = torch.Tensor(np.stack(intrinsics, axis=0))
+    extrinsics = torch.Tensor(np.stack(extrinsics, axis=0))
+    return intrinsics, extrinsics
+
+
+def load_images(scan_list):
+
+    def load_image(undist, image_file):
+        # rgb_file = scan.image_sets.rgb[rig_index][key]
+        rgb = undist.undistort(scan.loader.rgb.load_image(image_file))
+        return torch.ByteTensor(rgb)
+
+    params = []
+
+    for scan in scan_list:
+        for rig_index, rig_pose in enumerate(scan.rig_poses):
+            for key, camera in scan.cameras.items():
+                image_file = scan.image_sets.rgb[rig_index][key]
+                params.append([(camera.optimal_undistorted(), image_file)])
+
+    images = map_lists(expand(load_image), params)
+    for i in range(len(images)):
+        images[i] = images[i][0]
+
+    return torch.stack(images, dim=0)
 
 
 class IndexMapping(object):
-    def __init__(self, index2src_mapping, src2index_mapping):
-        self.index2src_mapping = index2src_mapping
-        self.src2index_mapping = src2index_mapping
+    def __init__(self, scan_dims):
+        self.scan_dims = scan_dims
+        self.scan_counts = torch.prod(self.scan_dims, dim=1)
+        self.scan_counts_cum = torch.cumsum(self.scan_counts)
 
-        scan_max = 0
-        rig_max = 0
-        cam_max = 0
+    def idx_to_src(self, idx):
+        scan = torch.searchsorted(self.scan_counts_cum, idx, right=False)
+        idx_in_scan = idx - self.scan_counts_cum[scan]
+        rig_in_scan = torch.div(idx_in_scan, self.scan_dims[scan, 1], rounding_mode='floor')
+        cam_in_rig = torch.remainder(idx_in_scan, self.scan_dims[scan, 1])
+        return scan, rig_in_scan, cam_in_rig
 
-        for i in range(len(index2src_mapping)):
-            s, r, c, = index2src_mapping[i]
-            scan_max = scan_max if scan_max > s else s
-            rig_max = rig_max if rig_max > r else r
-            cam_max = cam_max if cam_max > c else c
-
-        self.index2src_mapping_t = torch.zeros((len(index2src_mapping), 3), dtype=torch.long)
-        for i in range(len(index2src_mapping)):
-            s, r, c, = index2src_mapping[i]
-            self.index2src_mapping_t[i, 0] = s
-            self.index2src_mapping_t[i, 1] = r
-            self.index2src_mapping_t[i, 2] = c
+    def src_to_idx(self, scan, rig, camera):
+        idx = self.scan_counts_cum[scan] + rig * self.scan_dims[scan, 1] + camera
+        return idx
 
 
-    def src_to_index(self, scan, rig, camera):
-        if (scan, rig, camera) in self.src2index_mapping.keys():
-            return self.src2index_mapping[(scan, rig, camera)]
-        else:
-            return None
-
-    def index_to_src(self, index):
-        src = self.index2src_mapping_t[index]
-        return src[:, 0], src[:, 1], src[:, 2]
-
-    # def index_to_src(self, index):
-    #     scans = torch.zeros(index.shape, dtype=torch.long, device=index.device)
-    #     rigs = torch.zeros(index.shape, dtype=torch.long, device=index.device)
-    #     cams = torch.zeros(index.shape, dtype=torch.long, device=index.device)
-
-    #     for i, ind in enumerate(index):
-    #         scans[i], rigs[i], cams[i] = self.index2src_mapping[ind.item()]
-    #         # rigs[i] = self.index2src_mapping[ind]
-    #         # cams[i] = self.index2src_mapping[ind]
-
-    #     return scans, rigs, cams
-
-    def get_num_scans(self):
-        s = 0
-        while self.src_to_index(s, 0, 0) is not None:
-            s += 1
-        return s
-
-    def get_num_rigs(self, scan):
-        s = scan
-        r = 0
-        while self.src_to_index(s, r, 0) is not None:
-            r += 1
-        return r
-
-    def get_num_cams(self, scan, rig):
-        s = scan
-        r = rig
-        c = 0
-        while self.src_to_index(s, r, c) is not None:
-            c += 1
-        return c
 
 
 class CameraGeometryLoader(object):
 
-    def __init__(self, scan_paths, frame_ranges, frame_strides, transforms, image_scale):
+    def __init__(self, scan_paths:list[str], scan_pose_paths:list[str], frame_ranges:list[tuple[int, int]], frame_strides:list[int], image_scale:float, load_images_bool:bool=True, load_depths_bool:bool=False):
         scan_list = []
-        frames_list = []
-        transform_list = []
+        scan_pose_list = []
+
+        print(frame_ranges)
+
+        self.load_images_bool = load_images_bool
+        self.load_depths_bool = load_depths_bool
 
         self.N = 0
-        for scan_path, frame_range, frame_stride, transform_path in zip(scan_paths, frame_ranges, frame_strides, transforms):
-            scan = load_scan(scan_path, frame_range=frame_range, frame_stride=frame_stride, image_scale=image_scale)
-            frames = load_frames(scan)
-            if transform_path is not None:
-                transform = np.load(transform_path)
-            else:
-                transform = np.eye(4)
+        for scan_path, frame_range, frame_stride, scan_pose_path in zip(scan_paths, frame_ranges, frame_strides, scan_pose_paths):
 
-            if frames[0][0].depth is None:
-                self.depths_bool = False
-            else:
-                self.depths_bool = True
+            scan = Scan.load(scan_path)
+            scan = scan.with_image_scale(image_scale)
+            scan = scan.with_frames(frame_range=frame_range, frame_stride=frame_stride)
 
+            if scan_pose_path is not None:
+                scan_pose = np.load(scan_pose_path)
+            else:
+                scan_pose = np.eye(4)
 
             scan_list.append(scan)
-            frames_list.append(frames)
-            transform_list.append(transform)
+            scan_pose_list.append(scan_pose)
 
-            self.N += len(frames) * len(frames[0])
-            self.H, self.W = frames[0][0].rgb.shape[:2]
+        intrinsics, extrinsics = load_calibrations(scan_list, scan_pose_list)
 
-        self.images = torch.full([self.N, self.H, self.W, 4], fill_value=255, dtype=torch.uint8)
-        if self.depths_bool:
-            self.depths = torch.full([self.N, self.H, self.W], fill_value=1, dtype=torch.float32)
-        self.intrinsics = torch.zeros([self.N, 3, 3], dtype=torch.float32)
-        self.extrinsics = torch.zeros([self.N, 4, 4], dtype=torch.float32)
+        self.N = intrinsics.shape[0]
+        self.H = scan_list[0].common_image_size()[1]
+        self.W = scan_list[0].common_image_size()[0]
 
-        self.index2src_mapping = {}
-        self.src2index_mapping = {}
-        i = 0
-        s = 0
-        for scan, frames, transform in zip(scan_list, frames_list, transform_list):
-            r = 0
-            for rig in tqdm(frames):
-                c = 0
-                for frame in rig:
-                    self.images[i, :, :, :3] = torch.ByteTensor(frame.rgb)
-                    if self.depths_bool:
-                        self.depths[i, :, :] = torch.Tensor(frame.depth)
-                    self.intrinsics[i] = torch.Tensor(frame.camera.intrinsic)
-                    self.extrinsics[i] =  torch.Tensor(transform) @ torch.Tensor(frame.camera.extrinsic)
-
-                    self.index2src_mapping[i] = (s, r, c)
-                    self.src2index_mapping[(s, r, c)] = i
-
-                    i += 1
-                    c += 1
-                r += 1
-            s += 1
+        if self.load_images_bool:
+            self.images = load_images(scan_list)
 
 
+        
 
-        del scan_list
-        del frames_list
+        # if self.load_depths_bool:
+        #     self.depths = torch.zeros([self.N, self.H, self.W])
+        #     self.load_depths(scan_list)
+
+        # count = 0
+        # for scan in tqdm(scan_list):
+        #     for rig_index, rig_pose in tqdm(enumerate(scan.rig_poses), total=(len(scan.rig_poses)), leave=False):
+        #         for key, camera in tqdm(scan.cameras.items(), leave=False):
+        #             rgb_file = scan.image_sets.rgb[rig_index][key]
+        #             rgb = camera.optimal_undistorted().undistort(scan.loader.rgb.load_image(rgb_file))
+        #             self.images[count, ..., :3] = torch.ByteTensor(rgb)
+        #             count += 1
+
+    # def load_depths(self, scan_list):
+    #     count = 0
+    #     for scan in tqdm(scan_list):
+    #         for rig_index, rig_pose in tqdm(enumerate(scan.rig_poses), total=(len(scan.rig_poses)), leave=False):
+    #             for key, camera in tqdm(scan.cameras.items(), leave=False):
+    #                 depth_file = scan.image_sets.depth[rig_index][key]
+    #                 depth = camera.optimal_undistorted().undistort(scan.loader.depth.load_image(depth_file))
+    #                 self.depths[count] = torch.Tensor(depth)
+    #                 count += 1
+
+
+
+
+
+
+
+
+        #     self.N += len(frames) * len(frames[0])
+        #     self.H, self.W = frames[0][0].rgb.shape[:2]
+
+        # self.images = torch.full([self.N, self.H, self.W, 4], fill_value=255, dtype=torch.uint8)
+        # if self.depths_bool:
+        #     self.depths = torch.full([self.N, self.H, self.W], fill_value=1, dtype=torch.float32)
+        # self.intrinsics = torch.zeros([self.N, 3, 3], dtype=torch.float32)
+        # self.extrinsics = torch.zeros([self.N, 4, 4], dtype=torch.float32)
+
+        # self.index2src_mapping = {}
+        # self.src2index_mapping = {}
+        # i = 0
+        # s = 0
+        # for scan, frames, transform in zip(scan_list, frames_list, transform_list):
+        #     r = 0
+        #     for rig in tqdm(frames):
+        #         c = 0
+        #         for frame in rig:
+        #             self.images[i, :, :, :3] = torch.ByteTensor(frame.rgb)
+        #             if self.depths_bool:
+        #                 self.depths[i, :, :] = torch.Tensor(frame.depth)
+        #             self.intrinsics[i] = torch.Tensor(frame.camera.intrinsic)
+        #             self.extrinsics[i] =  torch.Tensor(transform) @ torch.Tensor(frame.camera.extrinsic)
+
+        #             self.index2src_mapping[i] = (s, r, c)
+        #             self.src2index_mapping[(s, r, c)] = i
+
+        #             i += 1
+        #             c += 1
+        #         r += 1
+        #     s += 1
+
+
+
+        # del scan_list
+        # del frames_list
 
 
     def format_groundtruth(self, gt, background=None):
@@ -227,36 +328,36 @@ class CameraGeometryLoader(object):
     def translation_center(self):
         return torch.mean(self.extrinsics[..., :3, 3], dim=0, keepdims=True)
 
-    def src_to_index(self, scan, rig, camera):
-        if (scan, rig, camera) in self.src2index_mapping.keys():
-            return self.src2index_mapping[(scan, rig, camera)]
-        else:
-            return None
+    # def src_to_index(self, scan, rig, camera):
+    #     if (scan, rig, camera) in self.src2index_mapping.keys():
+    #         return self.src2index_mapping[(scan, rig, camera)]
+    #     else:
+    #         return None
 
-    def index_to_src(self, index):
-        return self.index2src_mapping[index]
+    # def index_to_src(self, index):
+    #     return self.index2src_mapping[index]
 
 
-    def get_num_scans(self):
-        s = 0
-        while self.src_to_index(s, 0, 0) is not None:
-            s += 1
-        return s
+    # def get_num_scans(self):
+    #     s = 0
+    #     while self.src_to_index(s, 0, 0) is not None:
+    #         s += 1
+    #     return s
 
-    def get_num_rigs(self, scan):
-        s = scan
-        r = 0
-        while self.src_to_index(s, r, 0) is not None:
-            r += 1
-        return r
+    # def get_num_rigs(self, scan):
+    #     s = scan
+    #     r = 0
+    #     while self.src_to_index(s, r, 0) is not None:
+    #         r += 1
+    #     return r
 
-    def get_num_cams(self, scan, rig):
-        s = scan
-        r = rig
-        c = 0
-        while self.src_to_index(s, r, c) is not None:
-            c += 1
-        return c
+    # def get_num_cams(self, scan, rig):
+    #     s = scan
+    #     r = rig
+    #     c = 0
+    #     while self.src_to_index(s, r, c) is not None:
+    #         c += 1
+    #     return c
 
     # def get_num_scans(self):
     #     scans_unique = 0
@@ -310,11 +411,11 @@ class CameraGeometryLoader(object):
 
 
 if __name__ == '__main__':
-    scan_path = '/home/casey/PhD/data/conan_scans/ROW_349_EAST_SLOW_0006/scan.json'
+    scan_path = '/mnt/maara/conan_scans/blenheim-21-6-28/30-06_13-05/ROW_349_EAST_SLOW_0006/scene.json'
 
-    data_loader = CameraGeometryLoader([scan_path], [(0, 20)], image_scale=0.5)
+    data_loader = CameraGeometryLoader([scan_path], [(0, 20)], [None], [None], image_scale=0.5)
 
     # n, h, w, K, E, rgb_gt, color_bg = data_loader.get_random_batch(32)
-    n, h, w, K, E, rgb_gt, color_bg = data_loader.get_image_batch(32)
+    # n, h, w, K, E, rgb_gt, color_bg = data_loader.get_image_batch(32)
 
-    print(n.shape, h.shape, K.shape, E.shape, rgb_gt.shape, color_bg)
+    # print(n.shape, h.shape, K.shape, E.shape, rgb_gt.shape, color_bg)

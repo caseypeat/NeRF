@@ -1,0 +1,369 @@
+[2022-08-24 03:51:18] [0.00s] Initiating Dataloader...
+[2022-08-24 03:51:25] [6.26s] Initilising Model...
+[2022-08-24 03:51:28] [9.23s] Initilising Renderer...
+[2022-08-24 03:51:28] [9.23s] Initiating Inference...
+[2022-08-24 03:51:28] [9.23s] Initiating Optimiser...
+[2022-08-24 03:51:28] [9.23s] Initiating Trainer...
+[2022-08-24 03:51:28] [9.92s] Beginning Training...
+
+[2022-08-24 03:51:49] [30.88s] Iteration: 100
+[2022-08-24 03:51:49] [30.88s] Scalar: loss - Value: 0.010389
+[2022-08-24 03:51:49] [30.88s] Scalar: loss_rgb - Value: 0.010387
+[2022-08-24 03:51:49] [30.88s] Scalar: psnr_rgb - Value: 14.320919
+[2022-08-24 03:51:49] [30.88s] Scalar: dist_scalar - Value: 0.000011
+[2022-08-24 03:51:49] [30.88s] Scalar: loss_dist - Value: 0.185015
+[2022-08-24 03:51:49] [30.88s] Scalar: depth_scalar - Value: 0.000000
+[2022-08-24 03:51:49] [30.88s] Scalar: loss_depth - Value: 0.000000
+[2022-08-24 03:51:49] [30.88s] Scalar: loss (seconds) - Value: 0.010389
+[2022-08-24 03:51:49] [30.88s] Scalar: loss_rgb (seconds) - Value: 0.010387
+[2022-08-24 03:51:49] [30.88s] Scalar: psnr_rgb (seconds) - Value: 14.320919
+[2022-08-24 03:51:49] [30.88s] 
+[2022-08-24 03:52:10] [51.56s] Iteration: 200
+[2022-08-24 03:52:10] [51.56s] Scalar: loss - Value: 0.004636
+[2022-08-24 03:52:10] [51.56s] Scalar: loss_rgb - Value: 0.004633
+[2022-08-24 03:52:10] [51.56s] Scalar: psnr_rgb - Value: 17.541653
+[2022-08-24 03:52:10] [51.56s] Scalar: dist_scalar - Value: 0.000014
+[2022-08-24 03:52:10] [51.56s] Scalar: loss_dist - Value: 0.168056
+[2022-08-24 03:52:10] [51.56s] Scalar: depth_scalar - Value: 0.000000
+[2022-08-24 03:52:10] [51.56s] Scalar: loss_depth - Value: 0.000000
+[2022-08-24 03:52:10] [51.56s] Scalar: loss (seconds) - Value: 0.004636
+[2022-08-24 03:52:10] [51.56s] Scalar: loss_rgb (seconds) - Value: 0.004633
+[2022-08-24 03:52:10] [51.56s] Scalar: psnr_rgb (seconds) - Value: 17.541653
+[2022-08-24 03:52:10] [51.56s] 
+[2022-08-24 03:52:30] [71.80s] Iteration: 300
+[2022-08-24 03:52:30] [71.80s] Scalar: loss - Value: 0.003496
+[2022-08-24 03:52:30] [71.80s] Scalar: loss_rgb - Value: 0.003493
+[2022-08-24 03:52:30] [71.80s] Scalar: psnr_rgb - Value: 19.406645
+[2022-08-24 03:52:30] [71.80s] Scalar: dist_scalar - Value: 0.000018
+[2022-08-24 03:52:30] [71.80s] Scalar: loss_dist - Value: 0.146584
+[2022-08-24 03:52:30] [71.80s] Scalar: depth_scalar - Value: 0.000000
+[2022-08-24 03:52:30] [71.80s] Scalar: loss_depth - Value: 0.000000
+[2022-08-24 03:52:30] [71.80s] Scalar: loss (seconds) - Value: 0.003496
+[2022-08-24 03:52:30] [71.80s] Scalar: loss_rgb (seconds) - Value: 0.003493
+[2022-08-24 03:52:30] [71.80s] Scalar: psnr_rgb (seconds) - Value: 19.406645
+[2022-08-24 03:52:30] [71.80s] 
+[2022-08-24 03:52:50] [91.70s] Iteration: 400
+[2022-08-24 03:52:50] [91.70s] Scalar: loss - Value: 0.002823
+[2022-08-24 03:52:50] [91.70s] Scalar: loss_rgb - Value: 0.002821
+[2022-08-24 03:52:50] [91.70s] Scalar: psnr_rgb - Value: 20.617648
+[2022-08-24 03:52:50] [91.70s] Scalar: dist_scalar - Value: 0.000022
+[2022-08-24 03:52:50] [91.70s] Scalar: loss_dist - Value: 0.130787
+[2022-08-24 03:52:50] [91.70s] Scalar: depth_scalar - Value: 0.000000
+[2022-08-24 03:52:50] [91.70s] Scalar: loss_depth - Value: 0.000000
+[2022-08-24 03:52:50] [91.70s] Scalar: loss (seconds) - Value: 0.002823
+[2022-08-24 03:52:50] [91.70s] Scalar: loss_rgb (seconds) - Value: 0.002821
+[2022-08-24 03:52:50] [91.70s] Scalar: psnr_rgb (seconds) - Value: 20.617648
+[2022-08-24 03:52:50] [91.70s] 
+[2022-08-24 03:53:10] [111.37s] Iteration: 500
+[2022-08-24 03:53:10] [111.37s] Scalar: loss - Value: 0.002395
+[2022-08-24 03:53:10] [111.37s] Scalar: loss_rgb - Value: 0.002392
+[2022-08-24 03:53:10] [111.37s] Scalar: psnr_rgb - Value: 21.476876
+[2022-08-24 03:53:10] [111.37s] Scalar: dist_scalar - Value: 0.000028
+[2022-08-24 03:53:10] [111.37s] Scalar: loss_dist - Value: 0.116587
+[2022-08-24 03:53:10] [111.37s] Scalar: depth_scalar - Value: 0.000000
+[2022-08-24 03:53:10] [111.37s] Scalar: loss_depth - Value: 0.000000
+[2022-08-24 03:53:10] [111.37s] Scalar: loss (seconds) - Value: 0.002395
+[2022-08-24 03:53:10] [111.37s] Scalar: loss_rgb (seconds) - Value: 0.002392
+[2022-08-24 03:53:10] [111.37s] Scalar: psnr_rgb (seconds) - Value: 21.476876
+[2022-08-24 03:53:10] [111.37s] 
+[2022-08-24 03:53:29] [130.90s] Iteration: 600
+[2022-08-24 03:53:29] [130.90s] Scalar: loss - Value: 0.002094
+[2022-08-24 03:53:29] [130.90s] Scalar: loss_rgb - Value: 0.002090
+[2022-08-24 03:53:29] [130.90s] Scalar: psnr_rgb - Value: 22.147556
+[2022-08-24 03:53:29] [130.90s] Scalar: dist_scalar - Value: 0.000036
+[2022-08-24 03:53:29] [130.90s] Scalar: loss_dist - Value: 0.104927
+[2022-08-24 03:53:29] [130.90s] Scalar: depth_scalar - Value: 0.000000
+[2022-08-24 03:53:29] [130.90s] Scalar: loss_depth - Value: 0.000000
+[2022-08-24 03:53:29] [130.90s] Scalar: loss (seconds) - Value: 0.002094
+[2022-08-24 03:53:29] [130.90s] Scalar: loss_rgb (seconds) - Value: 0.002090
+[2022-08-24 03:53:29] [130.90s] Scalar: psnr_rgb (seconds) - Value: 22.147556
+[2022-08-24 03:53:29] [130.90s] 
+[2022-08-24 03:53:49] [150.30s] Iteration: 700
+[2022-08-24 03:53:49] [150.30s] Scalar: loss - Value: 0.001879
+[2022-08-24 03:53:49] [150.30s] Scalar: loss_rgb - Value: 0.001875
+[2022-08-24 03:53:49] [150.30s] Scalar: psnr_rgb - Value: 22.707888
+[2022-08-24 03:53:49] [150.30s] Scalar: dist_scalar - Value: 0.000045
+[2022-08-24 03:53:49] [150.30s] Scalar: loss_dist - Value: 0.095918
+[2022-08-24 03:53:49] [150.30s] Scalar: depth_scalar - Value: 0.000000
+[2022-08-24 03:53:49] [150.30s] Scalar: loss_depth - Value: 0.000000
+[2022-08-24 03:53:49] [150.30s] Scalar: loss (seconds) - Value: 0.001879
+[2022-08-24 03:53:49] [150.30s] Scalar: loss_rgb (seconds) - Value: 0.001875
+[2022-08-24 03:53:49] [150.30s] Scalar: psnr_rgb (seconds) - Value: 22.707888
+[2022-08-24 03:53:49] [150.30s] 
+[2022-08-24 03:54:08] [169.63s] Iteration: 800
+[2022-08-24 03:54:08] [169.63s] Scalar: loss - Value: 0.001726
+[2022-08-24 03:54:08] [169.63s] Scalar: loss_rgb - Value: 0.001721
+[2022-08-24 03:54:08] [169.63s] Scalar: psnr_rgb - Value: 23.112699
+[2022-08-24 03:54:08] [169.63s] Scalar: dist_scalar - Value: 0.000056
+[2022-08-24 03:54:08] [169.63s] Scalar: loss_dist - Value: 0.088623
+[2022-08-24 03:54:08] [169.63s] Scalar: depth_scalar - Value: 0.000000
+[2022-08-24 03:54:08] [169.63s] Scalar: loss_depth - Value: 0.000000
+[2022-08-24 03:54:08] [169.63s] Scalar: loss (seconds) - Value: 0.001726
+[2022-08-24 03:54:08] [169.63s] Scalar: loss_rgb (seconds) - Value: 0.001721
+[2022-08-24 03:54:08] [169.63s] Scalar: psnr_rgb (seconds) - Value: 23.112699
+[2022-08-24 03:54:08] [169.63s] 
+[2022-08-24 03:54:27] [188.89s] Iteration: 900
+[2022-08-24 03:54:27] [188.89s] Scalar: loss - Value: 0.001601
+[2022-08-24 03:54:27] [188.89s] Scalar: loss_rgb - Value: 0.001595
+[2022-08-24 03:54:27] [188.89s] Scalar: psnr_rgb - Value: 23.478918
+[2022-08-24 03:54:27] [188.89s] Scalar: dist_scalar - Value: 0.000071
+[2022-08-24 03:54:27] [188.89s] Scalar: loss_dist - Value: 0.082536
+[2022-08-24 03:54:27] [188.89s] Scalar: depth_scalar - Value: 0.000000
+[2022-08-24 03:54:27] [188.89s] Scalar: loss_depth - Value: 0.000000
+[2022-08-24 03:54:27] [188.89s] Scalar: loss (seconds) - Value: 0.001601
+[2022-08-24 03:54:27] [188.89s] Scalar: loss_rgb (seconds) - Value: 0.001595
+[2022-08-24 03:54:27] [188.89s] Scalar: psnr_rgb (seconds) - Value: 23.478918
+[2022-08-24 03:54:27] [188.89s] 
+[2022-08-24 03:54:46] [208.11s] Iteration: 1000
+[2022-08-24 03:54:46] [208.11s] Scalar: loss - Value: 0.001500
+[2022-08-24 03:54:46] [208.11s] Scalar: loss_rgb - Value: 0.001493
+[2022-08-24 03:54:46] [208.11s] Scalar: psnr_rgb - Value: 23.794665
+[2022-08-24 03:54:46] [208.11s] Scalar: dist_scalar - Value: 0.000089
+[2022-08-24 03:54:46] [208.11s] Scalar: loss_dist - Value: 0.076593
+[2022-08-24 03:54:46] [208.11s] Scalar: depth_scalar - Value: 0.000000
+[2022-08-24 03:54:46] [208.11s] Scalar: loss_depth - Value: 0.000000
+[2022-08-24 03:54:46] [208.11s] Scalar: loss (seconds) - Value: 0.001500
+[2022-08-24 03:54:46] [208.11s] Scalar: loss_rgb (seconds) - Value: 0.001493
+[2022-08-24 03:54:46] [208.11s] Scalar: psnr_rgb (seconds) - Value: 23.794665
+[2022-08-24 03:54:46] [208.11s] 
+[2022-08-24 03:55:06] [227.28s] Iteration: 1100
+[2022-08-24 03:55:06] [227.28s] Scalar: loss - Value: 0.001424
+[2022-08-24 03:55:06] [227.28s] Scalar: loss_rgb - Value: 0.001416
+[2022-08-24 03:55:06] [227.28s] Scalar: psnr_rgb - Value: 24.049647
+[2022-08-24 03:55:06] [227.28s] Scalar: dist_scalar - Value: 0.000112
+[2022-08-24 03:55:06] [227.28s] Scalar: loss_dist - Value: 0.071422
+[2022-08-24 03:55:06] [227.28s] Scalar: depth_scalar - Value: 0.000000
+[2022-08-24 03:55:06] [227.28s] Scalar: loss_depth - Value: 0.000000
+[2022-08-24 03:55:06] [227.28s] Scalar: loss (seconds) - Value: 0.001424
+[2022-08-24 03:55:06] [227.28s] Scalar: loss_rgb (seconds) - Value: 0.001416
+[2022-08-24 03:55:06] [227.28s] Scalar: psnr_rgb (seconds) - Value: 24.049647
+[2022-08-24 03:55:06] [227.28s] 
+[2022-08-24 03:55:25] [246.42s] Iteration: 1200
+[2022-08-24 03:55:25] [246.42s] Scalar: loss - Value: 0.001353
+[2022-08-24 03:55:25] [246.42s] Scalar: loss_rgb - Value: 0.001343
+[2022-08-24 03:55:25] [246.42s] Scalar: psnr_rgb - Value: 24.298751
+[2022-08-24 03:55:25] [246.42s] Scalar: dist_scalar - Value: 0.000141
+[2022-08-24 03:55:25] [246.42s] Scalar: loss_dist - Value: 0.066856
+[2022-08-24 03:55:25] [246.42s] Scalar: depth_scalar - Value: 0.000000
+[2022-08-24 03:55:25] [246.42s] Scalar: loss_depth - Value: 0.000000
+[2022-08-24 03:55:25] [246.42s] Scalar: loss (seconds) - Value: 0.001353
+[2022-08-24 03:55:25] [246.42s] Scalar: loss_rgb (seconds) - Value: 0.001343
+[2022-08-24 03:55:25] [246.42s] Scalar: psnr_rgb (seconds) - Value: 24.298751
+[2022-08-24 03:55:25] [246.42s] 
+[2022-08-24 03:55:44] [265.50s] Iteration: 1300
+[2022-08-24 03:55:44] [265.50s] Scalar: loss - Value: 0.001290
+[2022-08-24 03:55:44] [265.50s] Scalar: loss_rgb - Value: 0.001279
+[2022-08-24 03:55:44] [265.50s] Scalar: psnr_rgb - Value: 24.529797
+[2022-08-24 03:55:44] [265.50s] Scalar: dist_scalar - Value: 0.000178
+[2022-08-24 03:55:44] [265.50s] Scalar: loss_dist - Value: 0.063430
+[2022-08-24 03:55:44] [265.50s] Scalar: depth_scalar - Value: 0.000000
+[2022-08-24 03:55:44] [265.50s] Scalar: loss_depth - Value: 0.000000
+[2022-08-24 03:55:44] [265.50s] Scalar: loss (seconds) - Value: 0.001290
+[2022-08-24 03:55:44] [265.50s] Scalar: loss_rgb (seconds) - Value: 0.001279
+[2022-08-24 03:55:44] [265.50s] Scalar: psnr_rgb (seconds) - Value: 24.529797
+[2022-08-24 03:55:44] [265.50s] 
+[2022-08-24 03:56:03] [284.55s] Iteration: 1400
+[2022-08-24 03:56:03] [284.55s] Scalar: loss - Value: 0.001249
+[2022-08-24 03:56:03] [284.55s] Scalar: loss_rgb - Value: 0.001235
+[2022-08-24 03:56:03] [284.55s] Scalar: psnr_rgb - Value: 24.682414
+[2022-08-24 03:56:03] [284.55s] Scalar: dist_scalar - Value: 0.000224
+[2022-08-24 03:56:03] [284.55s] Scalar: loss_dist - Value: 0.060027
+[2022-08-24 03:56:03] [284.55s] Scalar: depth_scalar - Value: 0.000000
+[2022-08-24 03:56:03] [284.55s] Scalar: loss_depth - Value: 0.000000
+[2022-08-24 03:56:03] [284.55s] Scalar: loss (seconds) - Value: 0.001249
+[2022-08-24 03:56:03] [284.55s] Scalar: loss_rgb (seconds) - Value: 0.001235
+[2022-08-24 03:56:03] [284.55s] Scalar: psnr_rgb (seconds) - Value: 24.682414
+[2022-08-24 03:56:03] [284.55s] 
+[2022-08-24 03:56:22] [303.58s] Iteration: 1500
+[2022-08-24 03:56:22] [303.58s] Scalar: loss - Value: 0.001210
+[2022-08-24 03:56:22] [303.58s] Scalar: loss_rgb - Value: 0.001194
+[2022-08-24 03:56:22] [303.58s] Scalar: psnr_rgb - Value: 24.840633
+[2022-08-24 03:56:22] [303.58s] Scalar: dist_scalar - Value: 0.000282
+[2022-08-24 03:56:22] [303.58s] Scalar: loss_dist - Value: 0.056987
+[2022-08-24 03:56:22] [303.58s] Scalar: depth_scalar - Value: 0.000000
+[2022-08-24 03:56:22] [303.58s] Scalar: loss_depth - Value: 0.000000
+[2022-08-24 03:56:22] [303.58s] Scalar: loss (seconds) - Value: 0.001210
+[2022-08-24 03:56:22] [303.58s] Scalar: loss_rgb (seconds) - Value: 0.001194
+[2022-08-24 03:56:22] [303.58s] Scalar: psnr_rgb (seconds) - Value: 24.840633
+[2022-08-24 03:56:22] [303.58s] 
+[2022-08-24 03:56:41] [322.56s] Iteration: 1600
+[2022-08-24 03:56:41] [322.56s] Scalar: loss - Value: 0.001171
+[2022-08-24 03:56:41] [322.56s] Scalar: loss_rgb - Value: 0.001152
+[2022-08-24 03:56:41] [322.56s] Scalar: psnr_rgb - Value: 25.005206
+[2022-08-24 03:56:41] [322.56s] Scalar: dist_scalar - Value: 0.000355
+[2022-08-24 03:56:41] [322.57s] Scalar: loss_dist - Value: 0.054081
+[2022-08-24 03:56:41] [322.57s] Scalar: depth_scalar - Value: 0.000000
+[2022-08-24 03:56:41] [322.57s] Scalar: loss_depth - Value: 0.000000
+[2022-08-24 03:56:41] [322.57s] Scalar: loss (seconds) - Value: 0.001171
+[2022-08-24 03:56:41] [322.57s] Scalar: loss_rgb (seconds) - Value: 0.001152
+[2022-08-24 03:56:41] [322.57s] Scalar: psnr_rgb (seconds) - Value: 25.005206
+[2022-08-24 03:56:41] [322.57s] 
+[2022-08-24 03:57:00] [341.53s] Iteration: 1700
+[2022-08-24 03:57:00] [341.53s] Scalar: loss - Value: 0.001140
+[2022-08-24 03:57:00] [341.53s] Scalar: loss_rgb - Value: 0.001117
+[2022-08-24 03:57:00] [341.53s] Scalar: psnr_rgb - Value: 25.146653
+[2022-08-24 03:57:00] [341.53s] Scalar: dist_scalar - Value: 0.000447
+[2022-08-24 03:57:00] [341.53s] Scalar: loss_dist - Value: 0.051207
+[2022-08-24 03:57:00] [341.53s] Scalar: depth_scalar - Value: 0.000000
+[2022-08-24 03:57:00] [341.53s] Scalar: loss_depth - Value: 0.000000
+[2022-08-24 03:57:00] [341.53s] Scalar: loss (seconds) - Value: 0.001140
+[2022-08-24 03:57:00] [341.53s] Scalar: loss_rgb (seconds) - Value: 0.001117
+[2022-08-24 03:57:00] [341.53s] Scalar: psnr_rgb (seconds) - Value: 25.146653
+[2022-08-24 03:57:00] [341.53s] 
+[2022-08-24 03:57:19] [360.45s] Iteration: 1800
+[2022-08-24 03:57:19] [360.45s] Scalar: loss - Value: 0.001115
+[2022-08-24 03:57:19] [360.45s] Scalar: loss_rgb - Value: 0.001088
+[2022-08-24 03:57:19] [360.45s] Scalar: psnr_rgb - Value: 25.269706
+[2022-08-24 03:57:19] [360.45s] Scalar: dist_scalar - Value: 0.000563
+[2022-08-24 03:57:19] [360.45s] Scalar: loss_dist - Value: 0.048343
+[2022-08-24 03:57:19] [360.45s] Scalar: depth_scalar - Value: 0.000000
+[2022-08-24 03:57:19] [360.45s] Scalar: loss_depth - Value: 0.000000
+[2022-08-24 03:57:19] [360.45s] Scalar: loss (seconds) - Value: 0.001115
+[2022-08-24 03:57:19] [360.45s] Scalar: loss_rgb (seconds) - Value: 0.001088
+[2022-08-24 03:57:19] [360.45s] Scalar: psnr_rgb (seconds) - Value: 25.269706
+[2022-08-24 03:57:19] [360.45s] 
+[2022-08-24 03:57:38] [379.35s] Iteration: 1900
+[2022-08-24 03:57:38] [379.35s] Scalar: loss - Value: 0.001096
+[2022-08-24 03:57:38] [379.35s] Scalar: loss_rgb - Value: 0.001064
+[2022-08-24 03:57:38] [379.35s] Scalar: psnr_rgb - Value: 25.369804
+[2022-08-24 03:57:38] [379.35s] Scalar: dist_scalar - Value: 0.000709
+[2022-08-24 03:57:38] [379.35s] Scalar: loss_dist - Value: 0.045682
+[2022-08-24 03:57:38] [379.35s] Scalar: depth_scalar - Value: 0.000000
+[2022-08-24 03:57:38] [379.35s] Scalar: loss_depth - Value: 0.000000
+[2022-08-24 03:57:38] [379.35s] Scalar: loss (seconds) - Value: 0.001096
+[2022-08-24 03:57:38] [379.35s] Scalar: loss_rgb (seconds) - Value: 0.001064
+[2022-08-24 03:57:38] [379.35s] Scalar: psnr_rgb (seconds) - Value: 25.369804
+[2022-08-24 03:57:38] [379.35s] 
+[2022-08-24 03:57:57] [398.21s] Iteration: 2000
+[2022-08-24 03:57:57] [398.21s] Scalar: loss - Value: 0.001078
+[2022-08-24 03:57:57] [398.21s] Scalar: loss_rgb - Value: 0.001040
+[2022-08-24 03:57:57] [398.21s] Scalar: psnr_rgb - Value: 25.475811
+[2022-08-24 03:57:57] [398.21s] Scalar: dist_scalar - Value: 0.000892
+[2022-08-24 03:57:57] [398.21s] Scalar: loss_dist - Value: 0.043056
+[2022-08-24 03:57:57] [398.21s] Scalar: depth_scalar - Value: 0.000000
+[2022-08-24 03:57:57] [398.21s] Scalar: loss_depth - Value: 0.000000
+[2022-08-24 03:57:57] [398.21s] Scalar: loss (seconds) - Value: 0.001078
+[2022-08-24 03:57:57] [398.21s] Scalar: loss_rgb (seconds) - Value: 0.001040
+[2022-08-24 03:57:57] [398.21s] Scalar: psnr_rgb (seconds) - Value: 25.475811
+[2022-08-24 03:57:57] [398.21s] 
+[2022-08-24 03:58:15] [417.04s] Iteration: 2100
+[2022-08-24 03:58:15] [417.04s] Scalar: loss - Value: 0.001062
+[2022-08-24 03:58:15] [417.04s] Scalar: loss_rgb - Value: 0.001017
+[2022-08-24 03:58:15] [417.04s] Scalar: psnr_rgb - Value: 25.573198
+[2022-08-24 03:58:15] [417.04s] Scalar: dist_scalar - Value: 0.001123
+[2022-08-24 03:58:15] [417.04s] Scalar: loss_dist - Value: 0.040541
+[2022-08-24 03:58:15] [417.04s] Scalar: depth_scalar - Value: 0.000000
+[2022-08-24 03:58:15] [417.04s] Scalar: loss_depth - Value: 0.000000
+[2022-08-24 03:58:15] [417.04s] Scalar: loss (seconds) - Value: 0.001062
+[2022-08-24 03:58:15] [417.04s] Scalar: loss_rgb (seconds) - Value: 0.001017
+[2022-08-24 03:58:15] [417.04s] Scalar: psnr_rgb (seconds) - Value: 25.573198
+[2022-08-24 03:58:15] [417.04s] 
+[2022-08-24 03:58:34] [435.83s] Iteration: 2200
+[2022-08-24 03:58:34] [435.83s] Scalar: loss - Value: 0.001061
+[2022-08-24 03:58:34] [435.83s] Scalar: loss_rgb - Value: 0.001007
+[2022-08-24 03:58:34] [435.83s] Scalar: psnr_rgb - Value: 25.583595
+[2022-08-24 03:58:34] [435.83s] Scalar: dist_scalar - Value: 0.001414
+[2022-08-24 03:58:34] [435.83s] Scalar: loss_dist - Value: 0.037901
+[2022-08-24 03:58:34] [435.83s] Scalar: depth_scalar - Value: 0.000000
+[2022-08-24 03:58:34] [435.83s] Scalar: loss_depth - Value: 0.000000
+[2022-08-24 03:58:34] [435.83s] Scalar: loss (seconds) - Value: 0.001061
+[2022-08-24 03:58:34] [435.83s] Scalar: loss_rgb (seconds) - Value: 0.001007
+[2022-08-24 03:58:34] [435.83s] Scalar: psnr_rgb (seconds) - Value: 25.583595
+[2022-08-24 03:58:34] [435.83s] 
+[2022-08-24 03:58:53] [454.58s] Iteration: 2300
+[2022-08-24 03:58:53] [454.58s] Scalar: loss - Value: 0.001049
+[2022-08-24 03:58:53] [454.58s] Scalar: loss_rgb - Value: 0.000986
+[2022-08-24 03:58:53] [454.58s] Scalar: psnr_rgb - Value: 25.692889
+[2022-08-24 03:58:53] [454.58s] Scalar: dist_scalar - Value: 0.001780
+[2022-08-24 03:58:53] [454.58s] Scalar: loss_dist - Value: 0.035425
+[2022-08-24 03:58:53] [454.58s] Scalar: depth_scalar - Value: 0.000000
+[2022-08-24 03:58:53] [454.58s] Scalar: loss_depth - Value: 0.000000
+[2022-08-24 03:58:53] [454.58s] Scalar: loss (seconds) - Value: 0.001049
+[2022-08-24 03:58:53] [454.58s] Scalar: loss_rgb (seconds) - Value: 0.000986
+[2022-08-24 03:58:53] [454.58s] Scalar: psnr_rgb (seconds) - Value: 25.692889
+[2022-08-24 03:58:53] [454.58s] 
+[2022-08-24 03:59:12] [473.31s] Iteration: 2400
+[2022-08-24 03:59:12] [473.31s] Scalar: loss - Value: 0.001046
+[2022-08-24 03:59:12] [473.31s] Scalar: loss_rgb - Value: 0.000972
+[2022-08-24 03:59:12] [473.31s] Scalar: psnr_rgb - Value: 25.764227
+[2022-08-24 03:59:12] [473.31s] Scalar: dist_scalar - Value: 0.002241
+[2022-08-24 03:59:12] [473.31s] Scalar: loss_dist - Value: 0.033035
+[2022-08-24 03:59:12] [473.31s] Scalar: depth_scalar - Value: 0.000000
+[2022-08-24 03:59:12] [473.31s] Scalar: loss_depth - Value: 0.000000
+[2022-08-24 03:59:12] [473.31s] Scalar: loss (seconds) - Value: 0.001046
+[2022-08-24 03:59:12] [473.31s] Scalar: loss_rgb (seconds) - Value: 0.000972
+[2022-08-24 03:59:12] [473.31s] Scalar: psnr_rgb (seconds) - Value: 25.764227
+[2022-08-24 03:59:12] [473.31s] 
+[2022-08-24 03:59:30] [491.99s] Iteration: 2500
+[2022-08-24 03:59:30] [491.99s] Scalar: loss - Value: 0.001039
+[2022-08-24 03:59:30] [491.99s] Scalar: loss_rgb - Value: 0.000952
+[2022-08-24 03:59:30] [491.99s] Scalar: psnr_rgb - Value: 25.868871
+[2022-08-24 03:59:30] [491.99s] Scalar: dist_scalar - Value: 0.002821
+[2022-08-24 03:59:30] [491.99s] Scalar: loss_dist - Value: 0.030800
+[2022-08-24 03:59:30] [491.99s] Scalar: depth_scalar - Value: 0.000000
+[2022-08-24 03:59:30] [491.99s] Scalar: loss_depth - Value: 0.000000
+[2022-08-24 03:59:30] [491.99s] Scalar: loss (seconds) - Value: 0.001039
+[2022-08-24 03:59:30] [491.99s] Scalar: loss_rgb (seconds) - Value: 0.000952
+[2022-08-24 03:59:30] [491.99s] Scalar: psnr_rgb (seconds) - Value: 25.868871
+[2022-08-24 03:59:30] [491.99s] 
+[2022-08-24 03:59:49] [510.65s] Iteration: 2600
+[2022-08-24 03:59:49] [510.65s] Scalar: loss - Value: 0.001047
+[2022-08-24 03:59:49] [510.65s] Scalar: loss_rgb - Value: 0.000945
+[2022-08-24 03:59:49] [510.65s] Scalar: psnr_rgb - Value: 25.892786
+[2022-08-24 03:59:49] [510.65s] Scalar: dist_scalar - Value: 0.003552
+[2022-08-24 03:59:49] [510.65s] Scalar: loss_dist - Value: 0.028784
+[2022-08-24 03:59:49] [510.65s] Scalar: depth_scalar - Value: 0.000000
+[2022-08-24 03:59:49] [510.65s] Scalar: loss_depth - Value: 0.000000
+[2022-08-24 03:59:49] [510.65s] Scalar: loss (seconds) - Value: 0.001047
+[2022-08-24 03:59:49] [510.65s] Scalar: loss_rgb (seconds) - Value: 0.000945
+[2022-08-24 03:59:49] [510.65s] Scalar: psnr_rgb (seconds) - Value: 25.892786
+[2022-08-24 03:59:49] [510.65s] 
+[2022-08-24 04:00:08] [529.26s] Iteration: 2700
+[2022-08-24 04:00:08] [529.26s] Scalar: loss - Value: 0.001049
+[2022-08-24 04:00:08] [529.26s] Scalar: loss_rgb - Value: 0.000929
+[2022-08-24 04:00:08] [529.26s] Scalar: psnr_rgb - Value: 25.945624
+[2022-08-24 04:00:08] [529.26s] Scalar: dist_scalar - Value: 0.004472
+[2022-08-24 04:00:08] [529.26s] Scalar: loss_dist - Value: 0.026768
+[2022-08-24 04:00:08] [529.26s] Scalar: depth_scalar - Value: 0.000000
+[2022-08-24 04:00:08] [529.26s] Scalar: loss_depth - Value: 0.000000
+[2022-08-24 04:00:08] [529.26s] Scalar: loss (seconds) - Value: 0.001049
+[2022-08-24 04:00:08] [529.26s] Scalar: loss_rgb (seconds) - Value: 0.000929
+[2022-08-24 04:00:08] [529.26s] Scalar: psnr_rgb (seconds) - Value: 25.945624
+[2022-08-24 04:00:08] [529.26s] 
+[2022-08-24 04:00:26] [547.84s] Iteration: 2800
+[2022-08-24 04:00:26] [547.84s] Scalar: loss - Value: 0.001062
+[2022-08-24 04:00:26] [547.84s] Scalar: loss_rgb - Value: 0.000921
+[2022-08-24 04:00:26] [547.84s] Scalar: psnr_rgb - Value: 25.996700
+[2022-08-24 04:00:26] [547.84s] Scalar: dist_scalar - Value: 0.005629
+[2022-08-24 04:00:26] [547.84s] Scalar: loss_dist - Value: 0.025060
+[2022-08-24 04:00:26] [547.84s] Scalar: depth_scalar - Value: 0.000000
+[2022-08-24 04:00:26] [547.84s] Scalar: loss_depth - Value: 0.000000
+[2022-08-24 04:00:26] [547.84s] Scalar: loss (seconds) - Value: 0.001062
+[2022-08-24 04:00:26] [547.84s] Scalar: loss_rgb (seconds) - Value: 0.000921
+[2022-08-24 04:00:26] [547.84s] Scalar: psnr_rgb (seconds) - Value: 25.996700
+[2022-08-24 04:00:26] [547.84s] 
+[2022-08-24 04:00:45] [566.38s] Iteration: 2900
+[2022-08-24 04:00:45] [566.38s] Scalar: loss - Value: 0.001076
+[2022-08-24 04:00:45] [566.38s] Scalar: loss_rgb - Value: 0.000911
+[2022-08-24 04:00:45] [566.38s] Scalar: psnr_rgb - Value: 26.020500
+[2022-08-24 04:00:45] [566.38s] Scalar: dist_scalar - Value: 0.007087
+[2022-08-24 04:00:45] [566.38s] Scalar: loss_dist - Value: 0.023394
+[2022-08-24 04:00:45] [566.38s] Scalar: depth_scalar - Value: 0.000000
+[2022-08-24 04:00:45] [566.38s] Scalar: loss_depth - Value: 0.000000
+[2022-08-24 04:00:45] [566.38s] Scalar: loss (seconds) - Value: 0.001076
+[2022-08-24 04:00:45] [566.38s] Scalar: loss_rgb (seconds) - Value: 0.000911
+[2022-08-24 04:00:45] [566.38s] Scalar: psnr_rgb (seconds) - Value: 26.020500
+[2022-08-24 04:00:45] [566.38s] 
+[2022-08-24 04:01:03] [584.89s] Iteration: 3000
+[2022-08-24 04:01:03] [584.89s] Scalar: loss - Value: 0.001101
+[2022-08-24 04:01:03] [584.89s] Scalar: loss_rgb - Value: 0.000907
+[2022-08-24 04:01:03] [584.89s] Scalar: psnr_rgb - Value: 26.045358
+[2022-08-24 04:01:03] [584.89s] Scalar: dist_scalar - Value: 0.008922
+[2022-08-24 04:01:03] [584.89s] Scalar: loss_dist - Value: 0.021762
+[2022-08-24 04:01:03] [584.89s] Scalar: depth_scalar - Value: 0.000000
+[2022-08-24 04:01:03] [584.89s] Scalar: loss_depth - Value: 0.000000
+[2022-08-24 04:01:03] [584.89s] Scalar: loss (seconds) - Value: 0.001101
+[2022-08-24 04:01:03] [584.89s] Scalar: loss_rgb (seconds) - Value: 0.000907
+[2022-08-24 04:01:03] [584.89s] Scalar: psnr_rgb (seconds) - Value: 26.045358
+[2022-08-24 04:01:03] [584.89s] 
+[2022-08-24 04:01:03] [584.89s] Rending Image...

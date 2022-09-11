@@ -5,9 +5,11 @@ import time
 import math as m
 import matplotlib.pyplot as plt
 
+from tqdm import tqdm
+
 import helpers
 
-from tqdm import tqdm
+from renderer import render
 
 # from config import cfg
 
@@ -18,8 +20,8 @@ class Trainer(object):
         model,
         dataloader,
         logger,
-        inferencer,
-        renderer,
+        # inferencer,
+        # renderer,
         optimizer,
         scheduler,
         
@@ -41,8 +43,8 @@ class Trainer(object):
         self.model = model
         self.dataloader = dataloader
         self.logger = logger
-        self.inferencer = inferencer
-        self.renderer = renderer
+        # self.inferencer = inferencer
+        # self.renderer = renderer
 
         self.optimizer = optimizer
         self.scheduler = scheduler
@@ -145,7 +147,7 @@ class Trainer(object):
         
         n, h, w, K, E, rgb_gt, color_bg, _ = self.dataloader.get_random_batch(self.n_rays)
 
-        rgb, weights, z_vals_log_s, aux_outputs = self.renderer.render(n, h, w, K, E, color_bg)
+        rgb, weights, z_vals_log_s, aux_outputs = render(self.model, n, h, w, K, E, color_bg)
 
         # depth_scalar = 0.0
 

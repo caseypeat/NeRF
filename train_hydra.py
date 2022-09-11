@@ -7,10 +7,10 @@ import argparse
 
 from omegaconf import DictConfig, OmegaConf
 
-from loaders.camera_geometry_loader import CameraGeometryLoader
+from loaders.camera_geometry_loader_re2 import CameraGeometryLoader
 
 from nets import NeRFNetwork
-from renderer import NerfRenderer
+# from renderer import NerfRenderer
 from trainer import Trainer
 from logger import Logger
 from inference import Inferencer

@@ -4,197 +4,405 @@ import torch.nn.functional as F
 import torch.jit as jit
 import math as m
 
+from typing import Union
+
 import helpers
 
+from nets import NeRFNetwork, NeRFCoordinateWrapper
 
-class NerfRenderer(nn.Module):
-    def __init__(
-        self,
-        model,
+
+# class NerfRenderer(nn.Module):
+#     def __init__(
+#         self,
+#         model,
         
-        inner_bound,
-        outer_bound,
+#         inner_bound,
+#         outer_bound,
 
-        z_bounds,
-        steps_firstpass,
-        steps_importance,
-        alpha_importance,
+#         z_bounds,
+#         steps_firstpass,
+#         steps_importance,
+#         alpha_importance,
         
-        translation_center):
+#         translation_center):
         
-        super().__init__()
+#         super().__init__()
 
-        self.model = model
+#         self.model = model
 
-        self.inner_bound = inner_bound
-        self.outer_bound = outer_bound
+#         self.inner_bound = inner_bound
+#         self.outer_bound = outer_bound
 
-        self.z_bounds = z_bounds
-        self.steps_firstpass = steps_firstpass
-        self.steps_importance = steps_importance
-        self.alpha_importance = alpha_importance
+#         self.z_bounds = z_bounds
+#         self.steps_firstpass = steps_firstpass
+#         self.steps_importance = steps_importance
+#         self.alpha_importance = alpha_importance
 
-        self.translation_center = translation_center
+#         self.translation_center = translation_center
 
         
-    ## Rendering Pipeline
+#     ## Rendering Pipeline
     
-    def get_rays(self, h, w, K, E):
-        """ Ray generation for Oliver's calibration format """
-        dirs = torch.stack([w+0.5, h+0.5, torch.ones_like(w)], -1)  # [N_rays, 3]
-        dirs = torch.inverse(K) @ dirs[:, :, None]  # [N_rays, 3, 1]
+#     def get_rays(self, h, w, K, E):
+#         """ Ray generation for Oliver's calibration format """
+#         dirs = torch.stack([w+0.5, h+0.5, torch.ones_like(w)], -1)  # [N_rays, 3]
+#         dirs = torch.inverse(K) @ dirs[:, :, None]  # [N_rays, 3, 1]
 
-        rays_d = E[:, :3, :3] @ dirs  # [N_rays, 3, 1]
-        rays_d = torch.squeeze(rays_d, dim=2)  # [N_rays, 3]
+#         rays_d = E[:, :3, :3] @ dirs  # [N_rays, 3, 1]
+#         rays_d = torch.squeeze(rays_d, dim=2)  # [N_rays, 3]
 
-        rays_o = E[:, :3, -1].expand(rays_d.shape[0], -1)
+#         rays_o = E[:, :3, -1].expand(rays_d.shape[0], -1)
 
-        return rays_o, rays_d
-
-    
-    def get_sample_points(self, rays_o, rays_d, z_vals):
-        N_rays, N_samples = z_vals.shape
-
-        query_points = rays_d.new_zeros((N_rays, N_samples, 3))  # [N_rays, N_samples, 3]
-        query_points = rays_o[:, None, :].expand(-1, N_samples, -1) + rays_d[:, None, :].expand(-1, N_samples, -1) * z_vals[..., None]  # [N_rays, N_samples, 3]
-
-        norm = torch.linalg.norm(rays_d, dim=-1, keepdim=True)
-        query_dirs = rays_d / norm
-        query_dirs = query_dirs[:, None, :].expand(-1, N_samples, -1)
-
-        return query_points, query_dirs
+#         return rays_o, rays_d
 
     
-    def mipnerf360_scale(self, xyzs, bound_inner, bound_outer):
-        d = torch.linalg.norm(xyzs, dim=-1)[..., None].expand(-1, -1, 3)
-        xyzs_warped = torch.clone(xyzs)
-        xyzs_warped[d > bound_inner] = xyzs_warped[d > bound_inner] * ((bound_outer - (bound_outer - bound_inner) / d[d > bound_inner]) / d[d > bound_inner])
-        return xyzs_warped
+#     def get_sample_points(self, rays_o, rays_d, z_vals):
+#         N_rays, N_samples = z_vals.shape
+
+#         query_points = rays_d.new_zeros((N_rays, N_samples, 3))  # [N_rays, N_samples, 3]
+#         query_points = rays_o[:, None, :].expand(-1, N_samples, -1) + rays_d[:, None, :].expand(-1, N_samples, -1) * z_vals[..., None]  # [N_rays, N_samples, 3]
+
+#         norm = torch.linalg.norm(rays_d, dim=-1, keepdim=True)
+#         query_dirs = rays_d / norm
+#         query_dirs = query_dirs[:, None, :].expand(-1, N_samples, -1)
+
+#         return query_points, query_dirs
 
     
-    def render_rays_log(self, sigmas, rgbs, z_vals, z_vals_log):
-        N_rays, N_samples = z_vals.shape[:2]
-
-        delta = z_vals_log.new_zeros([N_rays, N_samples])  # [N_rays, N_samples]
-        delta[:, :-1] = (z_vals_log[:, 1:] - z_vals_log[:, :-1])
-
-        alpha = 1 - torch.exp(-sigmas * delta)  # [N_rays, N_samples]
-
-        alpha_shift = torch.cat([alpha.new_zeros((alpha.shape[0], 1)), alpha], dim=-1)[:, :-1]  # [N_rays, N_samples]
-        weights = alpha * torch.cumprod(1 - alpha_shift, dim=-1)  # [N_rays, N_samples]
-
-        rgb = torch.sum(weights[..., None] * rgbs, -2)  # [N_rays, 3]
-        invdepth = torch.sum(weights / z_vals, -1)  # [N_rays]
-
-        return rgb, invdepth, weights
-
-    @torch.no_grad()
-    def sample_pdf(self, z_vals, weights, N_importance):
-
-        N_rays, N_samples = z_vals.shape
-
-        pdf = weights  # [N_rays, N_samples]
-        cdf = torch.cumsum(pdf, dim=-1)  # [N_rays, N_samples]
-
-        # print(cdf.shape)
-
-        z_vals_mid = (z_vals[:, :-1] + z_vals[:, 1:]) / 2  # [N_rays, N_samples]
-
-        # Take uniform samples
-        u = torch.linspace(0, 1-1/N_importance, N_importance, device=weights.device)  # [N_rays, N_importance]
-        u = u[None, :].expand(N_rays, -1)
-        u = u + torch.rand([N_rays, N_importance], device=weights.device)/N_importance  # [N_rays, N_samples]
-        u = u * (cdf[:, -2, None] - cdf[:, 1, None])
-        u = u + cdf[:, 1, None]
-
-        inds = torch.searchsorted(cdf[:, 1:-2], u, right=True) + 1  # [N_rays, N_importance]
-
-        cdf_below = torch.gather(input=cdf, dim=1, index=inds-1)
-        cdf_above = torch.gather(input=cdf, dim=1, index=inds)
-        t = (u - cdf_below) / (cdf_above - cdf_below)
-
-        z_vals_mid_below = torch.gather(input=z_vals_mid, dim=1, index=inds-1)
-        z_vals_mid_above = torch.gather(input=z_vals_mid, dim=1, index=inds)
-        z_vals_im = z_vals_mid_below + (z_vals_mid_above - z_vals_mid_below) * t
-
-        z_vals_fine = z_vals_im
-
-        return z_vals_fine
-
-
-    ## Calculate density distribiution along ray using forward only first pass to inform second pass
-    @torch.no_grad()
-    def get_uniform_z_vals(self, rays_o, rays_d, n_samples):
-        z_vals_log = torch.empty((0), device=rays_o.device)
-        for i in range(len(self.steps_firstpass)):
-            z_vals_log = torch.cat((z_vals_log, torch.linspace(m.log10(self.z_bounds[i]), m.log10(self.z_bounds[i+1])-(m.log10(self.z_bounds[i+1])-m.log10(self.z_bounds[i]))/self.steps_firstpass[i], self.steps_firstpass[i], device=rays_o.device)))
-        z_vals_log = z_vals_log.expand(rays_o.shape[0], -1)
-        z_vals = torch.pow(10, z_vals_log)
-        return z_vals_log, z_vals
-
-
-    @torch.no_grad()
-    def reweight_weights(self, weights, alpha, steps):
-        weights = torch.cat([weights.new_zeros((weights.shape[0], 1)), weights, weights.new_zeros((weights.shape[0], 1))], dim=-1)
-        weights = 1/2 * (torch.maximum(weights[..., :-2], weights[..., 1:-1]) + torch.maximum(weights[..., 1:-1], weights[..., 2:]))
-        weights = weights + alpha / weights.shape[-1]
-        c = 0
-        for i in range(len(steps)):
-            weights[:, c:c+steps[i]] *= steps[i] / sum(steps)
-            c += steps[i]
-        weights = weights / torch.sum(weights, dim=-1, keepdim=True)  # [N_rays, N_samples-1]
-        return weights
+#     def mipnerf360_scale(self, xyzs, bound_inner, bound_outer):
+#         d = torch.linalg.norm(xyzs, dim=-1)[..., None].expand(-1, -1, 3)
+#         xyzs_warped = torch.clone(xyzs)
+#         xyzs_warped[d > bound_inner] = xyzs_warped[d > bound_inner] * ((bound_outer - (bound_outer - bound_inner) / d[d > bound_inner]) / d[d > bound_inner])
+#         return xyzs_warped
 
     
-    @torch.no_grad()
-    def efficient_sampling(self, rays_o, rays_d, n_samples, alpha_const):
-        z_vals_log, z_vals = self.get_uniform_z_vals(rays_o, rays_d, self.steps_firstpass)
+#     def render_rays_log(self, sigmas, rgbs, z_vals, z_vals_log):
+#         N_rays, N_samples = z_vals.shape[:2]
 
-        xyzs, dirs = self.get_sample_points(rays_o, rays_d, z_vals)
-        xyzs_centered = xyzs - self.translation_center.to(xyzs.device)
-        xyzs_warped = self.mipnerf360_scale(xyzs_centered, self.inner_bound, self.outer_bound)
+#         delta = z_vals_log.new_zeros([N_rays, N_samples])  # [N_rays, N_samples]
+#         delta[:, :-1] = (z_vals_log[:, 1:] - z_vals_log[:, :-1])
 
-        sigmas, _ = self.model.density(xyzs_warped, self.outer_bound)
+#         alpha = 1 - torch.exp(-sigmas * delta)  # [N_rays, N_samples]
 
-        delta = z_vals_log.new_zeros(sigmas.shape)  # [N_rays, N_samples]
-        delta[:, :-1] = (z_vals_log[:, 1:] - z_vals_log[:, :-1])
+#         alpha_shift = torch.cat([alpha.new_zeros((alpha.shape[0], 1)), alpha], dim=-1)[:, :-1]  # [N_rays, N_samples]
+#         weights = alpha * torch.cumprod(1 - alpha_shift, dim=-1)  # [N_rays, N_samples]
 
-        alpha = 1 - torch.exp(-sigmas * delta)  # [N_rays, N_samples]
+#         rgb = torch.sum(weights[..., None] * rgbs, -2)  # [N_rays, 3]
+#         invdepth = torch.sum(weights / z_vals, -1)  # [N_rays]
 
-        alpha_shift = torch.cat([alpha.new_zeros((alpha.shape[0], 1)), alpha], dim=-1)[:, :-1]  # [N_rays, N_samples]
-        weights = alpha * torch.cumprod(1 - alpha_shift, dim=-1)  # [N_rays, N_samples]
+#         return rgb, invdepth, weights
 
-        weights_re = self.reweight_weights(weights, alpha_const, self.steps_firstpass)
+#     @torch.no_grad()
+#     def sample_pdf(self, z_vals, weights, N_importance):
 
-        z_vals_log_fine = self.sample_pdf(z_vals_log, weights_re, n_samples)
-        z_vals_fine = torch.pow(10, z_vals_log_fine)
+#         N_rays, N_samples = z_vals.shape
 
-        return z_vals_log_fine, z_vals_fine
+#         pdf = weights  # [N_rays, N_samples]
+#         cdf = torch.cumsum(pdf, dim=-1)  # [N_rays, N_samples]
+
+#         # print(cdf.shape)
+
+#         z_vals_mid = (z_vals[:, :-1] + z_vals[:, 1:]) / 2  # [N_rays, N_samples]
+
+#         # Take uniform samples
+#         u = torch.linspace(0, 1-1/N_importance, N_importance, device=weights.device)  # [N_rays, N_importance]
+#         u = u[None, :].expand(N_rays, -1)
+#         u = u + torch.rand([N_rays, N_importance], device=weights.device)/N_importance  # [N_rays, N_samples]
+#         u = u * (cdf[:, -2, None] - cdf[:, 1, None])
+#         u = u + cdf[:, 1, None]
+
+#         inds = torch.searchsorted(cdf[:, 1:-2], u, right=True) + 1  # [N_rays, N_importance]
+
+#         cdf_below = torch.gather(input=cdf, dim=1, index=inds-1)
+#         cdf_above = torch.gather(input=cdf, dim=1, index=inds)
+#         t = (u - cdf_below) / (cdf_above - cdf_below)
+
+#         z_vals_mid_below = torch.gather(input=z_vals_mid, dim=1, index=inds-1)
+#         z_vals_mid_above = torch.gather(input=z_vals_mid, dim=1, index=inds)
+#         z_vals_im = z_vals_mid_below + (z_vals_mid_above - z_vals_mid_below) * t
+
+#         z_vals_fine = z_vals_im
+
+#         return z_vals_fine
 
 
-    def render(self, n, h, w, K, E, bg_color):
+#     ## Calculate density distribiution along ray using forward only first pass to inform second pass
+#     @torch.no_grad()
+    # def get_uniform_z_vals(self, rays_o, rays_d, n_samples):
+    #     z_vals_log = torch.empty((0), device=rays_o.device)
+    #     for i in range(len(self.steps_firstpass)):
+    #         z_vals_log = torch.cat((z_vals_log, torch.linspace(m.log10(self.z_bounds[i]), m.log10(self.z_bounds[i+1])-(m.log10(self.z_bounds[i+1])-m.log10(self.z_bounds[i]))/self.steps_firstpass[i], self.steps_firstpass[i], device=rays_o.device)))
+    #     z_vals_log = z_vals_log.expand(rays_o.shape[0], -1)
+    #     z_vals = torch.pow(10, z_vals_log)
+    #     return z_vals_log, z_vals
 
-        rays_o, rays_d = self.get_rays(h, w, K, E)
-        z_vals_log, z_vals = self.efficient_sampling(rays_o, rays_d, self.steps_importance, self.alpha_importance)
-        xyzs, dirs = self.get_sample_points(rays_o, rays_d, z_vals)
-        xyzs_centered = xyzs - self.translation_center.to(xyzs.device)
-        xyzs_warped = self.mipnerf360_scale(xyzs_centered, self.inner_bound, self.outer_bound)
-        n_expand = n[:, None].expand(-1, z_vals.shape[-1])
 
-        sigmas, rgbs, aux_outputs_net = self.model(xyzs_warped, dirs, n_expand, self.outer_bound)
+#     @torch.no_grad()
+#     def reweight_weights(self, weights, alpha, steps):
+#         weights = torch.cat([weights.new_zeros((weights.shape[0], 1)), weights, weights.new_zeros((weights.shape[0], 1))], dim=-1)
+#         weights = 1/2 * (torch.maximum(weights[..., :-2], weights[..., 1:-1]) + torch.maximum(weights[..., 1:-1], weights[..., 2:]))
+#         weights = weights + alpha / weights.shape[-1]
+#         c = 0
+#         for i in range(len(steps)):
+#             weights[:, c:c+steps[i]] *= steps[i] / sum(steps)
+#             c += steps[i]
+#         weights = weights / torch.sum(weights, dim=-1, keepdim=True)  # [N_rays, N_samples-1]
+#         return weights
 
-        image, invdepth, weights = self.render_rays_log(sigmas, rgbs, z_vals, z_vals_log)
-        image = image + (1 - torch.sum(weights, dim=-1)[..., None]) * bg_color
-        z_vals_log_s = (z_vals_log - m.log10(self.z_bounds[0])) / (m.log10(self.z_bounds[-1]) - m.log10(self.z_bounds[0]))
+    
+#     @torch.no_grad()
+#     def efficient_sampling(self, rays_o, rays_d, n_samples, alpha_const):
+#         z_vals_log, z_vals = self.get_uniform_z_vals(rays_o, rays_d, self.steps_firstpass)
 
-        # auxilary outputs that may be useful for inference of analysis, but not used in training
-        aux_outputs = {}
-        aux_outputs['invdepth'] = invdepth.detach()
-        aux_outputs['z_vals'] = z_vals.detach()
-        aux_outputs['z_vals_log'] = z_vals_log.detach()
-        aux_outputs['sigmas'] = sigmas.detach()
-        aux_outputs['rgbs'] = rgbs.detach()
-        aux_outputs['xyzs'] = xyzs.detach()
-        aux_outputs['x_hashtable'] = aux_outputs_net['x_hashtable']
+#         xyzs, dirs = self.get_sample_points(rays_o, rays_d, z_vals)
+#         xyzs_centered = xyzs - self.translation_center.to(xyzs.device)
+#         xyzs_warped = self.mipnerf360_scale(xyzs_centered, self.inner_bound, self.outer_bound)
 
-        return image, weights, z_vals_log_s, aux_outputs
+#         sigmas, _ = self.model.density(xyzs_warped, self.outer_bound)
+
+#         delta = z_vals_log.new_zeros(sigmas.shape)  # [N_rays, N_samples]
+#         delta[:, :-1] = (z_vals_log[:, 1:] - z_vals_log[:, :-1])
+
+#         alpha = 1 - torch.exp(-sigmas * delta)  # [N_rays, N_samples]
+
+#         alpha_shift = torch.cat([alpha.new_zeros((alpha.shape[0], 1)), alpha], dim=-1)[:, :-1]  # [N_rays, N_samples]
+#         weights = alpha * torch.cumprod(1 - alpha_shift, dim=-1)  # [N_rays, N_samples]
+
+#         weights_re = self.reweight_weights(weights, alpha_const, self.steps_firstpass)
+
+#         z_vals_log_fine = self.sample_pdf(z_vals_log, weights_re, n_samples)
+#         z_vals_fine = torch.pow(10, z_vals_log_fine)
+
+#         return z_vals_log_fine, z_vals_fine
+
+
+#     def render(self, n, h, w, K, E, bg_color):
+
+#         rays_o, rays_d = self.get_rays(h, w, K, E)
+#         z_vals_log, z_vals = self.efficient_sampling(rays_o, rays_d, self.steps_importance, self.alpha_importance)
+#         xyzs, dirs = self.get_sample_points(rays_o, rays_d, z_vals)
+#         xyzs_centered = xyzs - self.translation_center.to(xyzs.device)
+#         xyzs_warped = self.mipnerf360_scale(xyzs_centered, self.inner_bound, self.outer_bound)
+#         n_expand = n[:, None].expand(-1, z_vals.shape[-1])
+
+#         sigmas, rgbs, aux_outputs_net = self.model(xyzs_warped, dirs, n_expand, self.outer_bound)
+
+#         image, invdepth, weights = self.render_rays_log(sigmas, rgbs, z_vals, z_vals_log)
+#         image = image + (1 - torch.sum(weights, dim=-1)[..., None]) * bg_color
+#         z_vals_log_s = (z_vals_log - m.log10(self.z_bounds[0])) / (m.log10(self.z_bounds[-1]) - m.log10(self.z_bounds[0]))
+
+#         # auxilary outputs that may be useful for inference of analysis, but not used in training
+#         aux_outputs = {}
+#         aux_outputs['invdepth'] = invdepth.detach()
+#         aux_outputs['z_vals'] = z_vals.detach()
+#         aux_outputs['z_vals_log'] = z_vals_log.detach()
+#         aux_outputs['sigmas'] = sigmas.detach()
+#         aux_outputs['rgbs'] = rgbs.detach()
+#         aux_outputs['xyzs'] = xyzs.detach()
+#         aux_outputs['x_hashtable'] = aux_outputs_net['x_hashtable']
+
+#         return image, weights, z_vals_log_s, aux_outputs
+
+
+
+## Calculate density distribiution along ray using forward only first pass to inform second pass
+@torch.no_grad()
+def get_uniform_z_vals(steps:list[int], z_bounds:list[int], n_rays:int):
+    z_vals_log = torch.empty((0), device='cuda')
+    for i in range(len(steps)):
+        z_vals_start = m.log10(z_bounds[i])
+        z_vals_end = m.log10(z_bounds[i+1])-(m.log10(z_bounds[i+1])-m.log10(z_bounds[i]))/steps[i]
+        z_vals_log = torch.cat((z_vals_log, torch.linspace(z_vals_start, z_vals_end, steps[i])))
+    z_vals_log = z_vals_log.expand(n_rays, -1)
+    z_vals = torch.pow(10, z_vals_log)
+    return z_vals_log, z_vals
+
+
+@torch.no_grad()
+def regularize_weights(weights, alpha, steps):
+    weights = torch.cat([weights.new_zeros((weights.shape[0], 1)), weights, weights.new_zeros((weights.shape[0], 1))], dim=-1)
+    weights = 1/2 * (torch.maximum(weights[..., :-2], weights[..., 1:-1]) + torch.maximum(weights[..., 1:-1], weights[..., 2:]))
+    weights = weights + alpha / weights.shape[-1]
+    c = 0
+    for i in range(len(steps)):
+        weights[:, c:c+steps[i]] *= steps[i] / sum(steps)
+        c += steps[i]
+    weights = weights / torch.sum(weights, dim=-1, keepdim=True)  # [N_rays, N_samples-1]
+    return weights
+
+
+@torch.no_grad()
+def sample_pdf(z_vals, weights, steps):
+
+    N_rays, N_samples = z_vals.shape
+
+    pdf = weights  # [N_rays, N_samples]
+    cdf = torch.cumsum(pdf, dim=-1)  # [N_rays, N_samples]
+
+    # print(cdf.shape)
+
+    z_vals_mid = (z_vals[:, :-1] + z_vals[:, 1:]) / 2  # [N_rays, N_samples]
+
+    # Take uniform samples
+    u = torch.linspace(0, 1-1/steps, steps, device=weights.device)  # [N_rays, steps]
+    u = u[None, :].expand(N_rays, -1)
+    u = u + torch.rand([N_rays, steps], device=weights.device)/steps  # [N_rays, N_samples]
+    u = u * (cdf[:, -2, None] - cdf[:, 1, None])
+    u = u + cdf[:, 1, None]
+
+    inds = torch.searchsorted(cdf[:, 1:-2], u, right=True) + 1  # [N_rays, steps]
+
+    cdf_below = torch.gather(input=cdf, dim=1, index=inds-1)
+    cdf_above = torch.gather(input=cdf, dim=1, index=inds)
+    t = (u - cdf_below) / (cdf_above - cdf_below)
+
+    z_vals_mid_below = torch.gather(input=z_vals_mid, dim=1, index=inds-1)
+    z_vals_mid_above = torch.gather(input=z_vals_mid, dim=1, index=inds)
+    z_vals_im = z_vals_mid_below + (z_vals_mid_above - z_vals_mid_below) * t
+
+    z_vals_fine = z_vals_im
+
+    return z_vals_fine
+
+
+@torch.no_grad()
+def efficient_sampling(
+    models:Union[NeRFCoordinateWrapper, list[NeRFCoordinateWrapper]],
+    rays_o,
+    rays_d,
+    steps_firstpass,
+    steps_importance,
+    alpha_importance,):
+    z_vals_log, z_vals = get_uniform_z_vals(rays_o, rays_d, steps_firstpass)
+
+    xyzs, _ = get_sample_points(rays_o, rays_d, z_vals)
+
+    if type(models) is list:
+        sigmas = torch.zeros((len(models), *xyzs.shape[:-1], 1))
+        for i, model in enumerate(models):
+            sigmas[i] = model.density(xyzs)
+        sigma = torch.sum(sigmas, dim=0)
+    else:
+        sigma = model(xyzs)
+
+    delta = z_vals_log.new_zeros(sigma.shape)  # [N_rays, N_samples]
+    delta[:, :-1] = (z_vals_log[:, 1:] - z_vals_log[:, :-1])
+
+    alpha = 1 - torch.exp(-sigma * delta)  # [N_rays, N_samples]
+
+    alpha_shift = torch.cat([alpha.new_zeros((alpha.shape[0], 1)), alpha], dim=-1)[:, :-1]  # [N_rays, N_samples]
+    weights = alpha * torch.cumprod(1 - alpha_shift, dim=-1)  # [N_rays, N_samples]
+
+    weights_re = regularize_weights(weights, alpha_importance, steps_firstpass)
+
+    z_vals_log_fine = sample_pdf(z_vals_log, weights_re, steps_importance)
+    z_vals_fine = torch.pow(10, z_vals_log_fine)
+
+    return z_vals_log_fine, z_vals_fine
+
+
+def get_rays(h, w, K, E):
+    """ Ray generation for Oliver's calibration format """
+    dirs = torch.stack([w+0.5, h+0.5, torch.ones_like(w)], -1)  # [N_rays, 3]
+    dirs = torch.inverse(K) @ dirs[:, :, None]  # [N_rays, 3, 1]
+
+    rays_d = E[:, :3, :3] @ dirs  # [N_rays, 3, 1]
+    rays_d = torch.squeeze(rays_d, dim=2)  # [N_rays, 3]
+
+    rays_o = E[:, :3, -1].expand(rays_d.shape[0], -1)
+
+    return rays_o, rays_d
+
+    
+def get_sample_points(rays_o, rays_d, z_vals):
+    N_rays, N_samples = z_vals.shape
+
+    query_points = rays_d.new_zeros((N_rays, N_samples, 3))  # [N_rays, N_samples, 3]
+    query_points = rays_o[:, None, :].expand(-1, N_samples, -1) + rays_d[:, None, :].expand(-1, N_samples, -1) * z_vals[..., None]  # [N_rays, N_samples, 3]
+
+    norm = torch.linalg.norm(rays_d, dim=-1, keepdim=True)
+    query_dirs = rays_d / norm
+    query_dirs = query_dirs[:, None, :].expand(-1, N_samples, -1)
+
+    return query_points, query_dirs
+
+# def render_rays_log(sigmas, rgbs, z_vals, z_vals_log):
+#     N_rays, N_samples = z_vals.shape[:2]
+
+#     delta = z_vals_log.new_zeros([N_rays, N_samples])  # [N_rays, N_samples]
+#     delta[:, :-1] = (z_vals_log[:, 1:] - z_vals_log[:, :-1])
+
+#     alpha = 1 - torch.exp(-sigmas * delta)  # [N_rays, N_samples]
+
+#     alpha_shift = torch.cat([alpha.new_zeros((alpha.shape[0], 1)), alpha], dim=-1)[:, :-1]  # [N_rays, N_samples]
+#     weights = alpha * torch.cumprod(1 - alpha_shift, dim=-1)  # [N_rays, N_samples]
+
+#     rgb = torch.sum(weights[..., None] * rgbs, -2)  # [N_rays, 3]
+#     invdepth = torch.sum(weights / z_vals, -1)  # [N_rays]
+
+#     return rgb, invdepth, weights
+
+def render_rays_log(sigmas, colors, z_vals, z_vals_log):
+    N_rays, N_samples = z_vals.shape[:2]
+
+    delta = z_vals_log.new_zeros([N_rays, N_samples])  # [N_rays, N_samples]
+    delta[:, :-1] = (z_vals_log[:, 1:] - z_vals_log[:, :-1])
+
+    alphas = 1 - torch.exp(-sigmas * delta[None, ...])  # [N_rays, N_samples]
+    emits = alphas / torch.sum(alphas, dim=0, keepdim=True) * colors
+    emit = torch.sum(emits, dim=0)
+
+    sigma = torch.sum(sigmas, dim=0)
+    alpha = 1 - torch.exp(-sigma * delta)  # [N_rays, N_samples]
+    alpha_shift = torch.cat([alpha.new_zeros((alpha.shape[0], 1)), alpha], dim=-1)[:, :-1]  # [N_rays, N_samples]
+    weight = alpha * torch.cumprod(1 - alpha_shift, dim=-1)  # [N_rays, N_samples]
+
+    pixel = torch.sum(weight[..., None] * emit, -2)  # [N_rays, 3]
+    invdepth = torch.sum(weight / z_vals, -1)  # [N_rays]
+
+    return pixel, invdepth, weight
+
+
+def render(
+    models:Union[NeRFCoordinateWrapper, list[NeRFCoordinateWrapper]],
+    n:torch.LongTensor,
+    h:torch.LongTensor,
+    w:torch.LongTensor,
+    K:torch.Tensor,
+    E:torch.Tensor,
+    steps_firstpass:list[int],
+    steps_importance:int,
+    alpha_importance:float,
+    bg_color:torch.Tensor):
+    
+    rays_o, rays_d = get_rays(h, w, K, E)
+    z_vals_log, z_vals = efficient_sampling(models, rays_o, rays_d, steps_firstpass, steps_importance, alpha_importance)
+    xyzs, dirs = get_sample_points(rays_o, rays_d, z_vals)
+    n_expand = n[:, None].expand(-1, z_vals.shape[-1])
+
+    if type(models) is list:
+        sigmas = torch.zeros((len(models), *xyzs.shape[:-1], 1))
+        colors = torch.zeros((len(models), *xyzs.shape))
+        for i, model in enumerate(models):
+            sigmas[i], colors[i] = model(xyzs, dirs, n_expand)
+    else:
+        sigma, color = model(xyzs, dirs, n_expand)
+        sigmas, colors = sigma[None, ...], color[None, ...]
+
+    pixel, invdepth, weight = render_rays_log(sigmas, colors, z_vals, z_vals_log)
+    pixel = pixel + (1 - torch.sum(weight, dim=-1)[..., None]) * bg_color
+
+    z_vals_log_s = (z_vals_log - m.log10(z_bounds[0])) / (m.log10(z_bounds[-1]) - m.log10(z_bounds[0]))
+
+    # auxilary outputs that may be useful for inference of analysis, but not used in training
+    aux_outputs = {}
+    aux_outputs['invdepth'] = invdepth.detach()
+    aux_outputs['z_vals'] = z_vals.detach()
+    aux_outputs['z_vals_log'] = z_vals_log.detach()
+    aux_outputs['sigmas'] = sigmas.detach()
+    # aux_outputs['pixel'] = pixel.detach()
+    aux_outputs['xyzs'] = xyzs.detach()
+
+    return pixel, weight, z_vals_log_s, aux_outputs
+
+    

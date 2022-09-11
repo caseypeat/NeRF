@@ -13,16 +13,19 @@ hydra:
 
 scene:
   scene_paths:
-   - /home/casey/PhD/data/conan_scans/ROW_349_EAST_SLOW_0004/scene.json
+  #  - /home/casey/PhD/data/conan_scans/ROW_349_EAST_SLOW_0004/scene.json
   #  - /home/casey/PhD/data/conan_scans/ROW_349_EAST_SLOW_0005/scene.json
   #  - /home/casey/PhD/data/conan_scans/ROW_349_EAST_SLOW_0006/scene.json
 
   #  - /home/casey/PhD/data/conan_scans/ROW_349_WEST_SLOW_0007/scene.json
   #  - /home/casey/PhD/data/conan_scans/ROW_349_WEST_SLOW_0008/scene.json
   #  - /home/casey/PhD/data/conan_scans/ROW_349_WEST_SLOW_0009/scene.json
+   - /mnt/maara/genie_scans/blenheim_07_22/manual/05-07-22_10-17/368_east/scene.json
 
   frame_ranges:
-   - null
+   -
+    - 100
+    - 140
   transforms:
    - null
   image_scale: 0.5
@@ -30,13 +33,13 @@ scene:
   outer_bound: 2.5
 
 log:
-  root_dir: './logs/allign/0004'
+  root_dir: './genie_scans'
   eval_image_freq: end
   eval_pointcloud_freq: end
   save_weights_freq: end
 
 trainer:
-  num_epochs: 30
+  num_epochs: 100
   iters_per_epoch: 100
   n_rays: 16384
   dist_loss_lambda1: 1e-5
