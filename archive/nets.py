@@ -7,7 +7,7 @@ import tinycudann as tcnn
 import helpers
 # import raymarching
 
-from renderer import NerfRenderer
+from render import NerfRenderer
 
 
 class NerfHash(NerfRenderer):

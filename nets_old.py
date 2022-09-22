@@ -1,14 +1,8 @@
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
 import tinycudann as tcnn
-
-from typing import Optional, Union
-
-from loaders.camera_geometry_loader_re2 import IndexMapping
-from rotation import Exp_vector, Exp
 
 # from renderer import NerfRenderer
 
@@ -112,7 +106,7 @@ class NeRFNetwork(nn.Module):
         )
 
     
-    def forward(self, x, d, n):
+    def forward(self, x, d, n, outer_bound):
 
         prefix = x.shape[:-1]
         x = x.reshape(-1, 3)
@@ -120,6 +114,7 @@ class NeRFNetwork(nn.Module):
         n = n.reshape(-1)
 
         # sigma
+        x = (x + outer_bound) / (2 * outer_bound) # to [0, 1]
         x_hashtable = self.encoder(x)
 
         sigma_network_output = self.sigma_net(x_hashtable)
@@ -145,16 +140,17 @@ class NeRFNetwork(nn.Module):
         sigma = sigma.reshape(*prefix)
         color = color.reshape(*prefix, -1)
 
-        # aux_outputs_net = {}
-        # aux_outputs_net['x_hashtable'] = x_hashtable.reshape(*prefix, -1).detach()
+        aux_outputs_net = {}
+        aux_outputs_net['x_hashtable'] = x_hashtable.reshape(*prefix, -1).detach()
 
-        return sigma, color
+        return sigma, color, aux_outputs_net
 
-    def density(self, x):
+    def density(self, x, outer_bound):
 
         prefix = x.shape[:-1]
         x = x.reshape(-1, 3)
 
+        x = (x + outer_bound) / (2 * outer_bound) # to [0, 1]
         x_hashtable = self.encoder(x)
         sigma_network_output = self.sigma_net(x_hashtable)
 
@@ -162,118 +158,7 @@ class NeRFNetwork(nn.Module):
 
         sigma = sigma.reshape(*prefix)
 
-        # aux_outputs_net = {}
-        # aux_outputs_net['x_hashtable'] = x_hashtable.reshape(*prefix, -1).detach()
+        aux_outputs_net = {}
+        aux_outputs_net['x_hashtable'] = x_hashtable.reshape(*prefix, -1).detach()
 
-        return sigma
-    
-
-class Transform(nn.Module):
-    def __init__(self, init_transform):
-        super().__init__()
-
-        self.init_transform = torch.nn.Parameter(init_transform, requires_grad=False)
-
-        self.R = torch.nn.Parameter(torch.zeros((3,)), requires_grad=True)
-        self.T = torch.nn.Parameter(torch.zeros((3,)), requires_grad=True)
-
-    def forward(self, xyzs_a):
-
-        transform = torch.eye(4, dtype=torch.float32, device='cuda')
-        transform[:3, :3] = Exp(self.R)
-        transform[:3, 3] = self.T
-
-        b = xyzs_a.reshape(-1, 3)
-        b1 = torch.cat([b, b.new_ones((b.shape[0], 1))], dim=1)
-        b2 = (self.init_transform @ b1.T).T
-        b3 = (transform @ b2.T).T
-        xyzs_b = b3[:, :3].reshape(*xyzs_a.shape)
-
-        return xyzs_b
-
-
-class OptimizePose(nn.Module):
-    def __init__(self, index_mapping:IndexMapping, mode:str):
-        super().__init__()
-
-        self.index_mapping = index_mapping
-        self.mode = mode
-
-        if self.mode == 'scan':
-            self.num_poses = self.index_mapping.get_num_scans()
-        if self.mode == 'rig':
-            self.num_poses = self.index_mapping.get_num_rigs()
-        if self.mode == 'camera':
-            self.num_poses = self.index_mapping.get_num_cams()
-
-        self.R = torch.nn.Parameter(torch.zeros((self.num_poses, 3)), requires_grad=True)
-        self.T = torch.nn.Parameter(torch.zeros((self.num_poses, 3)), requires_grad=True)
-
-    def forward(self, n:torch.LongTensor, E:torch.Tensor):
-        if self.mode == 'scan':
-            pose = self.index_mapping.idx_to_src(n)[0]
-        if self.mode == 'rig':
-            pose = self.index_mapping.idx_to_rig(n)
-        if self.mode == 'camera':
-            pose = torch.clone(n)
-
-        pose_transforms = torch.zeros((len(n), 4, 4))
-        pose_transforms[:, 3, 3] = 1
-        pose_transforms[:, :3, :3] = Exp_vector(self.R[pose])
-        pose_transforms[:, :3, 3] = self.T[pose]
-
-        E_transformed = pose_transforms @ E
-
-        return E_transformed
-
-
-def mipnerf360_scale(xyzs, bound_inner, bound_outer):
-    d = torch.linalg.norm(xyzs, dim=-1)[..., None].expand(-1, -1, 3)
-    xyzs_warped = torch.clone(xyzs)
-    xyzs_warped[d > bound_inner] = xyzs_warped[d > bound_inner] * ((bound_outer - (bound_outer - bound_inner) / d[d > bound_inner]) / d[d > bound_inner])
-    return xyzs_warped
-
-
-class NeRFCoordinateWrapper(nn.Module):
-    def __init__(self, 
-        model:NeRFNetwork,
-        transform:Optional[Transform],
-        inner_bound:int,
-        outer_bound:int,
-        translation_center:torch.Tensor):
-        super().__init__()
-
-        self.model = model
-        self.transform = transform
-
-        self.inner_bound = inner_bound
-        self.outer_bound = outer_bound
-        self.translation_center = translation_center
-
-    def forward(self, xyzs, dirs, n):
-        if self.transform is None:
-            xyzs_transform = xyzs
-        else:
-            xyzs_transform = self.transform(xyzs)
-
-        xyzs_centered = xyzs_transform - self.translation_center.to(xyzs.device)
-        xyzs_warped = mipnerf360_scale(xyzs_centered, self.inner_bound, self.outer_bound)
-        xyzs_norm = (xyzs_warped + self.outer_bound) / (2 * self.outer_bound) # to [0, 1]
-
-        sigmas, rgbs = self.model(xyzs_norm, dirs, n)
-
-        return sigmas, rgbs
-
-    def density(self, xyzs):
-        if self.transform is None:
-            xyzs_transform = xyzs
-        else:
-            xyzs_transform = self.transform(xyzs)
-
-        xyzs_centered = xyzs_transform - self.translation_center.to(xyzs.device)
-        xyzs_warped = mipnerf360_scale(xyzs_centered, self.inner_bound, self.outer_bound)
-        xyzs_norm = (xyzs_warped + self.outer_bound) / (2 * self.outer_bound) # to [0, 1]
-
-        sigmas = self.model.density(xyzs_norm)
-
-        return sigmas
+        return sigma, aux_outputs_net

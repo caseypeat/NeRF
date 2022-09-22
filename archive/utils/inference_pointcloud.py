@@ -11,7 +11,7 @@ from omegaconf import OmegaConf
 from loaders.camera_geometry_loader import CameraGeometryLoader
 
 from nets import NeRFNetwork
-from renderer import NerfRenderer
+from render import NerfRenderer
 from trainer import Trainer
 from logger import Logger
 from inference import Inferencer

@@ -3,7 +3,7 @@ import torch
 
 from tqdm import tqdm
 
-from camera_geometry.scan import load_scan
+from camera_geometry.scan import Scan
 from camera_geometry.scan.views import load_frames
 
 
@@ -17,7 +17,8 @@ class CameraGeometryLoader(object):
         self.N = 0
 
         for scene_path, frame_range, transform_path in zip(scene_paths, frame_ranges, transforms):
-            scene = load_scan(scene_path, frame_range=frame_range, image_scale=image_scale)
+            # scene = Scan.load(scene_path, frame_range=frame_range, image_scale=image_scale)
+            scene = Scan.load(scene_path)
             frames = load_frames(scene)
             if transform_path is not None:
                 transform = np.load(transform_path)
@@ -49,7 +50,7 @@ class CameraGeometryLoader(object):
                 for frame in rig:
                     self.images[i, :, :, :3] = torch.ByteTensor(frame.rgb)
                     if self.depths_bool:
-                        self.depths[i, :, :] = torch.Tensor(frame.depth)
+                        self.depths[i, :, :] = torch.Tensor(frame.depth) * 16/65536
                     self.intrinsics[i] = torch.Tensor(frame.camera.intrinsic)
                     self.extrinsics[i] =  torch.Tensor(transform) @ torch.Tensor(frame.camera.extrinsic)
                     i += 1

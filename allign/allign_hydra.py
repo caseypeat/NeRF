@@ -12,7 +12,8 @@ from omegaconf import OmegaConf, DictConfig
 from tqdm import tqdm
 
 from loaders.camera_geometry_loader import CameraGeometryLoader
-from renderer import NerfRenderer
+# from loaders.camera_geometry_loader_re2 import CameraGeometryLoader
+from render import NerfRenderer
 from nets import NeRFNetwork
 
 from misc import configurator
@@ -83,20 +84,20 @@ def train(cfg : DictConfig) -> None:
     pcd_b_rs = pcd_b.uniform_down_sample(100)
 
     a = np.array(pcd_a_rs.points)
-    thresh1 = (np.amax(a[:, 0]) - np.amin(a[:, 0])) * 0.25 + np.amin(a[:, 0])
-    thresh2 = (np.amax(a[:, 0]) - np.amin(a[:, 0])) * 0.75 + np.amin(a[:, 0])
-    a = a[np.broadcast_to(a[:, 0, None], (a.shape[0], 3)) > thresh1].reshape(-1, 3)
-    a = a[np.broadcast_to(a[:, 0, None], (a.shape[0], 3)) < thresh2].reshape(-1, 3)
+    # thresh1 = (np.amax(a[:, 0]) - np.amin(a[:, 0])) * 0.25 + np.amin(a[:, 0])
+    # thresh2 = (np.amax(a[:, 0]) - np.amin(a[:, 0])) * 0.75 + np.amin(a[:, 0])
+    # a = a[np.broadcast_to(a[:, 0, None], (a.shape[0], 3)) > thresh1].reshape(-1, 3)
+    # a = a[np.broadcast_to(a[:, 0, None], (a.shape[0], 3)) < thresh2].reshape(-1, 3)
 
-    thresh1 = (np.amax(a[:, 1]) - np.amin(a[:, 1])) * 0.25 + np.amin(a[:, 1])
-    thresh2 = (np.amax(a[:, 1]) - np.amin(a[:, 1])) * 0.75 + np.amin(a[:, 1])
-    a = a[np.broadcast_to(a[:, 1, None], (a.shape[0], 3)) > thresh1].reshape(-1, 3)
-    a = a[np.broadcast_to(a[:, 1, None], (a.shape[0], 3)) < thresh2].reshape(-1, 3)
+    # thresh1 = (np.amax(a[:, 1]) - np.amin(a[:, 1])) * 0.25 + np.amin(a[:, 1])
+    # thresh2 = (np.amax(a[:, 1]) - np.amin(a[:, 1])) * 0.75 + np.amin(a[:, 1])
+    # a = a[np.broadcast_to(a[:, 1, None], (a.shape[0], 3)) > thresh1].reshape(-1, 3)
+    # a = a[np.broadcast_to(a[:, 1, None], (a.shape[0], 3)) < thresh2].reshape(-1, 3)
 
-    # thresh1 = (np.amax(a[:, 2]) - np.amin(a[:, 2])) * 0.25 + np.amin(a[:, 2])
-    # thresh2 = (np.amax(a[:, 2]) - np.amin(a[:, 2])) * 0.75 + np.amin(a[:, 2])
-    # a = a[np.broadcast_to(a[:, 2, None], (a.shape[0], 3)) > thresh1].reshape(-1, 3)
-    # a = a[np.broadcast_to(a[:, 2, None], (a.shape[0], 3)) < thresh2].reshape(-1, 3)
+    thresh1 = (np.amax(a[:, 2]) - np.amin(a[:, 2])) * 0.25 + np.amin(a[:, 2])
+    thresh2 = (np.amax(a[:, 2]) - np.amin(a[:, 2])) * 0.75 + np.amin(a[:, 2])
+    a = a[np.broadcast_to(a[:, 2, None], (a.shape[0], 3)) > thresh1].reshape(-1, 3)
+    a = a[np.broadcast_to(a[:, 2, None], (a.shape[0], 3)) < thresh2].reshape(-1, 3)
 
     # thresh = (np.amax(a[:, 1]) - np.amin(a[:, 1])) * 0.5 + np.amin(a[:, 1])
     # a = a[np.broadcast_to(a[:, 1, None], (a.shape[0], 3)) < thresh].reshape(-1, 3)
@@ -108,20 +109,20 @@ def train(cfg : DictConfig) -> None:
     # 1 - y: left to right
     # 2 - z: up to down
     b = np.array(pcd_b_rs.points)
-    thresh1 = (np.amax(b[:, 0]) - np.amin(b[:, 0])) * 0.25 + np.amin(b[:, 0])
-    thresh2 = (np.amax(b[:, 0]) - np.amin(b[:, 0])) * 0.75 + np.amin(b[:, 0])
-    b = b[np.broadcast_to(b[:, 0, None], (b.shape[0], 3)) > thresh1].reshape(-1, 3)
-    b = b[np.broadcast_to(b[:, 0, None], (b.shape[0], 3)) < thresh2].reshape(-1, 3)
+    # thresh1 = (np.amax(b[:, 0]) - np.amin(b[:, 0])) * 0.25 + np.amin(b[:, 0])
+    # thresh2 = (np.amax(b[:, 0]) - np.amin(b[:, 0])) * 0.75 + np.amin(b[:, 0])
+    # b = b[np.broadcast_to(b[:, 0, None], (b.shape[0], 3)) > thresh1].reshape(-1, 3)
+    # b = b[np.broadcast_to(b[:, 0, None], (b.shape[0], 3)) < thresh2].reshape(-1, 3)
 
-    thresh1 = (np.amax(b[:, 1]) - np.amin(b[:, 1])) * 0.25 + np.amin(b[:, 1])
-    thresh2 = (np.amax(b[:, 1]) - np.amin(b[:, 1])) * 0.75 + np.amin(b[:, 1])
-    b = b[np.broadcast_to(b[:, 1, None], (b.shape[0], 3)) > thresh1].reshape(-1, 3)
-    b = b[np.broadcast_to(b[:, 1, None], (b.shape[0], 3)) < thresh2].reshape(-1, 3)
+    # thresh1 = (np.amax(b[:, 1]) - np.amin(b[:, 1])) * 0.25 + np.amin(b[:, 1])
+    # thresh2 = (np.amax(b[:, 1]) - np.amin(b[:, 1])) * 0.75 + np.amin(b[:, 1])
+    # b = b[np.broadcast_to(b[:, 1, None], (b.shape[0], 3)) > thresh1].reshape(-1, 3)
+    # b = b[np.broadcast_to(b[:, 1, None], (b.shape[0], 3)) < thresh2].reshape(-1, 3)
 
-    # thresh1 = (np.amax(b[:, 2]) - np.amin(b[:, 2])) * 0.25 + np.amin(b[:, 2])
-    # thresh2 = (np.amax(b[:, 2]) - np.amin(b[:, 2])) * 0.75 + np.amin(b[:, 2])
-    # b = b[np.broadcast_to(b[:, 2, None], (b.shape[0], 3)) > thresh1].reshape(-1, 3)
-    # b = b[np.broadcast_to(b[:, 2, None], (b.shape[0], 3)) < thresh2].reshape(-1, 3)
+    thresh1 = (np.amax(b[:, 2]) - np.amin(b[:, 2])) * 0.25 + np.amin(b[:, 2])
+    thresh2 = (np.amax(b[:, 2]) - np.amin(b[:, 2])) * 0.75 + np.amin(b[:, 2])
+    b = b[np.broadcast_to(b[:, 2, None], (b.shape[0], 3)) > thresh1].reshape(-1, 3)
+    b = b[np.broadcast_to(b[:, 2, None], (b.shape[0], 3)) < thresh2].reshape(-1, 3)
 
     # thresh = (np.amax(b[:, 1]) - np.amin(b[:, 1])) * 0.5 + np.amin(b[:, 1])
     # b = b[np.broadcast_to(b[:, 1, None], (b.shape[0], 3)) < thresh].reshape(-1, 3)
@@ -137,6 +138,7 @@ def train(cfg : DictConfig) -> None:
 
     dataloader_a = CameraGeometryLoader(
         cfg_a.scene.scene_paths,
+        # [None],
         cfg_a.scene.frame_ranges,
         cfg_a.scene.transforms,
         cfg_a.scene.image_scale,
@@ -144,6 +146,7 @@ def train(cfg : DictConfig) -> None:
 
     dataloader_b = CameraGeometryLoader(
         cfg_b.scene.scene_paths,
+        # [None],
         cfg_b.scene.frame_ranges,
         cfg_b.scene.transforms,
         cfg_b.scene.image_scale,

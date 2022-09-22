@@ -10,6 +10,8 @@ from matplotlib import cm
 
 from tqdm import tqdm
 
+from render import render_nerf
+
 
 def rot90(image):
     if isinstance(image, torch.Tensor):
@@ -224,7 +226,7 @@ def rot90(image):
 
 
 @torch.no_grad()
-def render_image(self, n, h, w, K, E):
+def render_image(renderer, n, h, w, K, E, n_rays):
 
     # _f : flattened
     # _b : batched
@@ -239,8 +241,8 @@ def render_image(self, n, h, w, K, E):
     image_f = torch.zeros((*h_f.shape, 3), device='cpu')
     invdepth_f = torch.zeros(h_f.shape, device='cpu')
 
-    for a in tqdm(range(0, len(n_f), self.n_rays)):
-        b = min(len(n_f), a+self.n_rays)
+    for a in tqdm(range(0, len(n_f), n_rays)):
+        b = min(len(n_f), a+n_rays)
 
         n_fb = n_f[a:b]
         h_fb = h_f[a:b]
@@ -251,13 +253,13 @@ def render_image(self, n, h, w, K, E):
 
         color_bg = torch.ones(3, device='cuda') # [3], fixed white background
 
-        image_fb, _, _, aux_outputs_fb = self.renderer.render(n_fb, h_fb, w_fb, K_fb, E_fb, bg_color=color_bg)
+        image_fb, _, _, aux_outputs_fb = renderer.render(n_fb, h_fb, w_fb, K_fb, E_fb, bg_color=color_bg)
 
         image_f[a:b] = image_fb.cpu()
         invdepth_f[a:b] = aux_outputs_fb['invdepth'].cpu()
 
-    image = torch.reshape(image_f, (*h.shape, 3)).numpy()
-    invdepth = torch.reshape(invdepth_f, h.shape).numpy()
+    image = torch.reshape(image_f, (*h.shape, 3))
+    invdepth = torch.reshape(invdepth_f, h.shape)
 
     return image, invdepth
 
@@ -300,22 +302,35 @@ def extract_surface_geometry_map(weights, z_vals, dist_area, max_var):
 
 
 
-@torch.no_grad()
-def extract_surface_geometry_points(xyzs, rgbs, weights, z_vals, dist_area, max_var, max_radius):
-    dist_mask = calculate_dist_mask(weights, z_vals, dist_area, max_var)
-    median_mask = calculate_cumlative_weights_thresh(weights, 0.5).to(bool)[..., None]
-    inside_radius_mask = torch.linalg.norm(xyzs, dim=-1, keepdim=True) < max_radius
+# @torch.no_grad()
+# def extract_surface_geometry_points(xyzs, rgbs, weights, z_vals, dist_area, max_var, max_radius):
+#     dist_mask = calculate_dist_mask(weights, z_vals, dist_area, max_var)
+#     median_mask = calculate_cumlative_weights_thresh(weights, 0.5).to(bool)[..., None]
+#     inside_radius_mask = torch.linalg.norm(xyzs, dim=-1, keepdim=True) < max_radius
 
-    mask = (dist_mask & median_mask & inside_radius_mask)
+#     mask = (dist_mask & median_mask & inside_radius_mask)
+
+#     points = xyzs[mask.expand(*xyzs.shape)].reshape(-1, 3)
+#     colors = rgbs[mask.expand(*rgbs.shape)].reshape(-1, 3)
+
+#     return points, colors
+
+
+@torch.no_grad()
+def extract_surface_geometry_points(xyzs, colors, weights, z_vals, dist_area, max_var):
+    dist_mask = calculate_dist_mask(weights, z_vals, dist_area, max_var).to(bool)[..., None, None]
+    median_mask = calculate_cumlative_weights_thresh(weights, 0.5).to(bool)[..., None]
+
+    mask = (dist_mask & median_mask)
 
     points = xyzs[mask.expand(*xyzs.shape)].reshape(-1, 3)
-    colors = rgbs[mask.expand(*rgbs.shape)].reshape(-1, 3)
+    colors_ = colors[mask.expand(*colors.shape)].reshape(-1, 3)
 
-    return points, colors
+    return points, colors_
 
 
 @torch.no_grad()
-def render_invdepth_thresh(self, n, h, w, K, E):
+def render_invdepth_thresh(renderer, n, h, w, K, E, n_rays):
 
     n_f = torch.reshape(n, (-1,))
     h_f = torch.reshape(h, (-1,))
@@ -326,8 +341,8 @@ def render_invdepth_thresh(self, n, h, w, K, E):
 
     invdepth_thresh_f = torch.zeros(h_f.shape, device='cpu')
 
-    for a in tqdm(range(0, len(n_f), self.n_rays)):
-        b = min(len(n_f), a+self.n_rays)
+    for a in tqdm(range(0, len(n_f), n_rays)):
+        b = min(len(n_f), a+n_rays)
 
         n_fb = n_f[a:b]
         h_fb = h_f[a:b]
@@ -336,20 +351,20 @@ def render_invdepth_thresh(self, n, h, w, K, E):
         K_fb = K_f[a:b]
         E_fb = E_f[a:b]
 
-        _, weights_fb, _, aux_outputs_fb = self.renderer.render(n_fb, h_fb, w_fb, K_fb, E_fb)
+        _, weights_fb, _, aux_outputs_fb = renderer.render(n_fb, h_fb, w_fb, K_fb, E_fb)
         z_vals_fb = aux_outputs_fb['z_vals']
 
         invdepth_thresh_fb = extract_surface_geometry_map(
                                 weights_fb, z_vals_fb, dist_area=0.5, max_var=0.05)
         invdepth_thresh_f[a:b] = invdepth_thresh_fb.cpu()
 
-    invdepth_thresh = torch.reshape(invdepth_thresh_f, h.shape).numpy()
+    invdepth_thresh = torch.reshape(invdepth_thresh_f, h.shape)
 
     return invdepth_thresh
 
 
 @torch.no_grad()
-def generate_pointcloud(self, n, h, w, K, E):
+def generate_pointcloud(renderer, n, h, w, K, E, n_rays, max_varience, distribution_area):
 
     n_f = torch.reshape(n, (-1,))
     h_f = torch.reshape(h, (-1,))
@@ -361,8 +376,8 @@ def generate_pointcloud(self, n, h, w, K, E):
     points = torch.zeros((0, 3), device='cpu')
     colors = torch.zeros((0, 3), device='cpu')
 
-    for a in tqdm(range(0, len(n_f), self.n_rays)):
-        b = min(len(n_f), a+self.n_rays)
+    for a in tqdm(range(0, len(n_f), n_rays)):
+        b = min(len(n_f), a+n_rays)
 
         n_fb = n_f[a:b].to('cuda')
         h_fb = h_f[a:b].to('cuda')
@@ -371,13 +386,14 @@ def generate_pointcloud(self, n, h, w, K, E):
         K_fb = K_f[a:b].to('cuda')
         E_fb = E_f[a:b].to('cuda')
 
-        _, weights_fb, _, aux_outputs_fb = self.renderer.render(n_fb, h_fb, w_fb, K_fb, E_fb)
+        _, weights_fb, _, aux_outputs_fb = renderer.render(n_fb, h_fb, w_fb, K_fb, E_fb)
         xyzs_fb = aux_outputs_fb['xyzs']
-        rgbs_fb = aux_outputs_fb['rgbs']
+        colors_fb = aux_outputs_fb['colors']
         z_vals_fb = aux_outputs_fb['z_vals']
 
-        points_b, colors_b = extract_surface_geometry_points(xyzs_fb, weights_fb, z_vals_fb,
-                                dist_area=0.5, max_var=0.05, max_radius=1)
+        points_b, colors_b = extract_surface_geometry_points(
+                                xyzs_fb, colors_fb, weights_fb, z_vals_fb,
+                                distribution_area, max_varience)
 
         points = torch.cat([points, points_b.cpu()], dim=0)
         colors = torch.cat([colors, colors_b.cpu()], dim=0)
@@ -386,3 +402,66 @@ def generate_pointcloud(self, n, h, w, K, E):
     pointcloud['points'] = points
     pointcloud['colors'] = colors
     return pointcloud
+
+
+class ImageInference(object):
+    def __init__(self, renderer, dataloader, n_rays, image_num):
+        self.renderer = renderer
+        self.dataloader = dataloader
+
+        self.n_rays = n_rays
+        self.image_num = image_num
+
+    def __call__(self, image_num=None):
+        image_num = self.image_num if image_num is None else image_num 
+        n, h, w, K, E, _, _, _ = self.dataloader.get_image_batch(image_num, device='cuda')
+        return render_image(self.renderer, n, h, w, K, E, self.n_rays)
+
+
+class InvdepthThreshInference(object):
+    def __init__(self, renderer, dataloader, n_rays, image_num):
+        self.renderer = renderer
+        self.dataloader = dataloader
+
+        self.n_rays = n_rays
+        self.image_num = image_num
+
+    def __call__(self, image_num=None):
+        image_num = self.image_num if image_num is None else image_num 
+        n, h, w, K, E, _, _, _ = self.dataloader.get_image_batch(image_num, device='cuda')
+        return render_invdepth_thresh(self.renderer, n, h, w, K, E, self.n_rays)
+
+
+class PointcloudInference(object):
+    def __init__(self,
+        renderer,
+        dataloader,
+
+        max_variance,
+        distribution_area,
+
+        n_rays,
+        cams,
+        freq,
+        side_margin,):
+
+        self.renderer = renderer
+        self.dataloader = dataloader
+
+        self.max_variance = max_variance
+        self.distribution_area = distribution_area
+
+        self.n_rays = n_rays
+        self.cams = cams
+        self.freq = freq
+        self.side_margin = side_margin
+
+    def __call__(self):
+        n, h, w, K, E, _, _, _ = self.dataloader.get_pointcloud_batch(
+            self.cams, self.freq, self.side_margin, device='cpu')
+        return generate_pointcloud(
+            self.renderer,
+            n, h, w, K, E,
+            self.n_rays,
+            self.max_variance,
+            self.distribution_area)

@@ -1,25 +1,26 @@
+import hydra
 import numpy as np
 import torch
 import matplotlib.pyplot as plt
-import sys
-import argparse
 
-from omegaconf import OmegaConf
+from omegaconf import DictConfig, OmegaConf
 
-from loaders.camera_geometry_loader import CameraGeometryLoader
+from loaders.camera_geometry_loader_re2 import CameraGeometryLoader
 
-from nets import NeRFNetwork
-from renderer import NerfRenderer
-from trainer import Trainer
+from nets import NeRFCoordinateWrapper, NeRFNetwork
+from trainer import NeRFTrainer
 from logger import Logger
-from inference import Inferencer
+from metrics import PSNRWrapper, SSIMWrapper, LPIPSWrapper
+from render import Render
+from inference import ImageInference, InvdepthThreshInference, PointcloudInference
 
-from misc import configurator
+# from misc import configurator
 
 
-if __name__ == '__main__':
+@hydra.main(version_base=None, config_path="./configs", config_name="config")
+def train(cfg : DictConfig) -> None:
 
-    cfg = configurator('./configs/config_base.yaml')
+    # cfg = configurator('./configs/config_base.yaml')
 
     logger = Logger(
         root_dir=cfg.log.root_dir,
@@ -28,10 +29,11 @@ if __name__ == '__main__':
 
     logger.log('Initiating Dataloader...')
     dataloader = CameraGeometryLoader(
-        scene_paths=cfg.scene.scene_paths,
-        frame_ranges=cfg.scene.frame_ranges,
-        transforms=cfg.scene.transforms,
-        image_scale=cfg.scene.image_scale,
+        scan_paths=cfg.scan.scan_paths,
+        scan_pose_paths=cfg.scan.scan_pose_paths,
+        frame_ranges=cfg.scan.frame_ranges,
+        frame_strides=cfg.scan.frame_strides,
+        image_scale=cfg.scan.image_scale,
         )
 
     logger.log('Initilising Model...')
@@ -52,34 +54,13 @@ if __name__ == '__main__':
         color_num_layers=cfg.nets.color.num_layers,
     ).to('cuda')
 
-    logger.log('Initilising Renderer...')
-    renderer = NerfRenderer(
+    model_coord = NeRFCoordinateWrapper(
         model=model,
-        inner_bound=cfg.scene.inner_bound,
-        outer_bound=cfg.scene.outer_bound,
-        z_bounds=cfg.renderer.z_bounds,
-        steps_firstpass=cfg.renderer.steps,
-        steps_importance=cfg.renderer.importance_steps,
-        alpha_importance=cfg.renderer.alpha,
-        translation_center=dataloader.translation_center,
+        transform=None,
+        inner_bound=cfg.scan.inner_bound,
+        outer_bound=cfg.scan.outer_bound,
+        translation_center=dataloader.translation_center
     )
-
-    logger.log('Initiating Inference...')
-    if cfg.inference.image.image_num == 'middle':
-        inference_image_num = int(dataloader.images.shape[0]/2) + 3
-    else:
-        inference_image_num = cfg.inference.image.image_num
-    inferencer = Inferencer(
-        renderer=renderer,
-        n_rays=cfg.trainer.n_rays,
-        image_num=inference_image_num,
-        rotate=cfg.inference.image.rotate,
-        max_variance_npy=cfg.inference.pointcloud.max_variance_npy,
-        max_variance_pcd=cfg.inference.pointcloud.max_variance_pcd,
-        distribution_area=cfg.inference.pointcloud.distribution_area,
-        cams=cfg.inference.pointcloud.cams,
-        freq=cfg.inference.pointcloud.freq,
-        )
 
     logger.log('Initiating Optimiser...')
     optimizer = torch.optim.Adam([
@@ -96,13 +77,51 @@ if __name__ == '__main__':
         raise ValueError
     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lmbda, last_epoch=-1, verbose=False)
 
+    metrics = {
+        "eval_lpips": LPIPSWrapper(),
+        "eval_ssim": SSIMWrapper(),
+        "eval_psnr": PSNRWrapper(),
+    }
+
+    renderer = Render(
+        models=model_coord,
+        steps_firstpass=cfg.renderer.steps,
+        z_bounds=cfg.renderer.z_bounds,
+        steps_importance=cfg.renderer.importance_steps,
+        alpha_importance=cfg.renderer.alpha,
+    )
+
+    renderer_thresh = Render(
+        models=model_coord,
+        steps_firstpass=cfg.renderer_thresh.steps,
+        z_bounds=cfg.renderer_thresh.z_bounds,
+        steps_importance=cfg.renderer_thresh.importance_steps,
+        alpha_importance=cfg.renderer_thresh.alpha,
+    )
+
+    inferencers = {
+        "image": ImageInference(
+            renderer, dataloader, cfg.trainer.n_rays, cfg.inference.image.image_num),
+        "invdepth_thresh": InvdepthThreshInference(
+            renderer_thresh, dataloader, cfg.trainer.n_rays, cfg.inference.image.image_num),
+        "pointcloud": PointcloudInference(
+            renderer_thresh,
+            dataloader,
+            cfg.inference.pointcloud.max_variance,
+            cfg.inference.pointcloud.distribution_area,
+            cfg.trainer.n_rays,
+            cfg.inference.pointcloud.cams,
+            cfg.inference.pointcloud.freq,
+            cfg.inference.pointcloud.side_margin)
+    }
+    
     logger.log('Initiating Trainer...')
-    trainer = Trainer(
+    trainer = NeRFTrainer(
         model=model,
         dataloader=dataloader,
         logger=logger,
-        inferencer=inferencer,
         renderer=renderer,
+        inferencers=inferencers,
 
         optimizer=optimizer,
         scheduler=scheduler, 
@@ -111,16 +130,19 @@ if __name__ == '__main__':
         num_epochs=cfg.trainer.num_epochs,
         iters_per_epoch=cfg.trainer.iters_per_epoch,
 
+        dist_loss_range=cfg.trainer.dist_loss_range,
+        depth_loss_range=cfg.trainer.depth_loss_range,
+
         eval_image_freq=cfg.log.eval_image_freq,
         eval_pointcloud_freq=cfg.log.eval_pointcloud_freq,
         save_weights_freq=cfg.log.save_weights_freq,
 
-        dist_loss_lambda1=cfg.trainer.dist_loss_lambda1,
-        dist_loss_lambda2=cfg.trainer.dist_loss_lambda2,
-
-        depth_loss_lambda1=cfg.trainer.depth_loss_lambda1,
-        depth_loss_lambda2=cfg.trainer.depth_loss_lambda2,
+        metrics=metrics,
         )
 
     logger.log('Beginning Training...\n')
     trainer.train()
+
+
+if __name__ == '__main__':
+    train()

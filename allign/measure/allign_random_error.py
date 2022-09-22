@@ -11,7 +11,7 @@ from omegaconf import OmegaConf
 from tqdm import tqdm
 
 from loaders.camera_geometry_loader import CameraGeometryLoader
-from renderer import NerfRenderer
+from render import NerfRenderer
 from nets import NeRFNetwork
 
 from misc import configurator

@@ -4,47 +4,67 @@ import torchmetrics
 import time
 import math as m
 import matplotlib.pyplot as plt
+import open3d as o3d
 
 from tqdm import tqdm
+from typing import Union
 
-import helpers
+import losses
 
-from renderer import render
+from nets import NeRFCoordinateWrapper
+from logger import Logger
 
-# from config import cfg
+# from render import render_nerf
+from inference import render_image, render_invdepth_thresh, generate_pointcloud
+from metrics import MetricWrapper
+from misc import color_depthmap
 
 
-class Trainer(object):
+def logarithmic_scale(i, i_max, x_min, x_max):
+    i_norm = i/i_max
+    log_range = m.log10(x_max) - m.log10(x_min)
+    x = 10**(i_norm * log_range + m.log10(x_min))
+    return x
+
+def convert_pointcloud(pointcloud_npy):
+    pcd = o3d.geometry.PointCloud()
+    pcd.points = o3d.utility.Vector3dVector(pointcloud_npy['points'])
+    pcd.colors = o3d.utility.Vector3dVector(pointcloud_npy['colors'])
+    return pcd
+
+
+
+class NeRFTrainer(object):
     def __init__(
         self,
-        model,
+        logger:Logger,
         dataloader,
-        logger,
-        # inferencer,
-        # renderer,
-        optimizer,
+        model:NeRFCoordinateWrapper,
+        renderer,
+        inferencers,
+
+        optimizer:torch.optim.Optimizer,
         scheduler,
         
-        n_rays,
-        num_epochs,
-        iters_per_epoch,
-        
-        eval_image_freq,
-        eval_pointcloud_freq,
-        save_weights_freq,
-        
-        dist_loss_lambda1,
-        dist_loss_lambda2,
+        n_rays:int,
+        num_epochs:int,
+        iters_per_epoch:int,
 
-        depth_loss_lambda1,
-        depth_loss_lambda2,
+        dist_loss_range:tuple[int, int],
+        depth_loss_range:tuple[int, int],
+        
+        eval_image_freq:Union[int, str],
+        eval_pointcloud_freq:Union[int, str],
+        save_weights_freq:Union[int, str],
+
+        metrics:dict[str, MetricWrapper],
         ):
 
         self.model = model
         self.dataloader = dataloader
         self.logger = logger
-        # self.inferencer = inferencer
-        # self.renderer = renderer
+        self.renderer = renderer
+        self.inferencers = inferencers
 
         self.optimizer = optimizer
         self.scheduler = scheduler
@@ -59,16 +79,12 @@ class Trainer(object):
         self.eval_pointcloud_freq = eval_pointcloud_freq if eval_pointcloud_freq != 'end' else num_epochs
         self.save_weights_freq =  save_weights_freq if save_weights_freq != 'end' else num_epochs
 
-        self.dist_loss_lambda1 = dist_loss_lambda1
-        self.dist_loss_lambda2 = dist_loss_lambda2
+        self.dist_loss_range = dist_loss_range
+        self.depth_loss_range = depth_loss_range
 
-        self.depth_loss_lambda1 = depth_loss_lambda1
-        self.depth_loss_lambda2 = depth_loss_lambda2
+        self.metrics = metrics
 
         self.iter = 0
-
-        self.lpips = torchmetrics.image.lpip.LearnedPerceptualImagePatchSimilarity(net_type='vgg').to('cuda')
-        self.ssim = torchmetrics.StructuralSimilarityIndexMeasure()
 
     def train(self):
 
@@ -81,44 +97,48 @@ class Trainer(object):
             # Output recorded scalars
             self.logger.log(f'Iteration: {self.iter}')
             for key, val in self.logger.scalars.items():
-                self.logger.log(f'Scalar: {key} - Value: {np.mean(np.array(val[-self.iters_per_epoch:])).item():.6f}')
+                moving_avg = np.mean(np.array(val[-self.iters_per_epoch:])).item()
+                self.logger.log(f'Scalar: {key} - Value: {moving_avg:.6f}')
             self.logger.log('')
             
             # Log useful data
             if self.eval_image_freq is not None:
                 if (epoch+1) % self.eval_image_freq == 0:
                     self.logger.log('Rending Image...')
-                    n, h, w, K, E, rgb_gt, _, _ = self.dataloader.get_image_batch(self.inferencer.image_num, device='cuda')
-                    image, invdepth = self.inferencer.render_image(n, h, w, K, E)
-                    self.logger.image_color('image', image, self.iter)
-                    self.logger.image_grey('invdepth', invdepth, self.iter)
+                    image, invdepth = self.inferencers['image']()
+                    # n, h, w, K, E, rgb_gt, _, _ = self.dataloader.get_image_batch(
+                    #     self.inferencer.image_num, device='cuda')
+                    # image, invdepth = render_image(n, h, w, K, E)
+                    self.logger.image('image', image.numpy(), self.iter)
+                    self.logger.image('invdepth', color_depthmap(invdepth.numpy()), self.iter)
 
-                    # Calculate image metrics
-                    pred_bchw = torch.clamp(torch.Tensor(image.copy()).permute(2, 0, 1)[None, ...].to('cuda'), min=0, max=1)
-                    pred_lpips = torch.clamp(pred_bchw * 2 - 1, min=-1, max=1)
-                    target_bchw = torch.clamp(rgb_gt.permute(2, 0, 1)[None, ...].to('cuda'), min=0, max=1)
-                    target_lpips = torch.clamp(target_bchw * 2 - 1, min=-1, max=1)
-                    self.logger.eval_scalar('eval_lpips', self.lpips(pred_lpips, target_lpips), self.iter)
-                    self.logger.eval_scalar('eval_ssim', self.ssim(pred_bchw, target_bchw), self.iter)
-                    self.logger.eval_scalar('eval_psnr', helpers.psnr(pred_bchw, target_bchw), self.iter)
-
-                    for key, val in self.logger.eval_scalars.items():
-                        self.logger.log(f'Eval Scalar: {key} - Value: {val[-1]:.6f}')
-                    self.logger.log('')
+                    # # Calculate image metrics
+                    # pred = image
+                    # target = rgb_gt
+                    # for name, metric in self.metrics:
+                    #     self.logger.eval_scalar(name, metric(pred, target), self.iter)
+                    # for key, val in self.logger.eval_scalars.items():
+                    #     self.logger.log(f'Eval Scalar: {key} - Value: {val[-1]:.6f}')
+                    # self.logger.log('')
 
             if self.eval_image_freq is not None:
                 if (epoch+1) % self.eval_image_freq == 0:
-                    self.logger.log('Rending Invdepth Thresh...')
-                    n, h, w, K, E, _, _, _ = self.dataloader.get_image_batch(self.inferencer.image_num, device='cuda')
-                    invdepth_thresh = self.inferencer.render_invdepth_thresh(n, h, w, K, E)
-                    self.logger.image_grey('invdepth_thresh', invdepth_thresh, self.iter)
+                    invdepth_thresh = self.inferencers['invdepth_thresh']()
+                    # self.logger.log('Rending Invdepth Thresh...')
+                    # n, h, w, K, E, _, _, _ = self.dataloader.get_image_batch(
+                    #     self.inferencer.image_num, device='cuda')
+                    # invdepth_thresh = render_invdepth_thresh(n, h, w, K, E)
+                    self.logger.image('invdepth_thresh',
+                        color_depthmap(invdepth_thresh.numpy()), self.iter)
 
             if self.eval_pointcloud_freq is not None:
                 if (epoch+1) % self.eval_pointcloud_freq == 0:
                     self.logger.log('Generating Pointcloud...')
-                    n, h, w, K, E, _, _, _ = self.dataloader.get_pointcloud_batch(cams=self.inferencer.cams, freq=self.inferencer.freq)
-                    pointcloud = self.inferencer.extract_surface_geometry(n, h, w, K, E)
-                    self.logger.pointcloud(pointcloud, self.iter, self.inferencer.max_variance_pcd)
+                    pointcloud = self.inferencers['pointcloud']()
+                    # n, h, w, K, E, _, _, _ = self.dataloader.get_pointcloud_batch(
+                    #     cams=self.inferencer.cams, freq=self.inferencer.freq)
+                    # pointcloud = generate_pointcloud(n, h, w, K, E)
+                    self.logger.pointcloud(convert_pointcloud(pointcloud), self.iter)
 
             if self.save_weights_freq is not None:
                 if (epoch+1) % self.save_weights_freq == 0:
@@ -126,7 +146,7 @@ class Trainer(object):
                     self.logger.model(self.model, self.iter)
 
 
-    def train_epoch(self, iters_per_epoch):
+    def train_epoch(self, iters_per_epoch:int):
         for i in tqdm(range(iters_per_epoch)):
             self.optimizer.zero_grad()
 
@@ -141,46 +161,46 @@ class Trainer(object):
 
             self.iter += 1
 
-
     def train_step(self):
         self.model.train()
         
-        n, h, w, K, E, rgb_gt, color_bg, _ = self.dataloader.get_random_batch(self.n_rays)
+        n, h, w, K, E, rgb_gt, bg_color, _ = self.dataloader.get_random_batch(self.n_rays, device='cuda')
 
-        rgb, weights, z_vals_log_s, aux_outputs = render(self.model, n, h, w, K, E, color_bg)
-
-        # depth_scalar = 0.0
+        rgb, weights, z_vals_log_s, _ = self.renderer.render(n, h, w, K, E, bg_color)
 
         # Calculate losses
-        loss_rgb = helpers.criterion_rgb(rgb, rgb_gt)
-        if self.dist_loss_lambda1 == 0 or self.dist_loss_lambda2 == 0:
-            loss_dist = 0  # could still calculate loss_dist and multiply with a zero scalar, but has non-trivial computational cost
+        loss_rgb = losses.criterion_rgb(rgb, rgb_gt)
+        if self.dist_loss_range[0] == 0 or self.dist_loss_range[1]== 0:
+            loss_dist = 0  # non-trivial computational cost for full computation
             dist_scalar = 0
             loss = loss_rgb
         else:
-            loss_dist = helpers.criterion_dist(weights, z_vals_log_s)
-            dist_scalar = 10**(self.iter/self.num_iters * (m.log10(self.dist_loss_lambda2) - m.log10(self.dist_loss_lambda1)) + m.log10(self.dist_loss_lambda1))
+            loss_dist = losses.criterion_dist(weights, z_vals_log_s)
+            dist_scalar = logarithmic_scale(
+                self.iter, self.num_iters, self.dist_loss_range[0], self.dist_loss_range[1])
             loss = loss_rgb + dist_scalar * loss_dist
 
-        if self.depth_loss_lambda1 == 0 or self.depth_loss_lambda2 == 0:
+        if self.depth_loss_range[0] == 0 or self.depth_loss_range[1] == 0:
             depth_scalar = 0
             loss_depth = 0
         else:
-            depth_scalar = 10**(self.iter/self.num_iters * (m.log10(self.depth_loss_lambda2) - m.log10(self.depth_loss_lambda2)) + m.log10(self.depth_loss_lambda2))
+            depth_scalar = logarithmic_scale(
+                self.iter, self.num_iters, self.depth_loss_range[0], self.depth_loss_range[1])
             loss_depth = torch.mean(weights * (1 - z_vals_log_s))
             loss = loss + depth_scalar * loss_depth
 
         # Log scalars
         self.logger.scalar('loss', loss, self.iter)
         self.logger.scalar('loss_rgb', loss_rgb, self.iter)
-        self.logger.scalar('psnr_rgb', helpers.psnr(rgb, rgb_gt), self.iter)
+        self.logger.scalar('psnr_rgb', losses.psnr(rgb, rgb_gt), self.iter)
         self.logger.scalar('dist_scalar', dist_scalar, self.iter)
         self.logger.scalar('loss_dist', loss_dist, self.iter)
         self.logger.scalar('depth_scalar', depth_scalar, self.iter)
         self.logger.scalar('loss_depth', loss_depth, self.iter)
-
-        self.logger.scalar('loss (seconds)', loss, int(time.time() - self.t0_train))
-        self.logger.scalar('loss_rgb (seconds)', loss_rgb, int(time.time() - self.t0_train))
-        self.logger.scalar('psnr_rgb (seconds)', helpers.psnr(rgb, rgb_gt), int(time.time() - self.t0_train))
+        
+        t1 = int(time.time() - self.t0_train)
+        self.logger.scalar('loss (seconds)', loss, t1)
+        self.logger.scalar('loss_rgb (seconds)', loss_rgb, t1)
+        self.logger.scalar('psnr_rgb (seconds)', losses.psnr(rgb, rgb_gt), t1)
 
         return loss

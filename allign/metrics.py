@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 
 from allign.rotation import vec2skew, Exp, matrix2xyz_extrinsic
 
-from loaders.camera_geometry_loader import CameraGeometryLoader
+# from loaders.camera_geometry_loader import CameraGeometryLoader
 
 
 class Measure(object):
@@ -25,6 +25,7 @@ class Measure(object):
         rays_o, rays_d = self.renderer.get_rays(h, w, K, E)
         depth_broad = depth[:, None].repeat(1, 3)
         points = rays_o + rays_d * depth_broad
+        # print(depth)
         points = points[depth_broad < self.depth_thresh].reshape(-1, 3) # remove points with depth > depth_thresh
 
         points_pred = transform(points)
@@ -42,14 +43,14 @@ class Measure(object):
 
 
 
-if __name__ == '__main__':
-    scene_path = '/home/casey/Documents/PhD/data/my_renders/vine_C6_0/back_close/cameras.json'
-    loader = CameraGeometryLoader([scene_path], [None], [None], image_scale=0.5)
+# if __name__ == '__main__':
+#     scene_path = '/home/casey/Documents/PhD/data/my_renders/vine_C6_0/back_close/cameras.json'
+#     loader = CameraGeometryLoader([scene_path], [None], [None], image_scale=0.5)
 
-    n, h, w, K, E, rgb_gt, color_bg, depth = loader.get_image_batch(34)
+#     n, h, w, K, E, rgb_gt, color_bg, depth = loader.get_image_batch(34)
 
-    depth[depth > 0.7] = 0
+#     depth[depth > 0.7] = 0
 
-    plt.imshow(depth)
-    plt.show()
+#     plt.imshow(depth)
+#     plt.show()
 

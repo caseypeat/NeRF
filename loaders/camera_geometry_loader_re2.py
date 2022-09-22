@@ -51,6 +51,28 @@ def load_images(scan_list):
     return torch.stack(images, dim=0)
 
 
+def load_depths(scan_list):
+
+    def load_image(undist, image_file):
+        depth = undist.undistort(scan.loader.depth.load_image(image_file)) * 16 / 65536
+        return torch.Tensor(depth)
+
+    params = []
+
+    for scan in scan_list:
+        for rig_index, rig_pose in enumerate(scan.rig_poses):
+            for key, camera in scan.cameras.items():
+                depth_file = scan.image_sets.depth[rig_index][key]
+                params.append([(camera.optimal_undistorted(), depth_file)])
+
+    depths = map_lists(expand(load_image), params)
+    for i in range(len(depths)):
+        depths[i] = depths[i][0]
+
+    return torch.stack(depths, dim=0)
+
+
+
 class IndexMapping(object):
     def __init__(self, scan_dims:list[tuple[int, int]]):
         self.scan_dims = torch.Tensor(scan_dims)
@@ -149,14 +171,19 @@ class CameraGeometryLoader(object):
 
         self.index_mapping = IndexMapping(scan_dims)
 
-        intrinsics, extrinsics = load_calibrations(scan_list, scan_pose_list)
+        self.intrinsics, self.extrinsics = load_calibrations(scan_list, scan_pose_list)
 
-        self.N = intrinsics.shape[0]
+        self.N = self.intrinsics.shape[0]
         self.H = scan_list[0].common_image_size()[1]
         self.W = scan_list[0].common_image_size()[0]
 
+        self.translation_center = torch.mean(self.extrinsics[..., :3, 3], dim=0, keepdims=True)
+
         if self.load_images_bool:
             self.images = load_images(scan_list)
+
+        if self.load_depths_bool:
+            self.depths = load_depths(scan_list)
 
 
     def format_groundtruth(self, gt, background=None):
@@ -186,8 +213,11 @@ class CameraGeometryLoader(object):
         K = self.intrinsics[n].to(device)
         E = self.extrinsics[n].to(device)
 
-        rgb_gt, color_bg = self.format_groundtruth(self.images[n, h, w, :].to(device), background)
-        if self.depths_bool:
+        if self.load_images_bool:
+            rgb_gt, color_bg = self.format_groundtruth(self.images[n, h, w, :].to(device), background)
+        else:
+            rgb_gt, color_bg = None, None
+        if self.load_depths_bool:
             depth = self.depths[n, h, w].to(device)
         else:
             depth = None
@@ -216,12 +246,12 @@ class CameraGeometryLoader(object):
         return self.get_custom_batch(n, h, w, background=(1, 1, 1), device=device)
 
 
-    def get_pointcloud_batch(self, cams, freq, side_buffer, device):
+    def get_pointcloud_batch(self, cams, freq, side_margin, device):
 
         n = []
         for i in range(self.N):
-            s, r, c = self.index_to_src(i)
-            if r > side_buffer and r < self.get_num_rigs(s) - side_buffer:
+            s, r, c = self.index_mapping.idx_to_src(i)
+            if r > side_margin and r < self.index_mapping.get_num_rigs(s) - side_margin:
                 if c in cams:
                     if r % freq == 0:
                         n.append(i)
@@ -234,7 +264,7 @@ class CameraGeometryLoader(object):
         return self.get_custom_batch(n, h, w, background=(1, 1, 1), device=device)
 
 
-    def get_calibration(self, device='cuda'):
+    def get_calibration(self, device):
         K = self.intrinsics.to(device)
         E = self.extrinsics.to(device)
 

@@ -1,0 +1,19 @@
+
+input_paths:
+  config_path_a: ./logs/test2/20220920_221547/config.yaml
+  pointcloud_path_a: ./logs/test2/20220920_221547/pointclouds/3000.pcd
+  model_path_a: ./logs/test2/20220920_221547/model/3000.pth
+
+  config_path_b: './logs/test2/20220920_223034/config.yaml'
+  pointcloud_path_b: ./logs/test2/20220920_223034/pointclouds/3000.pcd
+  model_path_b: ./logs/test2/20220920_223034/model/3000.pth
+
+n_rays: 4096
+iters_per_epoch: 100
+num_epochs: 20
+
+renderer:
+  z_bounds: [0.1, 1]
+  steps_firstpass: [256]
+  importance_steps: 128
+  alpha: 0.2
