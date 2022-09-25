@@ -185,11 +185,20 @@ class Transform(nn.Module):
 
         b = xyzs_a.reshape(-1, 3)
         b1 = torch.cat([b, b.new_ones((b.shape[0], 1))], dim=1)
-        b2 = (self.init_transform @ b1.T).T
-        b3 = (transform @ b2.T).T
-        xyzs_b = b3[:, :3].reshape(*xyzs_a.shape)
+        b2 = (self.get_matrix() @ b1.T).T
+        # b2 = (self.init_transform @ b1.T).T
+        # b3 = (transform @ b2.T).T
+        xyzs_b = b2[:, :3].reshape(*xyzs_a.shape)
 
         return xyzs_b
+
+    def get_matrix(self):
+        transform_local = torch.eye(4, dtype=torch.float32, device='cuda')
+        transform_local[:3, :3] = Exp(self.R)
+        transform_local[:3, 3] = self.T
+        
+        transform = self.init_transform @ transform_local
+        return transform
 
 
 class OptimizePose(nn.Module):

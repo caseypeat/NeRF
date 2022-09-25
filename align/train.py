@@ -63,6 +63,8 @@ def train(cfg : DictConfig) -> None:
     # exit()
 
     transform = Transform(gen_random_transform(0.01, 0.01)).to('cuda')
+    # transform = Transform(torch.eye(4)).to('cuda')
+    # starting_error = gen_random_transform(0.01, 0.01).to('cuda')
 
 
     dataloader_a = CameraGeometryLoader(
@@ -72,7 +74,7 @@ def train(cfg : DictConfig) -> None:
         frame_strides=cfg_a.scan.frame_strides,
         image_scale=cfg_a.scan.image_scale,
         load_images_bool=False,
-        load_depths_bool=True,
+        load_depths_bool=False,
         )
 
     model_a = NeRFNetwork(
@@ -108,6 +110,7 @@ def train(cfg : DictConfig) -> None:
         frame_strides=cfg_b.scan.frame_strides,
         image_scale=cfg_b.scan.image_scale,
         load_images_bool=False,
+        load_depths_bool=False,
         )
 
     model_b = NeRFNetwork(
@@ -170,6 +173,7 @@ def train(cfg : DictConfig) -> None:
         iters_per_epoch=cfg.iters_per_epoch,
         num_epochs=cfg.num_epochs,
         n_rays=cfg.n_rays
+        # starting_error=starting_error
     )
 
     trainer_align.train()
