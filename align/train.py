@@ -19,6 +19,7 @@ from rotation import Exp, matrix2xyz_extrinsic
 
 from align.ransac import global_align
 from align.trainer import TrainerAlign
+from align.logger import AlignLogger
 
 
 def gen_random_transform(R_var, T_var):
@@ -34,16 +35,17 @@ def gen_random_transform(R_var, T_var):
     return transform
 
 
-@hydra.main(version_base=None, config_path="./configs", config_name="config")
+@hydra.main(version_base=None, config_path="./configs/vines", config_name="C1_0")
 def train(cfg : DictConfig) -> None:
     print(OmegaConf.to_yaml(cfg))
 
     cfg_a = OmegaConf.load(cfg.input_paths.config_path_a)
     cfg_b = OmegaConf.load(cfg.input_paths.config_path_b)
 
+    logger = AlignLogger(cfg.output_paths.log, cfg)
 
-    transform = Transform(gen_random_transform(0.01, 0.01)).to('cuda')
-
+    # transform = Transform(gen_random_transform(0.01, 0.01)).to('cuda')
+    transform = Transform(torch.Tensor(np.load(cfg.input_paths.transform_init))).to('cuda')
 
     dataloader_a = CameraGeometryLoader(
         scan_paths=cfg_a.scan.scan_paths,
@@ -118,11 +120,11 @@ def train(cfg : DictConfig) -> None:
     )
 
     optimizer = torch.optim.Adam([
-            {'name': 'translation', 'params': [transform.T], 'lr': 1e-3},
-            {'name': 'rotation', 'params': [transform.R], 'lr': 1e-3},
+            {'name': 'translation', 'params': [transform.T], 'lr': 5e-4},
+            {'name': 'rotation', 'params': [transform.R], 'lr': 5e-4},
             ], lr=1e-3, betas=(0.9, 0.99), eps=1e-15)
     num_iters = cfg.iters_per_epoch * cfg.num_epochs
-    lmbda = lambda x: 0.001**(x/(num_iters))
+    lmbda = lambda x: 0.01**(x/(num_iters))
     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lmbda, last_epoch=-1, verbose=False)
 
     renderer_a = Render(
@@ -142,6 +144,7 @@ def train(cfg : DictConfig) -> None:
     )
 
     trainer_align = TrainerAlign(
+        logger=logger,
         transform=transform,
         dataloader_a=dataloader_a,
         renderer_a=renderer_a,

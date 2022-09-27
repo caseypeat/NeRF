@@ -15,6 +15,7 @@ from allign.ransac import global_allign
 class TrainerAlign(object):
     def __init__(
         self,
+        logger,
 
         transform,
         dataloader_a,
@@ -28,6 +29,8 @@ class TrainerAlign(object):
         num_epochs,
         n_rays,):
         # starting_error,):
+
+        self.logger = logger
 
         self.transform = transform
 
@@ -63,10 +66,15 @@ class TrainerAlign(object):
             target = torch.eye(4, device='cuda')
             # target = self.starting_error
             error_rot, error_trans = pose_inv_error(pred, target)
-            print(f"Rotation Error (degrees): {torch.rad2deg(error_rot).item():.4f}")
-            print(f"Translation Error (mm): {(error_trans * 1000).item():.4f}")
+            self.logger.log(f"{self.iter} - Rotation Error (degrees): {torch.rad2deg(error_rot).item():.4f}")
+            self.logger.log(f"{self.iter} - Translation Error (mm): {(error_trans * 1000).item():.4f}")
+            self.logger.log("")
+            # self.logger.scalar("Rotation Error (degrees)", torch.rad2deg(error_rot).item(), self.iter)
+            # self.logger.scalar("Translation Error (mm)", (error_trans * 1000).item(), self.iter)
 
             self.train_epoch(self.iters_per_epoch)
+
+        self.logger.save_transform(self.transform.get_matrix().detach().cpu().numpy(), 'final_transform')
 
     def train_epoch(self, iters_per_epoch):
         for i in tqdm(range(iters_per_epoch)):

@@ -1,6 +1,6 @@
 defaults:  
   - _self_  
-  - override hydra/hydra_logging: disabled 
+  - override hydra/hydra_logging: disabled  
   - override hydra/job_logging: disabled  
   
 hydra:  
@@ -18,14 +18,14 @@ input_paths:
   pointcloud_path_b: ./logs/synthetic_allign_depth/vine_C1_0/back/20220714_003959/pointclouds/10000.pcd
   model_path_b: ./logs/synthetic_allign_depth/vine_C1_0/back/20220714_003959/model/10000.pth
 
-  transform_init: "./data/pose_estimates/nerf/vine_C1_0/ransac.npy"
+  transform_init: "./data/pose_estimates/nerf/vine_C1_0/icp.npy"
 
 output_paths:
-  log: ./align/logs/test
+  log: ./align/logs/icp3/vine_C1_0
 
 n_rays: 4096
 iters_per_epoch: 100
-num_epochs: 30
+num_epochs: 20
 
 renderer:
   z_bounds: [0.1, 1]

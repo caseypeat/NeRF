@@ -109,7 +109,7 @@ def log_str(log_filepath, string):
 
 if __name__ == "__main__":
 
-    num = 7
+    num = 2
 
     os.makedirs(f"./data/pose_estimates/nerf/vine_C1_{num}", exist_ok=True)
 
