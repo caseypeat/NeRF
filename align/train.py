@@ -41,30 +41,8 @@ def train(cfg : DictConfig) -> None:
     cfg_a = OmegaConf.load(cfg.input_paths.config_path_a)
     cfg_b = OmegaConf.load(cfg.input_paths.config_path_b)
 
-    # pcd_a = o3d.io.read_point_cloud(cfg.input_paths.pointcloud_path_a)
-    # pcd_b = o3d.io.read_point_cloud(cfg.input_paths.pointcloud_path_b)
-
-    # pcd_a_rs = pcd_a.uniform_down_sample(100)
-    # pcd_b_rs = pcd_b.uniform_down_sample(100)
-
-    # result_ransac, result_icp = global_align(pcd_a_rs, pcd_b_rs, voxel_size=0.01)
-
-    # ransac_transform_np = np.array(result_ransac.transformation)
-    # ransac_transform = torch.Tensor(np.array(result_ransac.transformation))
-    # transform_ransac = Transform(ransac_transform).cuda()
-
-    # icp_transform_np = np.array(result_icp.transformation)
-    # icp_transform = torch.Tensor(np.array(result_icp.transformation))
-    # transform_icp = Transform(icp_transform).cuda()
-
-
-    # print(np.linalg.norm(matrix2xyz_extrinsic(ransac_transform_np[:3, :3])))
-    # print(ransac_transform_np[:3, 3])
-    # exit()
 
     transform = Transform(gen_random_transform(0.01, 0.01)).to('cuda')
-    # transform = Transform(torch.eye(4)).to('cuda')
-    # starting_error = gen_random_transform(0.01, 0.01).to('cuda')
 
 
     dataloader_a = CameraGeometryLoader(
@@ -144,7 +122,7 @@ def train(cfg : DictConfig) -> None:
             {'name': 'rotation', 'params': [transform.R], 'lr': 1e-3},
             ], lr=1e-3, betas=(0.9, 0.99), eps=1e-15)
     num_iters = cfg.iters_per_epoch * cfg.num_epochs
-    lmbda = lambda x: 0.01**(x/(num_iters))
+    lmbda = lambda x: 0.001**(x/(num_iters))
     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lmbda, last_epoch=-1, verbose=False)
 
     renderer_a = Render(

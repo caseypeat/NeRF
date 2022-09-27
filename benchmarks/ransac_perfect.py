@@ -1,8 +1,12 @@
 import numpy as np
 import torch
 import open3d as o3d
+import os
+import time
 
+from datetime import datetime
 from omegaconf import DictConfig, OmegaConf
+from copy import deepcopy
 
 from loaders.camera_geometry_loader_re2 import CameraGeometryLoader
 from render import get_rays
@@ -57,10 +61,23 @@ def load_pointcloud(scan_path):
     return pcd
 
 
+def log_str(log_filepath, string):
+    with open(log_filepath, 'a') as f:
+        dt = datetime.today().strftime("%Y-%m-%d %H:%M:%S")
+        output_str = f'[{dt}] {string}\n'
+        print(output_str, end='')
+        f.write(output_str)
+
+
 if __name__ == "__main__":
 
-    pcd_a = load_pointcloud("/home/cpe44/data/vine_C1_0/front/cameras.json")
-    pcd_b = load_pointcloud("/home/cpe44/data/vine_C1_0/back/cameras.json")
+    num = 7
+
+    os.makedirs(f"./data/pose_estimates/perfect/vine_C1_{num}", exist_ok=True)
+
+
+    pcd_a = load_pointcloud(f"/home/cpe44/data/vine_C1_{num}/front/cameras.json")
+    pcd_b = load_pointcloud(f"/home/cpe44/data/vine_C1_{num}/back/cameras.json")
 
     ransac_result, icp_result = global_allign(pcd_a, pcd_b, voxel_size=0.01)
 
@@ -70,8 +87,27 @@ if __name__ == "__main__":
     error_rot_ransac, error_trans_ransac = pose_inv_error(transform_ransac, torch.eye(4))
     error_rot_icp, error_trans_icp = pose_inv_error(transform_icp, torch.eye(4))
 
-    print(f"Rotation Error (degrees) - RANSAC: {torch.rad2deg(error_rot_ransac).item():.4f}")
-    print(f"Translation Error (mm) - RANSAC: {(error_trans_ransac * 1000).item():.4f}")
+    log_str(f"./data/pose_estimates/perfect/vine_C1_{num}/events.log", f"Rotation Error (degrees) - RANSAC: {torch.rad2deg(error_rot_ransac).item():.4f}")
+    log_str(f"./data/pose_estimates/perfect/vine_C1_{num}/events.log", f"Translation Error (mm) - RANSAC: {(error_trans_ransac * 1000).item():.4f}")
 
-    print(f"Rotation Error (degrees) - ICP: {torch.rad2deg(error_rot_icp).item():.4f}")
-    print(f"Translation Error (mm) - ICP: {(error_trans_icp * 1000).item():.4f}")
+    log_str(f"./data/pose_estimates/perfect/vine_C1_{num}/events.log", f"Rotation Error (degrees) - ICP: {torch.rad2deg(error_rot_icp).item():.4f}")
+    log_str(f"./data/pose_estimates/perfect/vine_C1_{num}/events.log", f"Translation Error (mm) - ICP: {(error_trans_icp * 1000).item():.4f}")
+
+
+
+    np.save(f"./data/pose_estimates/perfect/vine_C1_{num}/ransac.npy", transform_ransac.numpy())
+    np.save(f"./data/pose_estimates/perfect/vine_C1_{num}/icp.npy", transform_icp.numpy())
+
+    pcd_a_ransac = deepcopy(pcd_a)
+    pcd_a_ransac.transform(transform_ransac.numpy())
+    pcd_both_ransac = o3d.geometry.PointCloud()
+    pcd_both_ransac += pcd_a_ransac
+    pcd_both_ransac += pcd_b
+    o3d.io.write_point_cloud(f"./data/pose_estimates/perfect/vine_C1_{num}/ransac.pcd", pcd_both_ransac)
+
+    pcd_a_icp = deepcopy(pcd_a)
+    pcd_a_icp.transform(transform_icp.numpy())
+    pcd_both_icp = o3d.geometry.PointCloud()
+    pcd_both_icp += pcd_a_icp
+    pcd_both_icp += pcd_b
+    o3d.io.write_point_cloud(f"./data/pose_estimates/perfect/vine_C1_{num}/icp.pcd", pcd_both_icp)

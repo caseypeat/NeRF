@@ -20,7 +20,7 @@ input_paths:
 
 n_rays: 4096
 iters_per_epoch: 100
-num_epochs: 20
+num_epochs: 100
 
 renderer:
   z_bounds: [0.1, 1]
