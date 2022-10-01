@@ -53,7 +53,7 @@ class Logger(object):
 
         OmegaConf.save(config=self.cfg, f=os.path.join(self.log_dir, 'config.yaml'))
 
-    def log(self, string):
+    def log(self, string:str):
         with open(self.log_file, 'a') as f:
             dt = datetime.today().strftime("%Y-%m-%d %H:%M:%S")
             output_str = f'[{dt}] [{time.time()-self.t0:.2f}s] {string}\n'
@@ -61,42 +61,52 @@ class Logger(object):
             print(output_str_ndt, end='')
             f.write(output_str)
 
-    def image_color(self, string, image, step):
+    def image(self, string:str, image:np.array, step:int):
         directory_path = os.path.join(self.images_dir, string)
         if not os.path.exists(directory_path):
             os.mkdir(directory_path)
         file_path = os.path.join(directory_path, f'{step}.jpg')
 
-        self.writer.add_image(string, image[..., np.array([2, 1, 0], dtype=int)], step, dataformats='HWC')
-        cv2.imwrite(file_path, np.uint8(image*255))
+        self.writer.add_image(string, image, step, dataformats='HWC')
+        cv2.imwrite(file_path, np.uint8(image[..., np.array([2, 1, 0], dtype=int)]*255))
 
-    def image_grey(self, string, grey, step):
-        grey_c = color_depthmap(grey)
-        directory_path = os.path.join(self.images_dir, string)
-        if not os.path.exists(directory_path):
-            os.mkdir(directory_path)
-        file_path = os.path.join(directory_path, f'{step}.jpg')
+    # def image_color(self, string, image, step):
+    #     directory_path = os.path.join(self.images_dir, string)
+    #     if not os.path.exists(directory_path):
+    #         os.mkdir(directory_path)
+    #     file_path = os.path.join(directory_path, f'{step}.jpg')
 
-        self.writer.add_image(string, grey_c, step, dataformats='HWC')
-        cv2.imwrite(file_path, np.uint8(grey_c[..., np.array([2, 1, 0], dtype=int)]*255))
+    #     self.writer.add_image(string, image[..., np.array([2, 1, 0], dtype=int)], step, dataformats='HWC')
+    #     cv2.imwrite(file_path, np.uint8(image*255))
 
-    def pointcloud(self, pointcloud, step, max_variance):
-        directory_path_np = os.path.join(self.pointcloud_dir, 'numpy')
-        if not os.path.exists(directory_path_np):
-            os.mkdir(directory_path_np)
-        file_path_np = os.path.join(directory_path_np, f'{step}.npy')
-        np.save(file_path_np, pointcloud)
+    # def image_grey(self, string, grey, step):
+    #     grey_c = color_depthmap(grey)
+    #     directory_path = os.path.join(self.images_dir, string)
+    #     if not os.path.exists(directory_path):
+    #         os.mkdir(directory_path)
+    #     file_path = os.path.join(directory_path, f'{step}.jpg')
+
+    #     self.writer.add_image(string, grey_c, step, dataformats='HWC')
+    #     cv2.imwrite(file_path, np.uint8(grey_c[..., np.array([2, 1, 0], dtype=int)]*255))
+
+    def pointcloud(self, pointcloud, step):
+        # directory_path_np = os.path.join(self.pointcloud_dir, 'numpy')
+        # if not os.path.exists(directory_path_np):
+        #     os.mkdir(directory_path_np)
+        # file_path_np = os.path.join(directory_path_np, f'{step}.npy')
+        # np.save(file_path_np, pointcloud)
         
-        directory_path_pcd = os.path.join(self.pointcloud_dir, 'pcd')
-        if not os.path.exists(directory_path_pcd):
-            os.mkdir(directory_path_pcd)
-        file_path_pcd = os.path.join(directory_path_pcd, f'{step}.pcd')
+        # directory_path_pcd = os.path.join(self.pointcloud_dir, 'pcd')
+        # if not os.path.exists(directory_path_pcd):
+        #     os.mkdir(directory_path_pcd)
+        file_path_pcd = os.path.join(self.pointcloud_dir, f'{step}.pcd')
 
-        pcd = o3d.geometry.PointCloud()
-        pcd.points = o3d.utility.Vector3dVector(pointcloud['points'][np.broadcast_to(pointcloud['depth_variance'], pointcloud['points'].shape) < max_variance].reshape(-1, 3))
-        pcd.colors = o3d.utility.Vector3dVector(pointcloud['colors'][np.broadcast_to(pointcloud['depth_variance'], pointcloud['colors'].shape) < max_variance].reshape(-1, 3))
+        # pcd = o3d.geometry.PointCloud()
+        # pcd
+        # pcd.points = o3d.utility.Vector3dVector(pointcloud['points'][np.broadcast_to(pointcloud['depth_variance'], pointcloud['points'].shape) < max_variance].reshape(-1, 3))
+        # pcd.colors = o3d.utility.Vector3dVector(pointcloud['colors'][np.broadcast_to(pointcloud['depth_variance'], pointcloud['colors'].shape) < max_variance].reshape(-1, 3))
 
-        o3d.io.write_point_cloud(file_path_pcd, pcd)
+        o3d.io.write_point_cloud(file_path_pcd, pointcloud)
 
     def model(self, model, step):
         file_path = os.path.join(self.model_dir, f'{step}.pth')

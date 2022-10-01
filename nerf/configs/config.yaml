@@ -9,47 +9,43 @@ hydra:
     dir: .
 
 
-scene:
+scan:
   scan_paths:
-    # - /home/casey/PhD/data/conan_scans/blenheim-22-7/twin_scans/a/20_2022-06-30-12-10-16/scene.json
-
-    # - /home/casey/PhD/data/genie_scans/blenheim_07_22/manual/05-07-22_10-17/368_east/scene.json
-    - /home/casey/PhD/data/genie_scans/blenheim_07_22/manual/05-07-22_10-17/368_west/scene.json
-
-  #  - /home/casey/PhD/data/conan_scans/bleheim-21-6-28/ROW_349_EAST_SLOW_0006/scene.json
+  #  - /home/casey/PhD/data/conan_scans/ROW_349_EAST_SLOW_0004/scene.json
   #  - /home/casey/PhD/data/conan_scans/ROW_349_EAST_SLOW_0005/scene.json
   #  - /home/casey/PhD/data/conan_scans/ROW_349_EAST_SLOW_0006/scene.json
 
   #  - /home/casey/PhD/data/conan_scans/ROW_349_WEST_SLOW_0007/scene.json
   #  - /home/casey/PhD/data/conan_scans/ROW_349_WEST_SLOW_0008/scene.json
   #  - /home/casey/PhD/data/conan_scans/ROW_349_WEST_SLOW_0009/scene.json
+  #  - /mnt/maara/genie_scans/blenheim_07_22/manual/05-07-22_10-17/368_east/scene.json
 
-  frame_ranges:
-    -
-      - 300
-      - 350
-  frame_strides:
+    - /home/cpe44/data/vine_C1_0/back/cameras.json
+
+  scan_pose_paths:
     - null
-  transforms:
+  frame_ranges:
+    - null
+  frame_strides:
     - null
   image_scale: 0.5
   inner_bound: 2
   outer_bound: 2.5
 
 log:
-  root_dir: './nerf/logs/test/pose_optimise'
+  root_dir: './logs/test2'
   eval_image_freq: end
   eval_pointcloud_freq: end
   save_weights_freq: end
 
 trainer:
-  num_epochs: 50
+  num_epochs: 30
   iters_per_epoch: 100
   n_rays: 16384
-  loss_dist_lambda:
+  dist_loss_range:
     - 1e-5
     - 1e-2
-  loss_depth_lambda:
+  depth_loss_range:
     - 0
     - 0
 
@@ -70,21 +66,15 @@ scheduler: step
 
 inference:
   image:
-    # image_num: 'middle'
-    scan: 'middle'
-    rig: 'middle'
-    cam: 'middle'
-    # rotate: 270  # clockwise
+    image_num: 33
 
   pointcloud:
-    max_variance_npy: 0.1
-    max_variance_pcd: 0.05
-    distribution_area: 0.4
+    max_variance: 0.05
+    distribution_area: 0.5
 
-    side_buffer: 3
+    side_margin: 3
     cams: [1, 2, 3, 4]
-    # cams: [2, 3]
-    freq: 4
+    freq: 3
 
 renderer:
   steps:
@@ -99,6 +89,15 @@ renderer:
     - 100
     - 1000
 
+  importance_steps: 128
+  alpha: 0.2
+
+renderer_thresh:
+  steps:
+    - 256
+  z_bounds:
+    - 0.1
+    - 1.0
   importance_steps: 128
   alpha: 0.2
 

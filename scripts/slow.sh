@@ -1,6 +1,0 @@
-python train.py --configs ./configs/config_base.yaml --params scene.scene_paths="[/mnt/maara/conan_scans/blenheim-21-6-28/30-06_13-05/ROW_349_WEST_SLOW_0007/scene.json]" log.root_dir="./logs/real/0007"
-python train.py --configs ./configs/config_base.yaml --params scene.scene_paths="[/mnt/maara/conan_scans/blenheim-21-6-28/30-06_13-05/ROW_349_WEST_SLOW_0008/scene.json]" log.root_dir="./logs/real/0008"
-python train.py --configs ./configs/config_base.yaml --params scene.scene_paths="[/mnt/maara/conan_scans/blenheim-21-6-28/30-06_13-05/ROW_349_WEST_SLOW_0009/scene.json]" log.root_dir="./logs/real/0009"
-python train.py --configs ./configs/config_base.yaml --params scene.scene_paths="[/mnt/maara/conan_scans/blenheim-21-6-28/30-06_13-05/ROW_349_EAST_SLOW_0004/scene.json]" log.root_dir="./logs/real/0004"
-python train.py --configs ./configs/config_base.yaml --params scene.scene_paths="[/mnt/maara/conan_scans/blenheim-21-6-28/30-06_13-05/ROW_349_EAST_SLOW_0005/scene.json]" log.root_dir="./logs/real/0005"
-python train.py --configs ./configs/config_base.yaml --params scene.scene_paths="[/mnt/maara/conan_scans/blenheim-21-6-28/30-06_13-05/ROW_349_EAST_SLOW_0006/scene.json]" log.root_dir="./logs/real/0006"
