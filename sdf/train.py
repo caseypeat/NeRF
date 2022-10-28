@@ -6,19 +6,19 @@ import matplotlib.pyplot as plt
 from omegaconf import DictConfig, OmegaConf
 
 from loaders.camera_geometry_loader_re2 import CameraGeometryLoader
-from loaders.synthetic2 import SyntheticLoader
 
 from nets import NeRFCoordinateWrapper, NeRFNetwork
-from nerf.trainer import NeRFTrainer
+from sdf.nets import NeRFSDFWrapper, NeRFNetworkSecondDerivative
+from sdf.trainer import SDFNeRFTrainer
 from nerf.logger import Logger
 from metrics import PSNRWrapper, SSIMWrapper, LPIPSWrapper
-from render import Render
+from sdf.render import SDFRender
 from inference import ImageInference, InvdepthThreshInference, PointcloudInference
 
 # from misc import configurator
 
 
-@hydra.main(version_base=None, config_path="./configs", config_name="config_lego")
+@hydra.main(version_base=None, config_path="./configs", config_name="config")
 def train(cfg : DictConfig) -> None:
 
     # cfg = configurator('./configs/config_base.yaml')
@@ -29,19 +29,16 @@ def train(cfg : DictConfig) -> None:
         )
 
     logger.log('Initiating Dataloader...')
-    # dataloader = CameraGeometryLoader(
-    #     scan_paths=cfg.scan.scan_paths,
-    #     scan_pose_paths=cfg.scan.scan_pose_paths,
-    #     frame_ranges=cfg.scan.frame_ranges,
-    #     frame_strides=cfg.scan.frame_strides,
-    #     image_scale=cfg.scan.image_scale,
-    #     )
-
-    dataloader = SyntheticLoader(rootdir="/home/cpe44/nerf_synthetic/lego")
-    # print(torch.amax(dataloader.extrinsics[..., :3, 3], dim=0), torch.amin(dataloader.extrinsics[..., :3, 3], dim=0))
+    dataloader = CameraGeometryLoader(
+        scan_paths=cfg.scan.scan_paths,
+        scan_pose_paths=cfg.scan.scan_pose_paths,
+        frame_ranges=cfg.scan.frame_ranges,
+        frame_strides=cfg.scan.frame_strides,
+        image_scale=cfg.scan.image_scale,
+        )
 
     logger.log('Initilising Model...')
-    model = NeRFNetwork(
+    model = NeRFNetworkSecondDerivative(
         N = dataloader.images.shape[0],
         encoding_precision=cfg.nets.encoding.precision,
         encoding_n_levels=cfg.nets.encoding.n_levels,
@@ -66,11 +63,16 @@ def train(cfg : DictConfig) -> None:
         translation_center=dataloader.translation_center
     )
 
+    model_coord_sdf = NeRFSDFWrapper(
+        model = model_coord,
+    )
+
     logger.log('Initiating Optimiser...')
     optimizer = torch.optim.Adam([
             {'name': 'encoding', 'params': list(model.encoder.parameters()), 'lr': cfg.optimizer.encoding.lr},
             {'name': 'latent_emb', 'params': [model.latent_emb], 'lr': cfg.optimizer.latent_emb.lr},
             {'name': 'net', 'params': list(model.sigma_net.parameters()) + list(model.color_net.parameters()), 'weight_decay': cfg.optimizer.net.weight_decay, 'lr': cfg.optimizer.net.lr},
+            {'name': 'density_beta', 'params': list(model_coord_sdf.laplace_density.parameters()), 'lr': 1e-3},
         ], betas=cfg.optimizer.betas, eps=cfg.optimizer.eps)
 
     if cfg.scheduler == 'step':
@@ -81,51 +83,51 @@ def train(cfg : DictConfig) -> None:
         raise ValueError
     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lmbda, last_epoch=-1, verbose=False)
 
-    metrics = {
-        "eval_lpips": LPIPSWrapper(),
-        "eval_ssim": SSIMWrapper(),
-        "eval_psnr": PSNRWrapper(),
-    }
+    # metrics = {
+    #     "eval_lpips": LPIPSWrapper(),
+    #     "eval_ssim": SSIMWrapper(),
+    #     "eval_psnr": PSNRWrapper(),
+    # }
 
-    renderer = Render(
-        models=model_coord,
+    renderer = SDFRender(
+        model=model_coord_sdf,
         steps_firstpass=cfg.renderer.steps,
         z_bounds=cfg.renderer.z_bounds,
         steps_importance=cfg.renderer.importance_steps,
         alpha_importance=cfg.renderer.alpha,
     )
 
-    renderer_thresh = Render(
-        models=model_coord,
-        steps_firstpass=cfg.renderer_thresh.steps,
-        z_bounds=cfg.renderer_thresh.z_bounds,
-        steps_importance=cfg.renderer_thresh.importance_steps,
-        alpha_importance=cfg.renderer_thresh.alpha,
-    )
+    # renderer_thresh = Render(
+    #     models=model_coord,
+    #     steps_firstpass=cfg.renderer_thresh.steps,
+    #     z_bounds=cfg.renderer_thresh.z_bounds,
+    #     steps_importance=cfg.renderer_thresh.importance_steps,
+    #     alpha_importance=cfg.renderer_thresh.alpha,
+    # )
 
-    inferencers = {
-        "image": ImageInference(
-            renderer, dataloader, cfg.trainer.n_rays, cfg.inference.image.image_num),
-        "invdepth_thresh": InvdepthThreshInference(
-            renderer_thresh, dataloader, cfg.trainer.n_rays, cfg.inference.image.image_num),
-        "pointcloud": PointcloudInference(
-            renderer_thresh,
-            dataloader,
-            cfg.inference.pointcloud.max_variance,
-            cfg.inference.pointcloud.distribution_area,
-            cfg.trainer.n_rays,
-            cfg.inference.pointcloud.cams,
-            cfg.inference.pointcloud.freq,
-            cfg.inference.pointcloud.side_margin)
-    }
+    # inferencers = {
+    #     "image": ImageInference(
+    #         renderer, dataloader, cfg.trainer.n_rays, cfg.inference.image.image_num),
+    #     "invdepth_thresh": InvdepthThreshInference(
+    #         renderer_thresh, dataloader, cfg.trainer.n_rays, cfg.inference.image.image_num),
+    #     "pointcloud": PointcloudInference(
+    #         renderer_thresh,
+    #         dataloader,
+    #         cfg.inference.pointcloud.max_variance,
+    #         cfg.inference.pointcloud.distribution_area,
+    #         cfg.trainer.n_rays,
+    #         cfg.inference.pointcloud.cams,
+    #         cfg.inference.pointcloud.freq,
+    #         cfg.inference.pointcloud.side_margin)
+    # }
     
     logger.log('Initiating Trainer...')
-    trainer = NeRFTrainer(
+    trainer = SDFNeRFTrainer(
         model=model,
         dataloader=dataloader,
         logger=logger,
         renderer=renderer,
-        inferencers=inferencers,
+        inferencers={},
 
         optimizer=optimizer,
         scheduler=scheduler, 
@@ -141,7 +143,7 @@ def train(cfg : DictConfig) -> None:
         eval_pointcloud_freq=cfg.log.eval_pointcloud_freq,
         save_weights_freq=cfg.log.save_weights_freq,
 
-        metrics=metrics,
+        metrics={},
         )
 
     logger.log('Beginning Training...\n')

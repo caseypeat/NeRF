@@ -33,14 +33,14 @@ scan:
   outer_bound: 2.5
 
 log:
-  root_dir: './nerf/logs/test3'
+  root_dir: './neus/logs/test/1'
   eval_image_freq: end
   eval_pointcloud_freq: end
   save_weights_freq: end
 
 trainer:
-  num_epochs: 10
-  iters_per_epoch: 100
+  num_epochs: 100
+  iters_per_epoch: 10
   n_rays: 16384
   dist_loss_range:
     - 1e-5
@@ -79,15 +79,15 @@ inference:
 renderer:
   steps:
     - 256
-    - 128
-    - 64
-    - 32
+    # - 128
+    # - 64
+    # - 32
   z_bounds:
     - 0.1
     - 1
-    - 10
-    - 100
-    - 1000
+    # - 10
+    # - 100
+    # - 1000
 
   importance_steps: 128
   alpha: 0.2

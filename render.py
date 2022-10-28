@@ -7,8 +7,6 @@ import math as m
 from typing import Union, Optional
 from dataclasses import dataclass
 
-import helpers
-
 from nets import NeRFNetwork, NeRFCoordinateWrapper
 
 
@@ -95,6 +93,7 @@ def efficient_sampling(
         sigma = models.density(xyzs)
 
     delta = z_vals_log.new_zeros(sigma.shape)  # [N_rays, N_samples]
+    # print(z_vals_log.shape)
     delta[:, :-1] = (z_vals_log[:, 1:] - z_vals_log[:, :-1])
 
     alpha = 1 - torch.exp(-sigma * delta)  # [N_rays, N_samples]

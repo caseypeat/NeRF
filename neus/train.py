@@ -1,5 +1,6 @@
 import hydra
 import numpy as np
+from pandas import DataFrame
 import torch
 import matplotlib.pyplot as plt
 
@@ -9,10 +10,12 @@ from loaders.camera_geometry_loader_re2 import CameraGeometryLoader
 from loaders.synthetic2 import SyntheticLoader
 
 from nets import NeRFCoordinateWrapper, NeRFNetwork
-from nerf.trainer import NeRFTrainer
+from sdf.nets import NeRFNetworkSecondDerivative
+from neus.nets import NeRFNeusWrapper
+from neus.trainer import NeusNeRFTrainer
 from nerf.logger import Logger
 from metrics import PSNRWrapper, SSIMWrapper, LPIPSWrapper
-from render import Render
+from neus.render import NeusRender
 from inference import ImageInference, InvdepthThreshInference, PointcloudInference
 
 # from misc import configurator
@@ -35,13 +38,13 @@ def train(cfg : DictConfig) -> None:
     #     frame_ranges=cfg.scan.frame_ranges,
     #     frame_strides=cfg.scan.frame_strides,
     #     image_scale=cfg.scan.image_scale,
+    #     load_depths_bool=True,
     #     )
 
     dataloader = SyntheticLoader(rootdir="/home/cpe44/nerf_synthetic/lego")
-    # print(torch.amax(dataloader.extrinsics[..., :3, 3], dim=0), torch.amin(dataloader.extrinsics[..., :3, 3], dim=0))
 
     logger.log('Initilising Model...')
-    model = NeRFNetwork(
+    model = NeRFNetworkSecondDerivative(
         N = dataloader.images.shape[0],
         encoding_precision=cfg.nets.encoding.precision,
         encoding_n_levels=cfg.nets.encoding.n_levels,
@@ -64,13 +67,26 @@ def train(cfg : DictConfig) -> None:
         inner_bound=cfg.scan.inner_bound,
         outer_bound=cfg.scan.outer_bound,
         translation_center=dataloader.translation_center
-    )
+    ).to('cuda')
+
+    model_coord_neus = NeRFNeusWrapper(
+        model = model_coord,
+    ).to('cuda')
+
+    renderer = NeusRender(
+        model=model_coord_neus,
+        steps_firstpass=cfg.renderer.steps,
+        z_bounds=cfg.renderer.z_bounds,
+        steps_importance=cfg.renderer.importance_steps,
+        alpha_importance=cfg.renderer.alpha,
+    ).to('cuda')
 
     logger.log('Initiating Optimiser...')
     optimizer = torch.optim.Adam([
             {'name': 'encoding', 'params': list(model.encoder.parameters()), 'lr': cfg.optimizer.encoding.lr},
             {'name': 'latent_emb', 'params': [model.latent_emb], 'lr': cfg.optimizer.latent_emb.lr},
             {'name': 'net', 'params': list(model.sigma_net.parameters()) + list(model.color_net.parameters()), 'weight_decay': cfg.optimizer.net.weight_decay, 'lr': cfg.optimizer.net.lr},
+            {'name': 's', 'params': [renderer.s], 'lr': 1e-3},
         ], betas=cfg.optimizer.betas, eps=cfg.optimizer.eps)
 
     if cfg.scheduler == 'step':
@@ -81,46 +97,13 @@ def train(cfg : DictConfig) -> None:
         raise ValueError
     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lmbda, last_epoch=-1, verbose=False)
 
-    metrics = {
-        "eval_lpips": LPIPSWrapper(),
-        "eval_ssim": SSIMWrapper(),
-        "eval_psnr": PSNRWrapper(),
-    }
-
-    renderer = Render(
-        models=model_coord,
-        steps_firstpass=cfg.renderer.steps,
-        z_bounds=cfg.renderer.z_bounds,
-        steps_importance=cfg.renderer.importance_steps,
-        alpha_importance=cfg.renderer.alpha,
-    )
-
-    renderer_thresh = Render(
-        models=model_coord,
-        steps_firstpass=cfg.renderer_thresh.steps,
-        z_bounds=cfg.renderer_thresh.z_bounds,
-        steps_importance=cfg.renderer_thresh.importance_steps,
-        alpha_importance=cfg.renderer_thresh.alpha,
-    )
-
     inferencers = {
         "image": ImageInference(
             renderer, dataloader, cfg.trainer.n_rays, cfg.inference.image.image_num),
-        "invdepth_thresh": InvdepthThreshInference(
-            renderer_thresh, dataloader, cfg.trainer.n_rays, cfg.inference.image.image_num),
-        "pointcloud": PointcloudInference(
-            renderer_thresh,
-            dataloader,
-            cfg.inference.pointcloud.max_variance,
-            cfg.inference.pointcloud.distribution_area,
-            cfg.trainer.n_rays,
-            cfg.inference.pointcloud.cams,
-            cfg.inference.pointcloud.freq,
-            cfg.inference.pointcloud.side_margin)
     }
     
     logger.log('Initiating Trainer...')
-    trainer = NeRFTrainer(
+    trainer = NeusNeRFTrainer(
         model=model,
         dataloader=dataloader,
         logger=logger,
@@ -141,7 +124,7 @@ def train(cfg : DictConfig) -> None:
         eval_pointcloud_freq=cfg.log.eval_pointcloud_freq,
         save_weights_freq=cfg.log.save_weights_freq,
 
-        metrics=metrics,
+        metrics={},
         )
 
     logger.log('Beginning Training...\n')

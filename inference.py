@@ -231,6 +231,8 @@ def render_image(renderer, n, h, w, K, E, n_rays):
     # _f : flattened
     # _b : batched
 
+    renderer.eval()
+
     n_f = torch.reshape(n, (-1,))
     h_f = torch.reshape(h, (-1,))
     w_f = torch.reshape(w, (-1,))

@@ -1,18 +1,13 @@
-
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
+import numpy as np
 
 import tinycudann as tcnn
 
-from typing import Optional, Union
-
-from loaders.camera_geometry_loader_re2 import IndexMapping
-from rotation import Exp_vector, Exp
-
-# from renderer import NerfRenderer
-
-# from config import cfg
+import sdf.utils.rend_util
+# from sdf.model.embedder import *
+from sdf.model.density import LaplaceDensity
+from model.ray_sampler import ErrorBoundSampler
 
 
 class NeRFNetwork(nn.Module):
@@ -166,126 +161,98 @@ class NeRFNetwork(nn.Module):
         # aux_outputs_net['x_hashtable'] = x_hashtable.reshape(*prefix, -1).detach()
 
         return sigma
-    
 
-class Transform(nn.Module):
-    def __init__(self, init_transform):
+
+class VolSDFNetwork(nn.Module):
+    def __init__(self, conf):
         super().__init__()
+        self.feature_vector_size = conf.get_int('feature_vector_size')
+        self.scene_bounding_sphere = conf.get_float('scene_bounding_sphere', default=1.0)
+        self.white_bkgd = conf.get_bool('white_bkgd', default=False)
+        self.bg_color = torch.tensor(conf.get_list("bg_color", default=[1.0, 1.0, 1.0])).float().cuda()
 
-        self.init_transform = torch.nn.Parameter(init_transform, requires_grad=False)
+        self.network = NeRFNetwork()
 
-        self.R = torch.nn.Parameter(torch.zeros((3,)), requires_grad=True)
-        self.T = torch.nn.Parameter(torch.zeros((3,)), requires_grad=True)
+        # self.implicit_network = ImplicitNetwork(self.feature_vector_size, 0.0 if self.white_bkgd else self.scene_bounding_sphere, **conf.get_config('implicit_network'))
+        # self.rendering_network = RenderingNetwork(self.feature_vector_size, **conf.get_config('rendering_network'))
 
-    def forward(self, xyzs_a):
+        self.density = LaplaceDensity(**conf.get_config('density'))
+        self.ray_sampler = ErrorBoundSampler(self.scene_bounding_sphere, **conf.get_config('ray_sampler'))
 
-        transform = torch.eye(4, dtype=torch.float32, device='cuda')
-        transform[:3, :3] = Exp(self.R)
-        transform[:3, 3] = self.T
+    def forward(self, input):
+        # Parse model input
+        intrinsics = input["intrinsics"]
+        uv = input["uv"]
+        pose = input["pose"]
 
-        b = xyzs_a.reshape(-1, 3)
-        b1 = torch.cat([b, b.new_ones((b.shape[0], 1))], dim=1)
-        b2 = (self.get_matrix() @ b1.T).T
-        # b2 = (self.init_transform @ b1.T).T
-        # b3 = (transform @ b2.T).T
-        xyzs_b = b2[:, :3].reshape(*xyzs_a.shape)
+        ray_dirs, cam_loc = rend_util.get_camera_params(uv, pose, intrinsics)
 
-        return xyzs_b
+        batch_size, num_pixels, _ = ray_dirs.shape
 
-    def get_matrix(self):
-        transform_local = torch.eye(4, dtype=torch.float32, device='cuda')
-        transform_local[:3, :3] = Exp(self.R)
-        transform_local[:3, 3] = self.T
-        
-        transform = self.init_transform @ transform_local
-        return transform
+        cam_loc = cam_loc.unsqueeze(1).repeat(1, num_pixels, 1).reshape(-1, 3)
+        ray_dirs = ray_dirs.reshape(-1, 3)
 
+        z_vals, z_samples_eik = self.ray_sampler.get_z_vals(ray_dirs, cam_loc, self)
+        N_samples = z_vals.shape[1]
 
-class OptimizePose(nn.Module):
-    def __init__(self, index_mapping:IndexMapping, mode:str):
-        super().__init__()
+        points = cam_loc.unsqueeze(1) + z_vals.unsqueeze(2) * ray_dirs.unsqueeze(1)
+        points_flat = points.reshape(-1, 3)
 
-        self.index_mapping = index_mapping
-        self.mode = mode
+        dirs = ray_dirs.unsqueeze(1).repeat(1,N_samples,1)
+        dirs_flat = dirs.reshape(-1, 3)
 
-        if self.mode == 'scan':
-            self.num_poses = self.index_mapping.get_num_scans()
-        if self.mode == 'rig':
-            self.num_poses = self.index_mapping.get_num_rigs()
-        if self.mode == 'camera':
-            self.num_poses = self.index_mapping.get_num_cams()
+        sdf, feature_vectors, gradients = self.implicit_network.get_outputs(points_flat)
 
-        self.R = torch.nn.Parameter(torch.zeros((self.num_poses, 3)), requires_grad=True)
-        self.T = torch.nn.Parameter(torch.zeros((self.num_poses, 3)), requires_grad=True)
+        rgb_flat = self.rendering_network(points_flat, gradients, dirs_flat, feature_vectors)
+        rgb = rgb_flat.reshape(-1, N_samples, 3)
 
-    def forward(self, n:torch.LongTensor, E:torch.Tensor):
-        if self.mode == 'scan':
-            pose = self.index_mapping.idx_to_src(n)[0]
-        if self.mode == 'rig':
-            pose = self.index_mapping.idx_to_rig(n)
-        if self.mode == 'camera':
-            pose = torch.clone(n)
+        weights = self.volume_rendering(z_vals, sdf)
 
-        pose_transforms = torch.zeros((len(n), 4, 4))
-        pose_transforms[:, 3, 3] = 1
-        pose_transforms[:, :3, :3] = Exp_vector(self.R[pose])
-        pose_transforms[:, :3, 3] = self.T[pose]
+        rgb_values = torch.sum(weights.unsqueeze(-1) * rgb, 1)
 
-        E_transformed = pose_transforms @ E
+        # white background assumption
+        if self.white_bkgd:
+            acc_map = torch.sum(weights, -1)
+            rgb_values = rgb_values + (1. - acc_map[..., None]) * self.bg_color.unsqueeze(0)
 
-        return E_transformed
+        output = {
+            'rgb_values': rgb_values,
+        }
 
+        if self.training:
+            # Sample points for the eikonal loss
+            n_eik_points = batch_size * num_pixels
+            eikonal_points = torch.empty(n_eik_points, 3).uniform_(-self.scene_bounding_sphere, self.scene_bounding_sphere).cuda()
 
-def mipnerf360_scale(xyzs, bound_inner, bound_outer):
-    if len(xyzs.shape) == 2:
-        d = torch.linalg.norm(xyzs, dim=-1)[..., None].expand(-1, 3)
-    else:
-        d = torch.linalg.norm(xyzs, dim=-1)[..., None].expand(-1, -1, 3)
-    xyzs_warped = torch.clone(xyzs)
-    xyzs_warped[d > bound_inner] = xyzs_warped[d > bound_inner] * ((bound_outer - (bound_outer - bound_inner) / d[d > bound_inner]) / d[d > bound_inner])
-    return xyzs_warped
+            # add some of the near surface points
+            eik_near_points = (cam_loc.unsqueeze(1) + z_samples_eik.unsqueeze(2) * ray_dirs.unsqueeze(1)).reshape(-1, 3)
+            eikonal_points = torch.cat([eikonal_points, eik_near_points], 0)
 
+            grad_theta = self.implicit_network.gradient(eikonal_points)
+            output['grad_theta'] = grad_theta
 
-class NeRFCoordinateWrapper(nn.Module):
-    def __init__(self, 
-        model:NeRFNetwork,
-        transform:Optional[Transform],
-        inner_bound:int,
-        outer_bound:int,
-        translation_center:torch.Tensor):
-        super().__init__()
+        if not self.training:
+            gradients = gradients.detach()
+            normals = gradients / gradients.norm(2, -1, keepdim=True)
+            normals = normals.reshape(-1, N_samples, 3)
+            normal_map = torch.sum(weights.unsqueeze(-1) * normals, 1)
 
-        self.model = model
-        self.transform = transform
+            output['normal_map'] = normal_map
 
-        self.inner_bound = inner_bound
-        self.outer_bound = outer_bound
-        self.translation_center = translation_center
+        return output
 
-    def forward(self, xyzs, dirs, n):
-        if self.transform is None:
-            xyzs_transform = xyzs
-        else:
-            xyzs_transform = self.transform(xyzs)
+    def volume_rendering(self, z_vals, sdf):
+        density_flat = self.density(sdf)
+        density = density_flat.reshape(-1, z_vals.shape[1])  # (batch_size * num_pixels) x N_samples
 
-        xyzs_centered = xyzs_transform - self.translation_center.to(xyzs.device)
-        xyzs_warped = mipnerf360_scale(xyzs_centered, self.inner_bound, self.outer_bound)
-        xyzs_norm = (xyzs_warped + self.outer_bound) / (2 * self.outer_bound) # to [0, 1]
+        dists = z_vals[:, 1:] - z_vals[:, :-1]
+        dists = torch.cat([dists, torch.tensor([1e10]).cuda().unsqueeze(0).repeat(dists.shape[0], 1)], -1)
 
-        sigmas, rgbs = self.model(xyzs_norm, dirs, n)
+        # LOG SPACE
+        free_energy = dists * density
+        shifted_free_energy = torch.cat([torch.zeros(dists.shape[0], 1).cuda(), free_energy[:, :-1]], dim=-1)  # shift one step
+        alpha = 1 - torch.exp(-free_energy)  # probability of it is not empty here
+        transmittance = torch.exp(-torch.cumsum(shifted_free_energy, dim=-1))  # probability of everything is empty up to now
+        weights = alpha * transmittance # probability of the ray hits something here
 
-        return sigmas, rgbs
-
-    def density(self, xyzs):
-        if self.transform is None:
-            xyzs_transform = xyzs
-        else:
-            xyzs_transform = self.transform(xyzs)
-
-        xyzs_centered = xyzs_transform - self.translation_center.to(xyzs.device)
-        xyzs_warped = mipnerf360_scale(xyzs_centered, self.inner_bound, self.outer_bound)
-        xyzs_norm = (xyzs_warped + self.outer_bound) / (2 * self.outer_bound) # to [0, 1]
-
-        sigmas = self.model.density(xyzs_norm)
-
-        return sigmas
+        return 
