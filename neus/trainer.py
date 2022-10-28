@@ -166,8 +166,14 @@ class NeusNeRFTrainer(object):
         
         n, h, w, K, E, rgb_gt, bg_color, _ = self.dataloader.get_random_batch(self.n_rays, device='cuda')
 
-        self.renderer.train()
-        rgb, weights, grad_theta, aux_outputs = self.renderer.render(n, h, w, K, E, bg_color)
+        # self.renderer.train()
+        rgb, weights, grad_theta, aux_outputs = self.renderer.render(n, h, w, K, E, bg_color, self.iter/5000)
+
+        # print(torch.amax(aux_outputs['sdf']), torch.amin(aux_outputs['sdf']))
+
+        # if self.iter % 100 == 0:
+        #     plt.plot(aux_outputs['z_vals'][0].cpu().numpy(), aux_outputs['sdf'][0].cpu().numpy())
+        #     plt.show()
 
         # Calculate losses
         loss_rgb = losses.criterion_rgb(rgb, rgb_gt)

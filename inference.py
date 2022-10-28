@@ -225,13 +225,13 @@ def rot90(image):
 #         return pointcloud
 
 
-@torch.no_grad()
+# @torch.no_grad()
 def render_image(renderer, n, h, w, K, E, n_rays):
 
     # _f : flattened
     # _b : batched
 
-    renderer.eval()
+    # renderer.eval()
 
     n_f = torch.reshape(n, (-1,))
     h_f = torch.reshape(h, (-1,))
@@ -257,7 +257,7 @@ def render_image(renderer, n, h, w, K, E, n_rays):
 
         image_fb, _, _, aux_outputs_fb = renderer.render(n_fb, h_fb, w_fb, K_fb, E_fb, bg_color=color_bg)
 
-        image_f[a:b] = image_fb.cpu()
+        image_f[a:b] = image_fb.detach().cpu()
         invdepth_f[a:b] = aux_outputs_fb['invdepth'].cpu()
 
     image = torch.reshape(image_f, (*h.shape, 3))
