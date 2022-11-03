@@ -133,6 +133,15 @@ def neus_efficient_sampling(
     return z_vals_log_fine, z_vals_fine, grad_theta
 
 
+class SingleVarianceNetwork(nn.Module):
+    def __init__(self, init_val):
+        super(SingleVarianceNetwork, self).__init__()
+        self.register_parameter('variance', nn.Parameter(torch.tensor(init_val)))
+
+    def forward(self, x):
+        return torch.ones([len(x), 1], device='cuda') * torch.exp(self.variance * 10.0)
+
+
 class NeusRender(nn.Module):
     def __init__(self,
         model,
@@ -148,13 +157,15 @@ class NeusRender(nn.Module):
         self.steps_importance = steps_importance
         self.alpha_importance = alpha_importance
 
-        self.s = torch.nn.Parameter(torch.full((1,), fill_value=3.0), requires_grad=True)
+        # self.s = torch.nn.Parameter(torch.full((1,), fill_value=3.0), requires_grad=True)
+        self.deviation_network = SingleVarianceNetwork(0.3)
 
     def render(self, n, h, w, K, E, bg_color, cos_anneal_ratio=0.0):
         rays_o, rays_d = get_rays(h, w, K, E)
+        inv_s = self.deviation_network(torch.zeros([1, 3], device='cuda'))[:, :1].clip(1e-6, 1e6)
         z_vals_log, z_vals, grad_theta = neus_efficient_sampling(
             self.model, rays_o, rays_d,
-            self.steps_firstpass, self.z_bounds, self.steps_importance, self.alpha_importance, self.s, cos_anneal_ratio)
+            self.steps_firstpass, self.z_bounds, self.steps_importance, self.alpha_importance, inv_s, cos_anneal_ratio)
 
         xyzs, dirs = get_sample_points(rays_o, rays_d, z_vals)
         n_expand = n[:, None].expand(-1, z_vals.shape[-1])
@@ -166,7 +177,7 @@ class NeusRender(nn.Module):
         # plt.plot(sdf[0].detach().cpu().numpy())
         # plt.show()
 
-        pixel, invdepth, weight = neus_render_rays_log(sdf, color, z_vals, z_vals_log, self.s, grad_theta, rays_d, cos_anneal_ratio)
+        pixel, invdepth, weight = neus_render_rays_log(sdf, color, z_vals, z_vals_log, inv_s, grad_theta, rays_d, cos_anneal_ratio)
 
         if bg_color is not None:
             pixel = pixel + (1 - torch.sum(weight, dim=-1)[..., None]) * bg_color

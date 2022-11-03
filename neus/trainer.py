@@ -11,11 +11,13 @@ from typing import Union
 
 import losses
 
-from neus.nets import NeRFNeusWrapper
+# from neus.nets import NeRFNeusWrapper
+
 from nerf.logger import Logger
 
 # from render import render_nerf
-from inference import render_image, render_invdepth_thresh, generate_pointcloud
+# from inference import render_image, render_invdepth_thresh, generate_pointcloud
+# from inference import render_image
 from metrics import MetricWrapper
 from misc import color_depthmap
 
@@ -39,7 +41,7 @@ class NeusNeRFTrainer(object):
         self,
         logger:Logger,
         dataloader,
-        model:NeRFNeusWrapper,
+        # model:NeRFNeusWrapper,
         renderer,
         inferencers,
 
@@ -60,7 +62,7 @@ class NeusNeRFTrainer(object):
         metrics:dict[str, MetricWrapper],
         ):
 
-        self.model = model
+        # self.model = model
         self.dataloader = dataloader
         self.logger = logger
         self.renderer = renderer
@@ -105,10 +107,7 @@ class NeusNeRFTrainer(object):
             if self.eval_image_freq is not None:
                 if (epoch+1) % self.eval_image_freq == 0:
                     self.logger.log('Rending Image...')
-                    image, invdepth = self.inferencers['image']()
-                    # n, h, w, K, E, rgb_gt, _, _ = self.dataloader.get_image_batch(
-                    #     self.inferencer.image_num, device='cuda')
-                    # image, invdepth = render_image(n, h, w, K, E)
+                    image, invdepth = self.inferencers['image'](self.get_cos_anneal_ratio())
                     self.logger.image('image', image.numpy(), self.iter)
                     self.logger.image('invdepth', color_depthmap(invdepth.numpy()), self.iter)
 
@@ -161,13 +160,20 @@ class NeusNeRFTrainer(object):
 
             self.iter += 1
 
+    def get_cos_anneal_ratio(self):
+        anneal_end = 50000
+        if anneal_end == 0.0:
+            return 1.0
+        else:
+            return np.min([1.0, self.iter / anneal_end])
+
     def train_step(self):
-        self.model.train()
+        # self.renderer.train()
         
         n, h, w, K, E, rgb_gt, bg_color, _ = self.dataloader.get_random_batch(self.n_rays, device='cuda')
 
         # self.renderer.train()
-        rgb, weights, grad_theta, aux_outputs = self.renderer.render(n, h, w, K, E, bg_color, self.iter/5000)
+        rgb, weights, grad_theta, aux_outputs = self.renderer.render(n, h, w, K, E, self.get_cos_anneal_ratio(), bg_color)
 
         # print(torch.amax(aux_outputs['sdf']), torch.amin(aux_outputs['sdf']))
 
@@ -205,7 +211,7 @@ class NeusNeRFTrainer(object):
         self.logger.scalar('loss_rgb', loss_rgb, self.iter)
         self.logger.scalar('psnr_rgb', losses.psnr(rgb, rgb_gt), self.iter)
         self.logger.scalar('loss_theta', loss_theta, self.iter)
-        self.logger.scalar('s', self.renderer.s, self.iter)
+        self.logger.scalar('variance', self.renderer.deviation_network.variance, self.iter)
         # self.logger.scalar('beta', self.renderer.model.laplace_density.get_beta(), self.iter)
         # self.logger.scalar('dist_scalar', dist_scalar, self.iter)
         # self.logger.scalar('loss_dist', loss_dist, self.iter)

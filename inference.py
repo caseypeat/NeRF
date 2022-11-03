@@ -225,7 +225,7 @@ def rot90(image):
 #         return pointcloud
 
 
-# @torch.no_grad()
+@torch.no_grad()
 def render_image(renderer, n, h, w, K, E, n_rays):
 
     # _f : flattened

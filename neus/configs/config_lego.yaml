@@ -15,16 +15,17 @@ scan:
   outer_bound: 5
 
 log:
-  root_dir: './neus/logs/test/lego'
-  eval_image_freq: 10
+  root_dir: './neus/logs/test/lego2'
+  eval_image_freq: 20
   eval_pointcloud_freq: end
   save_weights_freq: end
 
 trainer:
-  num_epochs: 100
+  num_epochs: 3000
   iters_per_epoch: 100
   # n_rays: 16384
   n_rays: 4096
+  # n_rays: 1024
   dist_loss_range:
     - 0
     - 0
@@ -45,7 +46,7 @@ optimizer:
     - 0.99
   eps: 1e-15
 
-scheduler: step
+scheduler: warmup
 
 inference:
   image:

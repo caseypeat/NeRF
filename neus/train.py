@@ -11,12 +11,14 @@ from loaders.synthetic2 import SyntheticLoader
 
 from nets import NeRFCoordinateWrapper, NeRFNetwork
 from sdf.nets import NeRFNetworkSecondDerivative
-from neus.nets import NeRFNeusWrapper
+# from neus.nets import NeRFNeusWrapper
 from neus.trainer import NeusNeRFTrainer
 from nerf.logger import Logger
 from metrics import PSNRWrapper, SSIMWrapper, LPIPSWrapper
-from neus.render import NeusRender
-from inference import ImageInference, InvdepthThreshInference, PointcloudInference
+# from neus.render import NeusRender
+from neus.render2 import NeuSRenderer
+# from inference import ImageInference, InvdepthThreshInference, PointcloudInference
+from neus.inference import ImageInference
 
 # from misc import configurator
 
@@ -44,55 +46,71 @@ def train(cfg : DictConfig) -> None:
     dataloader = SyntheticLoader(rootdir="/home/cpe44/nerf_synthetic/lego")
 
     logger.log('Initilising Model...')
-    model = NeRFNetworkSecondDerivative(
-        N = dataloader.images.shape[0],
-        encoding_precision=cfg.nets.encoding.precision,
-        encoding_n_levels=cfg.nets.encoding.n_levels,
-        encoding_n_features_per_level=cfg.nets.encoding.n_features_per_level,
-        encoding_log2_hashmap_size=cfg.nets.encoding.log2_hashmap_size,
-        geo_feat_dim=cfg.nets.sigma.geo_feat_dim,
-        sigma_hidden_dim=cfg.nets.sigma.hidden_dim,
-        sigma_num_layers=cfg.nets.sigma.num_layers,
-        encoding_dir_precision=cfg.nets.encoding_dir.precision,
-        encoding_dir_encoding=cfg.nets.encoding_dir.encoding,
-        encoding_dir_degree=cfg.nets.encoding_dir.degree,
-        latent_embedding_dim=cfg.nets.latent_embedding.features,
-        color_hidden_dim=cfg.nets.color.hidden_dim,
-        color_num_layers=cfg.nets.color.num_layers,
-    ).to('cuda')
+    # model = NeRFNetworkSecondDerivative(
+    #     N = dataloader.images.shape[0],
+    #     encoding_precision=cfg.nets.encoding.precision,
+    #     encoding_n_levels=cfg.nets.encoding.n_levels,
+    #     encoding_n_features_per_level=cfg.nets.encoding.n_features_per_level,
+    #     encoding_log2_hashmap_size=cfg.nets.encoding.log2_hashmap_size,
+    #     geo_feat_dim=cfg.nets.sigma.geo_feat_dim,
+    #     sigma_hidden_dim=cfg.nets.sigma.hidden_dim,
+    #     sigma_num_layers=cfg.nets.sigma.num_layers,
+    #     encoding_dir_precision=cfg.nets.encoding_dir.precision,
+    #     encoding_dir_encoding=cfg.nets.encoding_dir.encoding,
+    #     encoding_dir_degree=cfg.nets.encoding_dir.degree,
+    #     latent_embedding_dim=cfg.nets.latent_embedding.features,
+    #     color_hidden_dim=cfg.nets.color.hidden_dim,
+    #     color_num_layers=cfg.nets.color.num_layers,
+    # ).to('cuda')
 
-    model_coord = NeRFCoordinateWrapper(
-        model=model,
-        transform=None,
-        inner_bound=cfg.scan.inner_bound,
-        outer_bound=cfg.scan.outer_bound,
-        translation_center=dataloader.translation_center
-    ).to('cuda')
+    # model_coord = NeRFCoordinateWrapper(
+    #     model=model,
+    #     transform=None,
+    #     inner_bound=cfg.scan.inner_bound,
+    #     outer_bound=cfg.scan.outer_bound,
+    #     translation_center=dataloader.translation_center
+    # ).to('cuda')
 
-    model_coord_neus = NeRFNeusWrapper(
-        model = model_coord,
-    ).to('cuda')
+    # model_coord_neus = NeRFNeusWrapper(
+    #     model = model_coord,
+    # ).to('cuda')
 
-    renderer = NeusRender(
-        model=model_coord_neus,
-        steps_firstpass=cfg.renderer.steps,
-        z_bounds=cfg.renderer.z_bounds,
-        steps_importance=cfg.renderer.importance_steps,
-        alpha_importance=cfg.renderer.alpha,
-    ).to('cuda')
+    # renderer = NeusRender(
+    #     model=model_coord_neus,
+    #     steps_firstpass=cfg.renderer.steps,
+    #     z_bounds=cfg.renderer.z_bounds,
+    #     steps_importance=cfg.renderer.importance_steps,
+    #     alpha_importance=cfg.renderer.alpha,
+    # ).to('cuda')
+
+    renderer = NeuSRenderer()
 
     logger.log('Initiating Optimiser...')
     optimizer = torch.optim.Adam([
-            {'name': 'encoding', 'params': list(model.encoder.parameters()), 'lr': cfg.optimizer.encoding.lr},
-            {'name': 'latent_emb', 'params': [model.latent_emb], 'lr': cfg.optimizer.latent_emb.lr},
-            {'name': 'net', 'params': list(model.sigma_net.parameters()) + list(model.color_net.parameters()), 'weight_decay': cfg.optimizer.net.weight_decay, 'lr': cfg.optimizer.net.lr},
-            {'name': 's', 'params': [renderer.s], 'lr': 1e-3},
+            {'name': 'sdf_encoding', 'params': list(renderer.sdf_network.encoder.parameters()), 'lr': cfg.optimizer.encoding.lr},
+            {'name': 'sdf_net', 'params': list(renderer.sdf_network.network.parameters()), 'lr': cfg.optimizer.net.lr},
+            {'name': 'color', 'params': list(renderer.color_network.parameters()), 'lr': cfg.optimizer.net.lr},
+            {'name': 'deviation_network', 'params': list(renderer.deviation_network.parameters()), 'lr': 1e-3},
         ], betas=cfg.optimizer.betas, eps=cfg.optimizer.eps)
 
     if cfg.scheduler == 'step':
         lmbda = lambda x: 1
     elif cfg.scheduler == 'exp_decay':
         lmbda = lambda x: 0.1**(x/(cfg.trainer.num_epochs*cfg.trainer.iters_per_epoch))
+    elif cfg.scheduler == 'warmup':
+        # alpha = 0.05
+        # learning_factor = (np.cos(np.pi * progress) + 1.0) * 0.5 * (1 - alpha) + alpha
+        # lmbda = lambda x: 0.1**(x/(cfg.trainer.num_epochs*cfg.trainer.iters_per_epoch))
+        def lmbda(iter_step):
+            warm_up_end = 5000
+            end_iter = 300000
+            if iter_step < warm_up_end:
+                learning_factor = iter_step / warm_up_end
+            else:
+                alpha = 0.05
+                progress = (iter_step - warm_up_end) / (end_iter - warm_up_end)
+                learning_factor = (np.cos(np.pi * progress) + 1.0) * 0.5 * (1 - alpha) + alpha
+            return learning_factor
     else:
         raise ValueError
     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lmbda, last_epoch=-1, verbose=False)
@@ -104,7 +122,7 @@ def train(cfg : DictConfig) -> None:
     
     logger.log('Initiating Trainer...')
     trainer = NeusNeRFTrainer(
-        model=model,
+        # model=model,
         dataloader=dataloader,
         logger=logger,
         renderer=renderer,
