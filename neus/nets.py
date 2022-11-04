@@ -46,7 +46,8 @@ class SDFNetwork(nn.Module):
 
     def forward(self, inputs):
 
-        inputs = (inputs + 2) / 4
+        # inputs = (inputs + 2) / 4  # lego
+        inputs = (inputs + 3) / 6  # vines
 
         x = self.encoder(inputs)
         x = self.network(x)
