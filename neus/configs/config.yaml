@@ -33,15 +33,16 @@ scan:
   outer_bound: 2.5
 
 log:
-  root_dir: './neus/logs/test/1'
-  eval_image_freq: end
+  root_dir: './neus/logs/test/vines'
+  eval_image_freq: 5
   eval_pointcloud_freq: end
   save_weights_freq: end
 
 trainer:
-  num_epochs: 100
-  iters_per_epoch: 10
-  n_rays: 16384
+  num_epochs: 3000
+  iters_per_epoch: 100
+  # n_rays: 16384
+  n_rays: 4096
   dist_loss_range:
     - 1e-5
     - 1e-2

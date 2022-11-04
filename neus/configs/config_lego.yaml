@@ -15,7 +15,7 @@ scan:
   outer_bound: 5
 
 log:
-  root_dir: './neus/logs/test/lego2'
+  root_dir: './neus/logs/test/lego3'
   eval_image_freq: 20
   eval_pointcloud_freq: end
   save_weights_freq: end

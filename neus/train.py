@@ -23,7 +23,13 @@ from neus.inference import ImageInference
 # from misc import configurator
 
 
-@hydra.main(version_base=None, config_path="./configs", config_name="config_lego")
+def remove_backgrounds(dataloader, max_depth):
+    mask = torch.full(dataloader.depths.shape, fill_value=255, dtype=torch.uint8)[..., None]
+    mask[dataloader.depths > 1] = 0
+    dataloader.images = torch.cat([dataloader.images, mask], dim=-1)
+
+
+@hydra.main(version_base=None, config_path="./configs", config_name="config")
 def train(cfg : DictConfig) -> None:
 
     # cfg = configurator('./configs/config_base.yaml')
@@ -34,16 +40,22 @@ def train(cfg : DictConfig) -> None:
         )
 
     logger.log('Initiating Dataloader...')
-    # dataloader = CameraGeometryLoader(
-    #     scan_paths=cfg.scan.scan_paths,
-    #     scan_pose_paths=cfg.scan.scan_pose_paths,
-    #     frame_ranges=cfg.scan.frame_ranges,
-    #     frame_strides=cfg.scan.frame_strides,
-    #     image_scale=cfg.scan.image_scale,
-    #     load_depths_bool=True,
-    #     )
+    dataloader = CameraGeometryLoader(
+        scan_paths=cfg.scan.scan_paths,
+        scan_pose_paths=cfg.scan.scan_pose_paths,
+        frame_ranges=cfg.scan.frame_ranges,
+        frame_strides=cfg.scan.frame_strides,
+        image_scale=cfg.scan.image_scale,
+        load_depths_bool=True,
+        )
 
-    dataloader = SyntheticLoader(rootdir="/home/cpe44/nerf_synthetic/lego")
+    remove_backgrounds(dataloader, 1)
+    # plt.imshow(dataloader.images[0, ... , 3])
+    # plt.show()
+    # print(dataloader.images.shape)
+
+    # dataloader = SyntheticLoader(rootdir="/home/cpe44/nerf_synthetic/lego")
+    # dataloader = SyntheticLoader(rootdir="/home/cpe44/nerf_synthetic/ficus")
 
     logger.log('Initilising Model...')
     # model = NeRFNetworkSecondDerivative(
@@ -102,7 +114,7 @@ def train(cfg : DictConfig) -> None:
         # learning_factor = (np.cos(np.pi * progress) + 1.0) * 0.5 * (1 - alpha) + alpha
         # lmbda = lambda x: 0.1**(x/(cfg.trainer.num_epochs*cfg.trainer.iters_per_epoch))
         def lmbda(iter_step):
-            warm_up_end = 5000
+            warm_up_end = 500
             end_iter = 300000
             if iter_step < warm_up_end:
                 learning_factor = iter_step / warm_up_end

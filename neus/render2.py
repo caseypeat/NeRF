@@ -19,11 +19,33 @@ class NeuSRenderer:
 
         self.sdf_network = SDFNetwork().to("cuda")
         self.color_network = RenderingNetwork().to("cuda")
-        self.deviation_network = SingleVarianceNetwork(0.3).to("cuda")
+        self.deviation_network = SingleVarianceNetwork(0.6).to("cuda")
 
-        self.steps_firstpass = [128]
-        self.z_bounds = [2, 6]
-        
+        self.steps_firstpass = [256]
+        # self.z_bounds = [2, 6]
+        self.z_bounds = [0.1, 2]
+
+    
+    @torch.no_grad()
+    def get_dry_sdf(self, n, h, w, K, E):
+        rays_o, rays_d = get_rays(h, w, K, E)
+        n_rays = rays_o.shape[0]
+
+        z_vals_log, z_vals = get_uniform_z_vals(self.steps_firstpass, self.z_bounds, n_rays)
+        dists = torch.cat([z_vals[:, 1:] - z_vals[:, :-1], z_vals.new_zeros(z_vals.shape[0], 1)], dim=-1)
+        batch_size, n_samples = z_vals.shape
+
+        xyzs, dirs = get_sample_points(rays_o, rays_d, z_vals)
+
+        xyzs = xyzs.reshape(-1, 3)
+        dirs = dirs.reshape(-1, 3)
+
+        sdf_nn_output = self.sdf_network(xyzs)
+        sdf = sdf_nn_output[:, :1]
+
+        self.bias = 0.03 - torch.mean(sdf)
+
+        return sdf
 
     def render(self, n, h, w, K, E, cos_anneal_ratio, bg_color=None):
         rays_o, rays_d = get_rays(h, w, K, E)
@@ -39,7 +61,7 @@ class NeuSRenderer:
         dirs = dirs.reshape(-1, 3)
 
         sdf_nn_output = self.sdf_network(xyzs)
-        sdf = sdf_nn_output[:, :1]
+        sdf = sdf_nn_output[:, :1] + self.bias
         feature_vector = sdf_nn_output[:, 1:]
 
         gradients = self.sdf_network.gradient(xyzs).squeeze()
@@ -78,5 +100,7 @@ class NeuSRenderer:
 
         aux_outputs = {}
         aux_outputs['invdepth'] = invdepth.detach()
+        aux_outputs['z_vals'] = z_vals.detach()
+        aux_outputs['sdf'] = sdf.detach()
 
         return color, weights, gradients, aux_outputs

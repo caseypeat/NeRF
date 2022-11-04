@@ -50,6 +50,7 @@ class SDFNetwork(nn.Module):
 
         x = self.encoder(inputs)
         x = self.network(x)
+
         return x
 
     def sdf(self, x):

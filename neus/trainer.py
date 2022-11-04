@@ -172,8 +172,23 @@ class NeusNeRFTrainer(object):
         
         n, h, w, K, E, rgb_gt, bg_color, _ = self.dataloader.get_random_batch(self.n_rays, device='cuda')
 
+        if self.iter == 0:
+            sdf = self.renderer.get_dry_sdf(n, h, w, K, E)
+            # self.bias = 0.03 - torch.mean(sdf)
+
         # self.renderer.train()
         rgb, weights, grad_theta, aux_outputs = self.renderer.render(n, h, w, K, E, self.get_cos_anneal_ratio(), bg_color)
+
+        if self.iter % 100 == 0:
+            sdf = aux_outputs['sdf']
+            self.logger.log(f"Mean Ray Weight Sum: {torch.mean(torch.sum(weights, -1)):.4f}")
+            self.logger.log(f"Mean SDF: {torch.mean(sdf):.4f}")
+
+        # if self.iter % 100 == 0:
+        #     z_vals = np.mean(aux_outputs['z_vals'].detach().cpu().numpy(), axis=0)
+        #     w = np.mean(torch.cumsum(weights, -1).detach().cpu().numpy(), axis=0)
+        #     plt.plot(z_vals, w)
+        #     plt.show()
 
         # print(torch.amax(aux_outputs['sdf']), torch.amin(aux_outputs['sdf']))
 
