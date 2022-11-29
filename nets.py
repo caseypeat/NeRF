@@ -111,7 +111,7 @@ class NeRFNetwork(nn.Module):
             },
         )
 
-    
+    # @torch.no_grad()
     def forward(self, x, d, n):
 
         prefix = x.shape[:-1]

@@ -21,7 +21,7 @@ input_paths:
   transform_init: "./data/pose_estimates/nerf/vine_C1_0/ransac.npy"
 
 output_paths:
-  log: ./align/logs/test
+  log: ./align/logs/test/no_grad
 
 n_rays: 4096
 iters_per_epoch: 100

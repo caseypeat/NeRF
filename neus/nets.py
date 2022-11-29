@@ -16,7 +16,7 @@ class SDFNetwork(nn.Module):
     def __init__(self):
         super(SDFNetwork, self).__init__()
 
-        n_levels = 16
+        n_levels = 20
         n_features_per_level = 2
         input_dim = n_levels * n_features_per_level
         hidden_dim = 64
@@ -29,7 +29,7 @@ class SDFNetwork(nn.Module):
                 "otype": "HashGrid",
                 "n_levels": n_levels,
                 "n_features_per_level": n_features_per_level,
-                "log2_hashmap_size": 19,
+                "log2_hashmap_size": 24,
                 "base_resolution": 16,
                 "per_level_scale": 1.3819,
             },

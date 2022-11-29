@@ -19,7 +19,7 @@ class NeuSRenderer:
 
         self.sdf_network = SDFNetwork().to("cuda")
         self.color_network = RenderingNetwork().to("cuda")
-        self.deviation_network = SingleVarianceNetwork(0.3).to("cuda")
+        self.deviation_network = SingleVarianceNetwork(0.6).to("cuda")
 
         self.steps_firstpass = [256]
         # self.z_bounds = [2, 6]
@@ -53,8 +53,8 @@ class NeuSRenderer:
         n_rays = rays_o.shape[0]
 
         z_vals_log, z_vals = get_uniform_z_vals(self.steps_firstpass, self.z_bounds, n_rays)
-        # dists = torch.cat([z_vals[:, 1:] - z_vals[:, :-1], z_vals.new_zeros(z_vals.shape[0], 1)], dim=-1)
-        dists = torch.cat([z_vals_log[:, 1:] - z_vals_log[:, :-1], z_vals_log.new_zeros(z_vals_log.shape[0], 1)], dim=-1)
+        dists = torch.cat([z_vals[:, 1:] - z_vals[:, :-1], z_vals.new_zeros(z_vals.shape[0], 1)], dim=-1)
+        # dists = torch.cat([z_vals_log[:, 1:] - z_vals_log[:, :-1], z_vals_log.new_zeros(z_vals_log.shape[0], 1)], dim=-1)
         batch_size, n_samples = z_vals.shape
 
         xyzs, dirs = get_sample_points(rays_o, rays_d, z_vals)

@@ -9,7 +9,7 @@ from render import get_rays
 from rotation import rot2euler
 from metrics import pose_inv_error
 
-from allign.ransac import global_allign
+from align.ransac import global_align
 
 
 class TrainerAlign(object):

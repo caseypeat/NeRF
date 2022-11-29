@@ -35,7 +35,8 @@ def gen_random_transform(R_var, T_var):
     return transform
 
 
-@hydra.main(version_base=None, config_path="./configs/vines", config_name="C1_0")
+# @hydra.main(version_base=None, config_path="./configs/vines", config_name="C1_0")
+@hydra.main(version_base=None, config_path="./configs", config_name="config")
 def train(cfg : DictConfig) -> None:
     print(OmegaConf.to_yaml(cfg))
 
