@@ -30,16 +30,9 @@ log:
   save_weights_freq: null
 
 trainer:
-  num_epochs: 10
+  num_epochs: 100
   iters_per_epoch: 100
-  # n_rays: 16384
-  n_rays: 8192
-  # dist_loss_range:
-  #   - 0
-  #   - 0
-  # depth_loss_range:
-  #   - 0
-  #   - 0
+  n_rays: 16384
 
 optimizer:
   encoding:

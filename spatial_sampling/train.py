@@ -9,7 +9,6 @@ from loaders.camera_geometry_loader_re2 import CameraGeometryLoader
 from loaders.synthetic2 import SyntheticLoader
 
 from nets import NeRFCoordinateWrapper, NeRFNetwork
-# from nerf.trainer import NeRFTrainer
 from spatial_sampling.trainer import NeRFTrainer
 from nerf.logger import Logger
 from metrics import PSNRWrapper, SSIMWrapper, LPIPSWrapper
@@ -89,8 +88,6 @@ def train(cfg : DictConfig) -> None:
         "eval_psnr": PSNRWrapper(),
     }
 
-    # print(cfg.renderer.steps)
-
     renderer = Render(
         models=model_coord,
         steps_firstpass=cfg.renderer.steps,
@@ -112,15 +109,6 @@ def train(cfg : DictConfig) -> None:
             renderer, dataloader, cfg.trainer.n_rays, cfg.inference.image.image_num),
         "invdepth_thresh": InvdepthThreshInference(
             renderer_thresh, dataloader, cfg.trainer.n_rays, cfg.inference.image.image_num),
-        # "pointcloud": PointcloudInference(
-        #     renderer_thresh,
-        #     dataloader,
-        #     cfg.inference.pointcloud.max_variance,
-        #     cfg.inference.pointcloud.distribution_area,
-        #     cfg.trainer.n_rays,
-        #     cfg.inference.pointcloud.cams,
-        #     cfg.inference.pointcloud.freq,
-        #     cfg.inference.pointcloud.side_margin)
     }
 
     logger.log('Initiating Trainer...')
@@ -137,9 +125,6 @@ def train(cfg : DictConfig) -> None:
         n_rays=cfg.trainer.n_rays,
         num_epochs=cfg.trainer.num_epochs,
         iters_per_epoch=cfg.trainer.iters_per_epoch,
-
-        # dist_loss_range=cfg.trainer.dist_loss_range,
-        # depth_loss_range=cfg.trainer.depth_loss_range,
 
         eval_image_freq=cfg.log.eval_image_freq,
         eval_pointcloud_freq=cfg.log.eval_pointcloud_freq,

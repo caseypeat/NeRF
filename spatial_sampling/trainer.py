@@ -49,9 +49,6 @@ class NeRFTrainer(object):
         n_rays:int,
         num_epochs:int,
         iters_per_epoch:int,
-
-        # dist_loss_range:tuple[int, int],
-        # depth_loss_range:tuple[int, int],
         
         eval_image_freq:Union[int, str],
         eval_pointcloud_freq:Union[int, str],
@@ -79,9 +76,6 @@ class NeRFTrainer(object):
         self.eval_pointcloud_freq = eval_pointcloud_freq if eval_pointcloud_freq != 'end' else num_epochs
         self.save_weights_freq =  save_weights_freq if save_weights_freq != 'end' else num_epochs
 
-        # self.dist_loss_range = dist_loss_range
-        # self.depth_loss_range = depth_loss_range
-
         self.metrics = metrics
 
         self.iter = 0
@@ -106,28 +100,12 @@ class NeRFTrainer(object):
                 if (epoch+1) % self.eval_image_freq == 0:
                     self.logger.log('Rending Image...')
                     image, invdepth = self.inferencers['image']()
-                    # n, h, w, K, E, rgb_gt, _, _ = self.dataloader.get_image_batch(
-                    #     self.inferencer.image_num, device='cuda')
-                    # image, invdepth = render_image(n, h, w, K, E)
                     self.logger.image('image', image.numpy(), self.iter)
                     self.logger.image('invdepth', color_depthmap(invdepth.numpy()), self.iter)
-
-                    # # Calculate image metrics
-                    # pred = image
-                    # target = rgb_gt
-                    # for name, metric in self.metrics:
-                    #     self.logger.eval_scalar(name, metric(pred, target), self.iter)
-                    # for key, val in self.logger.eval_scalars.items():
-                    #     self.logger.log(f'Eval Scalar: {key} - Value: {val[-1]:.6f}')
-                    # self.logger.log('')
 
             if self.eval_image_freq is not None:
                 if (epoch+1) % self.eval_image_freq == 0:
                     invdepth_thresh = self.inferencers['invdepth_thresh']()
-                    # self.logger.log('Rending Invdepth Thresh...')
-                    # n, h, w, K, E, _, _, _ = self.dataloader.get_image_batch(
-                    #     self.inferencer.image_num, device='cuda')
-                    # invdepth_thresh = render_invdepth_thresh(n, h, w, K, E)
                     self.logger.image('invdepth_thresh',
                         color_depthmap(invdepth_thresh.numpy()), self.iter)
 
@@ -135,9 +113,6 @@ class NeRFTrainer(object):
                 if (epoch+1) % self.eval_pointcloud_freq == 0:
                     self.logger.log('Generating Pointcloud...')
                     pointcloud = self.inferencers['pointcloud']()
-                    # n, h, w, K, E, _, _, _ = self.dataloader.get_pointcloud_batch(
-                    #     cams=self.inferencer.cams, freq=self.inferencer.freq)
-                    # pointcloud = generate_pointcloud(n, h, w, K, E)
                     self.logger.pointcloud(convert_pointcloud(pointcloud), self.iter)
 
             if self.save_weights_freq is not None:
@@ -171,33 +146,11 @@ class NeRFTrainer(object):
         # Calculate losses
         loss_rgb = losses.criterion_rgb(rgb, rgb_gt)
         loss = loss_rgb
-        # if self.dist_loss_range[0] == 0 or self.dist_loss_range[1]== 0:
-        #     loss_dist = 0  # non-trivial computational cost for full computation
-        #     dist_scalar = 0
-        #     loss = loss_rgb
-        # else:
-        #     loss_dist = losses.criterion_dist(weights, z_vals_log_s)
-        #     dist_scalar = logarithmic_scale(
-        #         self.iter, self.num_iters, self.dist_loss_range[0], self.dist_loss_range[1])
-        #     loss = loss_rgb + dist_scalar * loss_dist
-
-        # if self.depth_loss_range[0] == 0 or self.depth_loss_range[1] == 0:
-        #     depth_scalar = 0
-        #     loss_depth = 0
-        # else:
-        #     depth_scalar = logarithmic_scale(
-        #         self.iter, self.num_iters, self.depth_loss_range[0], self.depth_loss_range[1])
-        #     loss_depth = torch.mean(weights * (1 - z_vals_log_s))
-        #     loss = loss + depth_scalar * loss_depth
 
         # Log scalars
         self.logger.scalar('loss', loss, self.iter)
         self.logger.scalar('loss_rgb', loss_rgb, self.iter)
         self.logger.scalar('psnr_rgb', losses.psnr(rgb, rgb_gt), self.iter)
-        # self.logger.scalar('dist_scalar', dist_scalar, self.iter)
-        # self.logger.scalar('loss_dist', loss_dist, self.iter)
-        # self.logger.scalar('depth_scalar', depth_scalar, self.iter)
-        # self.logger.scalar('loss_depth', loss_depth, self.iter)
         
         t1 = int(time.time() - self.t0_train)
         self.logger.scalar('loss (seconds)', loss, t1)
