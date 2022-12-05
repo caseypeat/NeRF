@@ -10,10 +10,17 @@ from loaders.synthetic2 import SyntheticLoader
 
 from nets import NeRFCoordinateWrapper, NeRFNetwork
 # from nerf.trainer import NeRFTrainer
+from spatial_sampling.trainer import NeRFTrainer
 from nerf.logger import Logger
 from metrics import PSNRWrapper, SSIMWrapper, LPIPSWrapper
-from render import Render
+from spatial_sampling.render import Render
 from inference import ImageInference, InvdepthThreshInference, PointcloudInference
+
+
+def remove_backgrounds(dataloader, max_depth):
+    mask = torch.full(dataloader.depths.shape, fill_value=255, dtype=torch.uint8)[..., None]
+    mask[dataloader.depths > 1] = 0
+    dataloader.images = torch.cat([dataloader.images, mask], dim=-1)
 
 
 @hydra.main(version_base=None, config_path="./configs", config_name="config")
@@ -30,7 +37,10 @@ def train(cfg : DictConfig) -> None:
         frame_ranges=cfg.scan.frame_ranges,
         frame_strides=cfg.scan.frame_strides,
         image_scale=cfg.scan.image_scale,
+        load_depths_bool=True,
         )
+
+    remove_backgrounds(dataloader, 1)
 
     logger.log('Initilising Model...')
     model = NeRFNetwork(
@@ -79,20 +89,22 @@ def train(cfg : DictConfig) -> None:
         "eval_psnr": PSNRWrapper(),
     }
 
+    # print(cfg.renderer.steps)
+
     renderer = Render(
         models=model_coord,
         steps_firstpass=cfg.renderer.steps,
-        z_bounds=cfg.renderer.z_bounds,
         steps_importance=cfg.renderer.importance_steps,
-        alpha_importance=cfg.renderer.alpha,
+        total_samples=cfg.renderer.total_samples,
+        z_bounds=cfg.renderer.z_bounds,
     )
 
     renderer_thresh = Render(
         models=model_coord,
         steps_firstpass=cfg.renderer_thresh.steps,
-        z_bounds=cfg.renderer_thresh.z_bounds,
         steps_importance=cfg.renderer_thresh.importance_steps,
-        alpha_importance=cfg.renderer_thresh.alpha,
+        total_samples=cfg.renderer_thresh.total_samples,
+        z_bounds=cfg.renderer_thresh.z_bounds,
     )
 
     inferencers = {
@@ -100,15 +112,15 @@ def train(cfg : DictConfig) -> None:
             renderer, dataloader, cfg.trainer.n_rays, cfg.inference.image.image_num),
         "invdepth_thresh": InvdepthThreshInference(
             renderer_thresh, dataloader, cfg.trainer.n_rays, cfg.inference.image.image_num),
-        "pointcloud": PointcloudInference(
-            renderer_thresh,
-            dataloader,
-            cfg.inference.pointcloud.max_variance,
-            cfg.inference.pointcloud.distribution_area,
-            cfg.trainer.n_rays,
-            cfg.inference.pointcloud.cams,
-            cfg.inference.pointcloud.freq,
-            cfg.inference.pointcloud.side_margin)
+        # "pointcloud": PointcloudInference(
+        #     renderer_thresh,
+        #     dataloader,
+        #     cfg.inference.pointcloud.max_variance,
+        #     cfg.inference.pointcloud.distribution_area,
+        #     cfg.trainer.n_rays,
+        #     cfg.inference.pointcloud.cams,
+        #     cfg.inference.pointcloud.freq,
+        #     cfg.inference.pointcloud.side_margin)
     }
 
     logger.log('Initiating Trainer...')
@@ -126,8 +138,8 @@ def train(cfg : DictConfig) -> None:
         num_epochs=cfg.trainer.num_epochs,
         iters_per_epoch=cfg.trainer.iters_per_epoch,
 
-        dist_loss_range=cfg.trainer.dist_loss_range,
-        depth_loss_range=cfg.trainer.depth_loss_range,
+        # dist_loss_range=cfg.trainer.dist_loss_range,
+        # depth_loss_range=cfg.trainer.depth_loss_range,
 
         eval_image_freq=cfg.log.eval_image_freq,
         eval_pointcloud_freq=cfg.log.eval_pointcloud_freq,
@@ -138,3 +150,7 @@ def train(cfg : DictConfig) -> None:
 
     logger.log('Beginning Training...\n')
     trainer.train()
+
+
+if __name__ == "__main__":
+    train()

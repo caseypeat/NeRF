@@ -1,0 +1,113 @@
+defaults:  
+  - _self_  
+  - override hydra/hydra_logging: disabled  
+  - override hydra/job_logging: disabled  
+  
+hydra:  
+  output_subdir: null  
+  run:  
+    dir: .
+
+
+scan:
+  scan_paths:
+    - /home/cpe44/data/vine_C1_0/back/cameras.json
+
+  scan_pose_paths:
+    - null
+  frame_ranges:
+    - null
+  frame_strides:
+    - null
+  image_scale: 0.5
+  inner_bound: 2
+  outer_bound: 2.5
+
+log:
+  root_dir: './spatial_sampling/logs/test/1'
+  eval_image_freq: end
+  eval_pointcloud_freq: null
+  save_weights_freq: null
+
+trainer:
+  num_epochs: 10
+  iters_per_epoch: 100
+  # n_rays: 16384
+  n_rays: 8192
+  # dist_loss_range:
+  #   - 0
+  #   - 0
+  # depth_loss_range:
+  #   - 0
+  #   - 0
+
+optimizer:
+  encoding:
+    lr: 2e-2
+  latent_emb:
+    lr: 2e-2
+  net:
+    weight_decay: 1e-6
+    lr: 1e-3
+  betas:
+    - 0.9
+    - 0.99
+  eps: 1e-15
+
+scheduler: step
+
+inference:
+  image:
+    image_num: 33
+
+  pointcloud:
+    max_variance: 0.05
+    distribution_area: 0.5
+
+    side_margin: 3
+    cams: [1, 2, 3, 4]
+    freq: 3
+
+renderer:
+  steps:
+    - 128
+  z_bounds:
+    - 0.1
+    - 1
+  importance_steps: 64
+  # total_samples : 1048576
+  total_samples : 524288
+
+renderer_thresh:
+  steps:
+    - 128
+  z_bounds:
+    - 0.1
+    - 1.0
+  importance_steps: 64
+  # total_samples : 1048576
+  total_samples : 524288
+
+nets:
+  encoding:
+    n_levels: 20
+    n_features_per_level: 2
+    log2_hashmap_size: 24
+    precision: float32
+  
+  encoding_dir:
+    encoding: SphericalHarmonics
+    degree: 4
+    precision: float32
+
+  latent_embedding:
+    features: 48
+
+  sigma:
+    num_layers: 2
+    hidden_dim: 64
+    geo_feat_dim: 15
+
+  color:
+    num_layers: 3
+    hidden_dim: 64
