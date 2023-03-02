@@ -44,7 +44,7 @@ class NeuSRenderer:
         sdf = sdf_nn_output[:, :1]
 
         # self.bias = 0.0024 - torch.mean(sdf)
-        self.bias = 0.03 - torch.mean(sdf)
+        self.bias = 0.06 - torch.mean(sdf)
 
         return sdf
 

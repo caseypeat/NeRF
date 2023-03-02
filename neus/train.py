@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 
 from omegaconf import DictConfig, OmegaConf
 
-from loaders.camera_geometry_loader_re2 import CameraGeometryLoader
+from loaders.camera_geometry_loader_recon import CameraGeometryLoader
 from loaders.synthetic2 import SyntheticLoader
 
 from nets import NeRFCoordinateWrapper, NeRFNetwork
@@ -46,15 +46,17 @@ def train(cfg : DictConfig) -> None:
         frame_ranges=cfg.scan.frame_ranges,
         frame_strides=cfg.scan.frame_strides,
         image_scale=cfg.scan.image_scale,
-        load_depths_bool=True,
+        load_depths_bool=False,
         )
+    dataloader.extrinsics[..., :3, 3] = dataloader.extrinsics[..., :3, 3] - torch.mean(dataloader.extrinsics[..., :3, 3], dim=0, keepdims=True)
+    # print(torch.mean(dataloader.extrinsics[..., :3, 3], dim=0, keepdims=True))
 
-    remove_backgrounds(dataloader, 1)
+    # remove_backgrounds(dataloader, 1)
     # plt.imshow(dataloader.images[0, ... , 3])
     # plt.show()
     # print(dataloader.images.shape)
 
-    # dataloader = SyntheticLoader(rootdir="/home/cpe44/nerf_synthetic/lego")
+    # dataloader = SyntheticLoader(rootdir="/home/casey/PhD/data/nerf_datasets/nerf_synthetic/lego")
     # dataloader = SyntheticLoader(rootdir="/home/cpe44/nerf_synthetic/ficus")
 
     logger.log('Initilising Model...')
